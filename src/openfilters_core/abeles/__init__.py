@@ -45,7 +45,13 @@ try:
 	if getattr(_dll, "__file__", None) is None:
 		raise ImportError("_abeles is not compiled")
 	from ._abeles import *
-except ImportError:
+except ImportError as _import_error:
+	# Say why a compiled core that exists could not be used (stderr only:
+	# stdout may be a protocol channel).
+	if "requested" not in str(_import_error) and "not compiled" not in str(_import_error):
+		import sys as _sys
+		_sys.stderr.write("OpenFilters: compiled _abeles could not be loaded (%s); "
+		                  "using the slower pure-Python implementation\n" % _import_error)
 	abeles_dll_import_failed = True
 
 # If the importation of the dll failed, load the Python versions.

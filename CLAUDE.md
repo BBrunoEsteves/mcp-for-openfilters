@@ -25,7 +25,8 @@ runs in parallel worker processes, results go to disk, tools return compact summ
 
 - Tests: `.venv/Scripts/python -m pytest tests -q`
 - End-to-end: `.venv/Scripts/python dev/e2e_client.py`
-- Build C++ extensions in place (needs MSVC Build Tools): `.venv/Scripts/python setup.py build_ext --inplace`
+- Fast C++ core without a local compiler: `.venv/Scripts/python dev/fetch_compiled.py` (downloads what GitHub Actions
+  compiled; rerun after changing C++ code or after regenerating the core). With a compiler: `python setup.py build_ext --inplace`.
 
 ## Conventions
 
@@ -35,6 +36,8 @@ stdout in server or worker code (stdout is the MCP channel). User-facing errors:
 
 ## Status (2026-10-22)
 
-Done: Python 3 port validated (analytic + independent TMM, < 1e-9), all optimizers working, 22 MCP tools
-working end to end, 38 tests passing. Pending: compile C++ core (waiting for MSVC Build Tools), register
-in Claude Desktop/Code, GitHub repo + CI wheels, PyPI, MCP Registry, Claude plugin submission.
+Done: Python 3 port validated (analytic + independent TMM, < 1e-9; needle derivatives vs finite differences),
+all optimizers working, 22 MCP tools working end to end, 39 tests. Private GitHub repo
+BBrunoEsteves/openfilters-mcp; CI compiles the C++ core and tests on Windows/macOS/Linux and builds wheels
+(cp310-cp314, runtime DLLs bundled). Compiled core is 15-30x faster than pure Python.
+Pending: register in Claude Desktop/Code, make public, PyPI, MCP Registry, Claude plugin submission.

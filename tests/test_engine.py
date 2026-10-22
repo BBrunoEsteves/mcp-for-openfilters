@@ -101,3 +101,30 @@ def test_user_material_and_project_round_trip(tmp_path):
     assert len(loaded["targets"]) == 2
     assert engine.evaluate(loaded["designs"][0], loaded["targets"])["merit_chi2"] == \
         pytest.approx(engine.evaluate(design, TARGETS)["merit_chi2"])
+
+
+def test_needle_derivatives_match_finite_differences():
+    """OpenFilters' needle merit derivative (dMF = 0.5 dchi2/dd) against
+    physically inserting a 0.01 nm layer."""
+    from openfilters_core.optimization_needles import optimization_needles
+    start = {"substrate": "BK7", "layers": [{"material": m, "thickness": t} for m, t in [("TiO2", 80), ("SiO2", 120)] * 3]}
+    targets = [{"kind": "R", "from": 520, "to": 545, "step": 2.5, "value": 0.99, "tolerance": 0.01},
+               {"kind": "T", "from": 600, "to": 680, "step": 5, "value": 0.9, "tolerance": 0.02}]
+    o = optimization_needles(engine.build_filter(start), engine.build_targets(targets))
+    o.calculate_needles()
+    base = engine.evaluate(start, targets)["merit_chi2"]
+    materials = o.get_needle_materials()
+    h = 0.01
+    for i_parameter, (_, layer) in enumerate(o.parameters):
+        host = start["layers"][layer]
+        positions = o.dMF_positions[i_parameter]
+        for i_needle in (1, len(positions) // 2):
+            for i_material, material in enumerate(materials):
+                if material == host["material"]:
+                    continue
+                cut = positions[i_needle]  # measured from the substrate side of the layer
+                layers = start["layers"][:layer] + [dict(host, thickness=cut), {"material": material, "thickness": h},
+                                                     dict(host, thickness=host["thickness"] - cut)] + start["layers"][layer + 1:]
+                finite = (engine.evaluate(dict(start, layers=layers), targets)["merit_chi2"] - base) / h
+                analytic = 2 * o.dMF[i_material][i_parameter][i_needle]
+                assert analytic == pytest.approx(finite, rel=0.02, abs=5.0)

@@ -107,7 +107,13 @@ EXT_DETECT = """try:
 \tif getattr(_dll, "__file__", None) is None:
 \t\traise ImportError("{mod} is not compiled")
 \tfrom {mod} import *
-except ImportError:"""
+except ImportError as _import_error:
+\t# Say why a compiled core that exists could not be used (stderr only:
+\t# stdout may be a protocol channel).
+\tif "requested" not in str(_import_error) and "not compiled" not in str(_import_error):
+\t\timport sys as _sys
+\t\t_sys.stderr.write("OpenFilters: compiled {mod} could not be loaded (%s); "
+\t\t                  "using the slower pure-Python implementation\\n" % _import_error)"""
 MANUAL += [(f"{pkg}/__init__.py", f"try:\n\tfrom {mod} import *\nexcept ImportError:", EXT_DETECT.format(mod=mod))
            for pkg, mod in [("abeles", "_abeles"), ("moremath", "_moremath")]]
 
@@ -228,6 +234,9 @@ def main(original, fork, output):
     # Empty the output folder rather than deleting it (Windows refuses to
     # delete a folder that is some process's working directory).
     output.mkdir(parents=True, exist_ok=True)
+    # Compiled extensions (and DLLs they need) are kept: they are built
+    # separately and are not produced by this script.
+    compiled = {p: p.read_bytes() for p in output.rglob("*") if p.suffix in (".pyd", ".so", ".dll")}
     for child in output.iterdir():
         shutil.rmtree(child) if child.is_dir() else child.unlink()
     shutil.copytree(original, output, dirs_exist_ok=True,
@@ -267,6 +276,10 @@ def main(original, fork, output):
     shutil.rmtree(output / "abeles" / "_abeles")
     shutil.copytree(fork / "abeles" / "_abeles", output / "abeles" / "_abeles")
     port_moremath_cpp(output / "moremath" / "_moremath")
+
+    for path, data in compiled.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
 
 
 if __name__ == "__main__":
