@@ -128,3 +128,40 @@ def test_needle_derivatives_match_finite_differences():
                 finite = (engine.evaluate(dict(start, layers=layers), targets)["merit_chi2"] - base) / h
                 analytic = 2 * o.dMF[i_material][i_parameter][i_needle]
                 assert analytic == pytest.approx(finite, rel=0.02, abs=5.0)
+
+
+AR = {"center_wavelength": 550, "formula": {"formula": "0.25H 0.25L H L", "materials": {"H": "TiO2", "L": "SiO2"}},
+      "substrate": "BK7"}
+AR_TARGETS = [{"kind": "R", "from": 450, "to": 650, "step": 5, "value": 0, "tolerance": 0.005}]
+
+
+@pytest.mark.parametrize("min_thickness", [10.0, 20.0])
+def test_min_thickness_is_enforced_quickly(min_thickness):
+    """Regression: OpenFilters' needle loop with a minimum thickness cycled
+    (add needle / remove thin layers) until the time limit."""
+    import time
+    t0 = time.time()
+    r = engine.optimize(AR, AR_TARGETS, "needle", {"min_thickness": min_thickness, "time_limit": 120})
+    assert time.time() - t0 < 30
+    assert r["stop_reason"] != "time_limit"
+    assert r["thinnest_layer_nm"] >= min_thickness - 1e-6
+    assert r["merit_chi2"] == pytest.approx(engine.evaluate(r["design"], AR_TARGETS)["merit_chi2"], rel=1e-9)
+    if min_thickness == 10.0:
+        assert r["all_targets_met"]
+
+
+def test_cycle_detection_stops_and_keeps_best_design():
+    import time
+    from openfilters_core.optimization_needles import optimization_needles
+    targets = engine.build_targets(AR_TARGETS)
+    o = optimization_needles(engine.build_filter(AR), targets)
+    o.set_min_thickness(10.0)  # OpenFilters' own removal, which cycles on this case
+    o.set_automatic_mode(True)
+    monitor = engine._Monitor(o, time.time() + 60, None, None, None)
+    o.set_parent(monitor)
+    t0 = time.time()
+    o.go()
+    assert monitor.stop_reason == "cycling"
+    assert time.time() - t0 < 10
+    best = dict(engine.describe(AR)["design"], layers=monitor.best_layers)
+    assert engine.evaluate(best, AR_TARGETS)["merit_chi2"] < 5.0

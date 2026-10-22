@@ -24,7 +24,7 @@ from openfilters_core import targets as of_targets
 from openfilters_core import version as of_version
 from openfilters_core.definitions import BACK, FRONT, P, S, UNPOLARIZED
 from openfilters_core.optimization_needles import optimization_needles
-from openfilters_core.optimization_refinement import optimization_refinement
+from openfilters_core.optimization_refinement import THICKNESS, optimization_refinement
 from openfilters_core.optimization_steps import optimization_steps
 
 from . import settings
@@ -554,28 +554,63 @@ METHODS = {"refine": optimization_refinement, "needle": optimization_needles, "s
 
 
 class _Monitor:
-    """Implements OpenFilters' parent.update() hook: enforces limits and
-    reports progress."""
+    """Implements OpenFilters' parent.update() hook: enforces limits, detects
+    add/remove cycles, remembers the best design seen, reports progress."""
 
-    def __init__(self, optimizer, time_limit, max_layers, max_total_thickness, progress):
+    def __init__(self, optimizer, deadline, max_layers, max_total_thickness, progress):
         self.optimizer, self.progress = optimizer, progress
-        self.deadline = time.time() + time_limit if time_limit else None
+        self.deadline = deadline
         self.max_layers, self.max_total_thickness = max_layers, max_total_thickness
         self.stop_reason, self.last_report = None, 0.0
+        self.best_chi2, self.best_layers = float("inf"), None
+        self.states, self.last_count = {}, None
 
     def update(self, working, status):
         o = self.optimizer
+        count = o.nb_front_layers
+        thickness = sum(_flat(o.front_thickness))
+        chi2 = o.get_chi_2()
+        within_limits = (not self.max_layers or count <= self.max_layers) and \
+                        (not self.max_total_thickness or thickness <= self.max_total_thickness)
+        if within_limits and chi2 and chi2 < self.best_chi2 * (1 - 1e-12):
+            snapshot = _snapshot(o)
+            if snapshot is not None:
+                self.best_chi2, self.best_layers = chi2, snapshot
+        if count != self.last_count:
+            # The needle/step loops can alternate between adding and removing
+            # the same layers forever; three visits to a state means a cycle.
+            self.last_count = count
+            key = (count, round(chi2, 6))
+            self.states[key] = self.states.get(key, 0) + 1
+            if self.states[key] >= 3:
+                self.stop_reason = "cycling"
         if self.deadline and time.time() > self.deadline:
             self.stop_reason = "time_limit"
-        elif self.max_layers and o.nb_front_layers > self.max_layers:
+        elif self.max_layers and count > self.max_layers:
             self.stop_reason = "max_layers"
-        elif self.max_total_thickness and sum(_flat(o.front_thickness)) > self.max_total_thickness:
+        elif self.max_total_thickness and thickness > self.max_total_thickness:
             self.stop_reason = "max_total_thickness"
         if self.stop_reason:
             o.stop()
         if self.progress and time.time() - self.last_report > 2.0:
             self.last_report = time.time()
-            self.progress({"iteration": o.get_iteration(), "chi2": o.get_chi_2(), "nb_layers": o.nb_front_layers})
+            self.progress({"iteration": o.get_iteration(), "chi2": chi2, "nb_layers": count})
+
+
+def _snapshot(o):
+    """Front layers of an optimizer's current state as design layers (None
+    for graded layers, which are not tracked)."""
+    layers = []
+    for i in range(o.nb_front_layers):
+        thickness = o.front_thickness[i]
+        if isinstance(thickness, list):
+            return None
+        material = o.materials[o.front_layers[i]]
+        layer = {"material": material.get_name(), "thickness": float(thickness)}
+        if material.is_mixture():
+            layer["index"] = float(o.front_index[i])
+        layers.append(layer)
+    return layers
 
 
 def _flat(thicknesses):
@@ -586,21 +621,76 @@ def _flat(thicknesses):
             yield t
 
 
-def optimize(design, target_specs, method="needle", options=None, progress=None):
-    """Run one OpenFilters optimization and return the optimized design."""
-    options = dict(options or {})
-    if method not in METHODS:
-        raise EngineError(f"method must be one of {', '.join(METHODS)}")
-    f = build_filter(design)
-    targets = build_targets(target_specs)
-    start = time.time()
-    initial = _evaluator(f, targets).get_chi_2()
+def _thin_layers(layers, min_thickness):
+    return [i for i, l in enumerate(layers) if not l.get("graded") and l["thickness"] < min_thickness]
 
+
+def _remove_layer(layers, i, center_wavelength):
+    """Remove layer i, giving its optical thickness to its neighbours
+    (OpenFilters' rule), then merge identical neighbours."""
+    layers = [dict(l) for l in layers]
+
+    def n(layer):
+        return layer["index"] if "index" in layer else _material(layer["material"]).get_index(center_wavelength)
+
+    ot = layers[i]["thickness"] * n(layers[i])
+    neighbours = [k for k in (i - 1, i + 1) if 0 <= k < len(layers) and not layers[k].get("graded")]
+    for k in neighbours:
+        layers[k]["thickness"] += ot / len(neighbours) / n(layers[k])
+    del layers[i]
+    merged = []
+    for layer in layers:
+        prev = merged[-1] if merged else None
+        if prev and not prev.get("graded") and not layer.get("graded") and prev["material"] == layer["material"]                 and abs(prev.get("index", 0.0) - layer.get("index", 0.0)) < 1e-9:
+            prev["thickness"] += layer["thickness"]
+        else:
+            merged.append(layer)
+    return merged
+
+
+def _enforce_min_thickness(design, targets, options, deadline, progress, floor, center_wavelength):
+    """Make every layer at least `floor` thick: clamp thin layers to the
+    floor and refine with the floor as a bound; then try removing layers
+    stuck at the floor, keeping a removal when the merit does not get worse
+    (fewer layers are preferred). Returns (design, chi2, removed, iterations)."""
+    def clamp(layers):
+        return [dict(l, thickness=max(l["thickness"], floor)) if not l.get("graded") else l for l in layers]
+
+    def refine(layers):
+        d, chi2, _, it = _run("refine", dict(design, layers=clamp(layers)), targets, options, deadline, progress, floor)
+        return d, chi2, it
+
+    current, chi2, iterations = refine(design["layers"])
+    removed = 0
+    while time.time() < deadline and len(current["layers"]) > 1:
+        stuck = [i for i, l in enumerate(current["layers"]) if not l.get("graded") and l["thickness"] <= floor * (1 + 1e-6)]
+        best = None
+        for i in stuck:
+            candidate, c_chi2, it = refine(_remove_layer(current["layers"], i, center_wavelength))
+            iterations += it
+            if best is None or c_chi2 < best[1]:
+                best = (candidate, c_chi2)
+        if best is None or best[1] > chi2 * (1 + 1e-3) + 1e-12:
+            break
+        current, chi2 = best
+        removed += 1
+    return current, chi2, removed, iterations
+
+
+def _run(method, design, targets, options, deadline, progress, floor=None):
+    """One OpenFilters optimization. Returns (design, chi2, stop_reason,
+    iterations); the design is the best one seen, not merely the last.
+    floor (refine only): lower bound on every layer thickness."""
+    f = build_filter(design)
     o = METHODS[method](f, targets)
+    if floor:
+        # OpenFilters bounds thicknesses at 0; raise the bound to the floor.
+        for i, (kind, _) in enumerate(o.parameters):
+            if kind == THICKNESS:
+                o.parameter_min[i] = max(o.parameter_min[i], floor)
+        o.optimizer.set_limits(o.parameter_min, o.parameter_max)
     if options.get("max_iterations"):
         o.max_iterations = o.initial_max_iterations = int(options["max_iterations"])
-    if "min_thickness" in options:
-        o.set_min_thickness(float(options["min_thickness"]))
     if method == "needle":
         if options.get("needle_materials"):
             o.set_needle_materials(options["needle_materials"])
@@ -610,19 +700,77 @@ def optimize(design, target_specs, method="needle", options=None, progress=None)
         o.set_nb_steps(int(options["nb_steps"]))
     if method in ("needle", "step"):
         o.set_automatic_mode(bool(options.get("automatic", True)))
-    monitor = _Monitor(o, float(options.get("time_limit", 300)), options.get("max_layers"),
-                       options.get("max_total_thickness"), progress)
+    monitor = _Monitor(o, deadline, options.get("max_layers"), options.get("max_total_thickness"), progress)
     o.set_parent(monitor)
     o.go()
     o.copy_to_filter()
+    final_design = design_from_filter(f)
+    final_chi2 = _evaluator(f, targets).get_chi_2()
+    limits_ok = (not options.get("max_layers") or f.get_nb_layers() <= options["max_layers"]) and \
+                (not options.get("max_total_thickness") or f.get_total_thickness() <= options["max_total_thickness"])
+    best_design, best_chi2 = (final_design, final_chi2) if limits_ok else (None, float("inf"))
+    if monitor.best_layers is not None:
+        candidate = dict(final_design, layers=monitor.best_layers)
+        chi2 = _evaluator(build_filter(candidate), targets).get_chi_2()
+        if chi2 < best_chi2:
+            best_design, best_chi2 = candidate, chi2
+    if best_design is None:  # never within the limits: report the last design
+        best_design, best_chi2 = final_design, final_chi2
+    stop = monitor.stop_reason or ("converged" if o.get_stop_criteria_met() else "finished")
+    return best_design, float(best_chi2), stop, o.get_iteration()
 
+
+def optimize(design, target_specs, method="needle", options=None, progress=None):
+    """Optimize a design and return the best design found.
+
+    min_thickness is enforced after optimization: the thinnest offending
+    layer is removed and the design re-refined, repeatedly; with the needle
+    or step method, further rounds then try to improve the cleaned design.
+    The result honours min_thickness unless stop_reason says otherwise."""
+    options = dict(options or {})
+    if method not in METHODS:
+        raise EngineError(f"method must be one of {', '.join(METHODS)}")
+    min_thickness = float(options.get("min_thickness") or 0.0)
+    targets = build_targets(target_specs)
+    start = time.time()
+    deadline = start + float(options.get("time_limit", 300))
+    design = design_from_filter(build_filter(design))
+    cw = design["center_wavelength"]
+    initial = _evaluator(build_filter(design), targets).get_chi_2()
+
+    current, chi2, stop, iterations = _run(method, design, targets, options, deadline, progress)
+    removed, rounds = 0, 1
+    if min_thickness:
+        best = None
+        for rounds in range(1, 6):
+            clean, clean_chi2, n_removed, its = _enforce_min_thickness(
+                current, targets, options, deadline, progress, min_thickness, cw)
+            removed += n_removed
+            iterations += its
+            if best is None or clean_chi2 < best[1] * (1 - 1e-3):
+                best = (clean, clean_chi2)
+            else:
+                break  # another round did not improve the clean design
+            if method == "refine" or time.time() >= deadline:
+                break
+            current, chi2, stop, it = _run(method, best[0], targets, options, deadline, progress)
+            iterations += it
+        current, chi2 = best
+        if _thin_layers(current["layers"], min_thickness * (1 - 1e-9)):
+            stop = "min_thickness_not_reached"
+
+    f = build_filter(current)
     final = _evaluator(f, targets)
     rows, all_pass = target_report(final, target_specs)
+    if time.time() >= deadline and stop not in ("max_layers", "max_total_thickness", "min_thickness_not_reached"):
+        stop = "time_limit"
+    thicknesses = [l["thickness"] for l in current["layers"] if not l.get("graded")]
     return {"method": method, "initial_chi2": float(initial), "merit_chi2": float(final.get_chi_2()),
-            "all_targets_met": all_pass, "targets": rows, "iterations": o.get_iteration(),
-            "stop_reason": monitor.stop_reason or ("converged" if o.get_stop_criteria_met() else "finished"),
+            "all_targets_met": all_pass, "targets": rows, "iterations": iterations, "stop_reason": stop,
             "nb_layers": f.get_nb_layers(), "total_thickness_nm": round(float(f.get_total_thickness()), 3),
-            "elapsed_s": round(time.time() - start, 2), "design": design_from_filter(f)}
+            "thinnest_layer_nm": round(min(thicknesses), 3) if thicknesses else None,
+            "thin_layers_removed": removed, "rounds": rounds if min_thickness else 1,
+            "elapsed_s": round(time.time() - start, 2), "design": current}
 
 
 # ---------------------------------------------------------------------------
