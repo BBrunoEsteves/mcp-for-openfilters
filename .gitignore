@@ -13,3 +13,4 @@ dist/
 third_party/
 .e2e_home/
 *.dll
+.config_backups/
