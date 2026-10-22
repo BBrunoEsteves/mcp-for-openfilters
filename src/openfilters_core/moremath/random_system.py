@@ -26,7 +26,7 @@
 import random
 import array
 
-from linear_algebra import *
+from .linear_algebra import *
 
 
 

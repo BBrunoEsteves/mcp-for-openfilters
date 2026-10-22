@@ -23,8 +23,8 @@
 
 
 
-from definitions import *
-from data_holder import REFLECTION,\
+from .definitions import *
+from .data_holder import REFLECTION,\
                         TRANSMISSION,\
                         ABSORPTION,\
                         REFLECTION_PHASE,\

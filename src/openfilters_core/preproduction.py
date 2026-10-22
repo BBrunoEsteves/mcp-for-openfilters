@@ -31,12 +31,12 @@ import math
 import random
 import time
 
-from definitions import *
-import config
-import optical_filter
-import data_holder
-import export
-import color
+from .definitions import *
+from . import config
+from . import optical_filter
+from . import data_holder
+from . import export
+from . import color
 
 
 
@@ -93,10 +93,7 @@ class random_errors(object):
 		self.thickness_error_type = config.THICKNESS_ERROR_TYPE
 		self.relative_thickness_error = config.RELATIVE_THICKNESS_ERROR
 		self.physical_thickness_error = config.PHYSICAL_THICKNESS_ERROR
-		self.relative_index_error = config.RELATIVE_INDEX_ERROR
-		self.physical_index_error = config.PHYSICAL_INDEX_ERROR
 		self.distribution = config.DISTRIBUTION
-		self.index_distribution = config.INDEX_DISTRIBUTION
 		self.nb_tests = config.NB_TESTS
 		
 		self.wavelengths = self.original_filter.get_wavelengths()
@@ -243,38 +240,8 @@ class random_errors(object):
 		self.physical_thickness_error = physical_thickness_error
 		
 		self.reset()
-
-		######################################################################
-		#                                                                    #
-		# set_index_thickness_error                                          #
-		#                                                                    #
-		######################################################################
-		def set_relative_index_error(self, relative_index_error):
-			"""Set the relative index error
-
-			This method takes a single input argument:
-			  relative_index_error   the relative index error."""
-
-			self.relative_index_error = relative_index_error
-
-			self.reset()
-
-		######################################################################
-		#                                                                    #
-		# set_physical_index_error                                           #
-		#                                                                    #
-		######################################################################
-		def set_physical_index_error(self, physical_index_error):
-			"""Set the absolute physical index error
-
-			This method takes a single input argument:
-			  physical_index_error   the physical index error."""
-
-			self.physical_index_error = physical_index_error
-
-			self.reset()
-
-
+	
+	
 	######################################################################
 	#                                                                    #
 	# set_distribution                                                   #
@@ -290,24 +257,8 @@ class random_errors(object):
 		self.distribution = distribution
 		
 		self.reset()
-
-		######################################################################
-		#                                                                    #
-		# set_index_distribution                                             #
-		#                                                                    #
-		######################################################################
-		def set_index_distribution(self, distribution):
-			"""Set the distribution
-
-			This method takes a single input argument:
-			  distribution           the distribution to use (either UNIFORM or
-			                         NORMAL)."""
-
-			self.index_distribution = distribution
-
-			self.reset()
-
-
+	
+	
 	######################################################################
 	#                                                                    #
 	# set_nb_tests                                                       #

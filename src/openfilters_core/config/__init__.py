@@ -35,14 +35,14 @@ __all__ = ["config_color",
            "config_special"]
 
 
-from config_color import *
-from config_dispersive import *
-from config_Fourier import *
-from config_general import *
-from config_GUI import *
-from config_interface import *
-from config_materials import *
-from config_needles import *
-from config_preproduction import *
-from config_refinement import *
-from config_special import *
+from .config_color import *
+from .config_dispersive import *
+from .config_Fourier import *
+from .config_general import *
+from .config_GUI import *
+from .config_interface import *
+from .config_materials import *
+from .config_needles import *
+from .config_preproduction import *
+from .config_refinement import *
+from .config_special import *

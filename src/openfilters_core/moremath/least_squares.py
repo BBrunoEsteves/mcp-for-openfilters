@@ -24,7 +24,7 @@
 
 
 
-import QR
+from . import QR
 
 
 

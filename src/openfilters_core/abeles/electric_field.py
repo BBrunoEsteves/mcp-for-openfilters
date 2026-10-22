@@ -26,8 +26,8 @@
 
 import cmath
 
-from definitions import *
-from spectro import spectrum
+from .definitions import *
+from .spectro import spectrum
 
 
 

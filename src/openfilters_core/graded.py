@@ -27,9 +27,9 @@ from __future__ import division
 
 import math
 
-from definitions import *
-from moremath import interpolation
-from moremath import limits
+from .definitions import *
+from .moremath import interpolation
+from .moremath import limits
 
 # If log1p is implemented (Python 2.6 and later), use it, otherwise
 # implement it using log.

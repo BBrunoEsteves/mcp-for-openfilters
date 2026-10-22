@@ -31,26 +31,26 @@ try:
 	import os as _os
 	if _os.environ.get("OPENFILTERS_PURE_PYTHON"):
 		raise ImportError("pure-Python mode requested")
-	import _moremath as _dll
+	from . import _moremath as _dll
 	if getattr(_dll, "__file__", None) is None:
 		raise ImportError("_moremath is not compiled")
-	from _moremath import *
+	from ._moremath import *
 except ImportError:
 	moremath_dll_import_failed = True
 
 # If the importation of the dll failed, load the Python versions.
 if moremath_dll_import_failed:
-	import Levenberg_Marquardt
-	import QR
-	import roots
+	from . import Levenberg_Marquardt
+	from . import QR
+	from . import roots
 
 # Those modules are not implemented in C.
-import Gauss_Jordan
-import integration
-import interpolation
-import least_squares
-import limits
-import linear_algebra
+from . import Gauss_Jordan
+from . import integration
+from . import interpolation
+from . import least_squares
+from . import limits
+from . import linear_algebra
 
 
 

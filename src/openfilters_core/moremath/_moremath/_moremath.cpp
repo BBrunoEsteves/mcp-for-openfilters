@@ -54,27 +54,30 @@ static PyMethodDef moremath_methods[] =
 /* Init this package so that it can be called from Python.           */
 /*                                                                   */
 /*********************************************************************/
-PyMODINIT_FUNC init_moremath()
+PyMODINIT_FUNC PyInit__moremath()
 {
 	PyObject					*package;
 	PyObject					*Levenberg_Marquardt_module, *QR_module, *roots_module;
 
 	/* Init the package. */
-	package = Py_InitModule("_moremath", moremath_methods);
+	static struct PyModuleDef package_def = {PyModuleDef_HEAD_INIT, "_moremath", NULL, -1, moremath_methods};
+	package = PyModule_Create(&package_def);
 
-	if (!package) return;
+	if (!package) return NULL;
 
 	/* Init all the modules. */
 	Levenberg_Marquardt_module = init_Levenberg_Marquardt();
 	QR_module = init_QR();
 	roots_module = init_roots();
 
-	if (PyErr_Occurred()) return;
+	if (PyErr_Occurred()) return NULL;
 
 	/* Add the modules to the package. */
 	PyModule_AddObject(package, "Levenberg_Marquardt", Levenberg_Marquardt_module);
 	PyModule_AddObject(package, "QR", QR_module);
 	PyModule_AddObject(package, "roots", roots_module);
+
+	return package;
 }
 
 

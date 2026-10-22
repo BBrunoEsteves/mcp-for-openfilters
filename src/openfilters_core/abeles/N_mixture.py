@@ -39,8 +39,8 @@
 
 
 
-from dispersion_mixtures import *
-from N import *
+from .dispersion_mixtures import *
+from .N import *
 
 
 

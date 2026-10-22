@@ -240,7 +240,8 @@ PyObject * init_roots()
 {
 	PyObject					*roots_module;
 
-	roots_module = Py_InitModule("moremath.roots", roots_methods);
+	static struct PyModuleDef roots_module_def = {PyModuleDef_HEAD_INIT, "moremath.roots", NULL, -1, roots_methods};
+	roots_module = PyModule_Create(&roots_module_def);
 
 	return roots_module;
 }

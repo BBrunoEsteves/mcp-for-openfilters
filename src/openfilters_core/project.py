@@ -28,12 +28,12 @@
 import os
 import tempfile
 
-import simple_parser
-import optical_filter
-import targets
-import materials
-import version
-import release
+from . import simple_parser
+from . import optical_filter
+from . import targets
+from . import materials
+from . import version
+from . import release
 
 
 
@@ -511,7 +511,7 @@ def write_project(project, filename):
 	
 	try:
 		os.remove(filename)
-	except (OSError, WindowsError):
+	except OSError:
 		pass
 	
 	os.rename(temporary_file_name, filename)

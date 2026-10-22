@@ -25,6 +25,7 @@
 
 
 
+
 ########################################################################
 #                                                                      #
 # version                                                              #
@@ -57,7 +58,7 @@ class version(object):
 		try:
 			if len(args) == 1 and isinstance(args[0], str):
 				number, _, self.build = args[0].partition("-")
-				numbers = str.split(number, ".")
+				numbers = number.split(".")
 				self.major = int(numbers[0])
 				self.minor = int(numbers[1])
 				if len(numbers) == 2: self.revision = 0
@@ -69,7 +70,7 @@ class version(object):
 				self.minor = int(args[1])
 				if len(args) > 2: self.revision = int(args[2])
 				else: self.revision = 0
-		except Exception as e:
+		except:
 			raise ValueError
 	
 	

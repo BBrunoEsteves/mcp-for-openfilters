@@ -1,7 +1,7 @@
 LIBRARY     _MOREMATH.DLL
 
 EXPORTS
-	init_moremath
+	PyInit__moremath
 	
 	new_spline
 	del_spline

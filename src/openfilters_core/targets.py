@@ -25,12 +25,12 @@
 
 import math
 
-from definitions import *
-import simple_parser
-from moremath import interpolation
-from moremath.Levenberg_Marquardt import SMALLER, EQUAL, LARGER
-import color
-import version
+from .definitions import *
+from . import simple_parser
+from .moremath import interpolation
+from .moremath.Levenberg_Marquardt import SMALLER, EQUAL, LARGER
+from . import color
+from . import version
 
 
 

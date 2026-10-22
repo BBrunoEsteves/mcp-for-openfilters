@@ -36,9 +36,9 @@ import cmath
 import wx
 import wx.grid
 
-from definitions import *
-from moremath import interpolation
-from moremath import limits
+from ..definitions import *
+from ..moremath import interpolation
+from ..moremath import limits
 
 from GUI import GUI_layer_dialogs
 from GUI.GUI_validators import int_validator, float_validator

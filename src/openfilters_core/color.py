@@ -37,11 +37,11 @@ import os.path
 import math
 import copy
 
-import config
-import simple_parser
-from moremath import interpolation
-from moremath import Gauss_Jordan
-import main_directory
+from . import config
+from . import simple_parser
+from .moremath import interpolation
+from .moremath import Gauss_Jordan
+from . import main_directory
 
 
 
@@ -1772,7 +1772,7 @@ def read_observer(observer_name):
 	
 	try:
 		keywords, values = simple_parser.parse_file(observer_file)
-	except (simple_parser.parsing_error, error):
+	except simple_parser.parsing_error as error:
 		raise color_error(observer_name, "Cannot parse observer because %s" % error.get_value())
 	
 	observer_file.close()
@@ -1850,7 +1850,7 @@ def read_illuminant(illuminant_name):
 	
 	try:
 		keywords, values = simple_parser.parse_file(illuminant_file)
-	except (simple_parser.parsing_error, error):
+	except simple_parser.parsing_error as error:
 		raise color_error(illuminant_name, "Cannot parse illuminant because %s" % error.get_value())
 	
 	illuminant_file.close()

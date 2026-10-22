@@ -25,9 +25,9 @@
 
 import math
 
-import config
-from moremath import interpolation
-import targets
+from . import config
+from .moremath import interpolation
+from . import targets
 
 
 

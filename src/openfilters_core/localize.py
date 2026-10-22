@@ -25,7 +25,7 @@
 
 import sys
 
-import config
+from . import config
 
 
 

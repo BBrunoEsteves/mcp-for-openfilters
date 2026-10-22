@@ -31,12 +31,12 @@ import math
 import cmath
 import copy
 
-import config
-from definitions import *
-import abeles
-import main_directory
-import simple_parser
-import units
+from . import config
+from .definitions import *
+from . import abeles
+from . import main_directory
+from . import simple_parser
+from . import units
 
 
 
@@ -1786,7 +1786,7 @@ class material_catalog(object):
 		
 		# Get the material names and sort them in a case insensitive
 		# manner.
-		material_names = self.materials.keys()
+		material_names = list(self.materials.keys())
 		material_names.sort(key = str.upper)
 		
 		return material_names

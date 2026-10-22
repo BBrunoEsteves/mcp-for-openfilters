@@ -32,8 +32,8 @@ import math
 
 import wx
 
-from definitions import *
-from moremath import integration
+from ..definitions import *
+from ..moremath import integration
 
 from GUI import GUI_layer_dialogs
 from GUI.GUI_validators import float_validator

@@ -41,33 +41,33 @@ try:
 	import os as _os
 	if _os.environ.get("OPENFILTERS_PURE_PYTHON"):
 		raise ImportError("pure-Python mode requested")
-	import _abeles as _dll
+	from . import _abeles as _dll
 	if getattr(_dll, "__file__", None) is None:
 		raise ImportError("_abeles is not compiled")
-	from _abeles import *
+	from ._abeles import *
 except ImportError:
 	abeles_dll_import_failed = True
 
 # If the importation of the dll failed, load the Python versions.
 if abeles_dll_import_failed:
-	from definitions import *
-	from wvls import *
-	from N import *
-	from N_mixture import *
-	from dispersion import *
-	from dispersion_mixtures import *
-	from sin2 import *
-	from matrices import *
-	from r_and_t import *
-	from spectro import *
-	from phase import *
-	from ellipso import *
-	from admittance import *
-	from circle import *
-	from electric_field import *
-	from monitoring import *
-	from derivatives import *
-	from needles import *
+	from .definitions import *
+	from .wvls import *
+	from .N import *
+	from .N_mixture import *
+	from .dispersion import *
+	from .dispersion_mixtures import *
+	from .sin2 import *
+	from .matrices import *
+	from .r_and_t import *
+	from .spectro import *
+	from .phase import *
+	from .ellipso import *
+	from .admittance import *
+	from .circle import *
+	from .electric_field import *
+	from .monitoring import *
+	from .derivatives import *
+	from .needles import *
 
 
 

@@ -27,7 +27,7 @@
 import math
 import cmath
 
-from definitions import *
+from .definitions import *
 
 
 

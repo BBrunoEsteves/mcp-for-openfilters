@@ -21,7 +21,7 @@
 
 
 
-from definitions import *
+from .definitions import *
 
 
 MIN = -1.0

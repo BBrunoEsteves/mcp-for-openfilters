@@ -27,10 +27,10 @@
 import math
 import cmath
 
-from definitions import *
-from spectro import spectrum
+from .definitions import *
+from .spectro import spectrum
 
-from moremath.Newton_polynomials import Newton_quadratic
+from ..moremath.Newton_polynomials import Newton_quadratic
 
 
 

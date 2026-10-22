@@ -1312,7 +1312,8 @@ PyObject * init_QR()
 {
 	PyObject					*QR_module;
 
-	QR_module = Py_InitModule("moremath.QR", QR_methods);
+	static struct PyModuleDef QR_module_def = {PyModuleDef_HEAD_INIT, "moremath.QR", NULL, -1, QR_methods};
+	QR_module = PyModule_Create(&QR_module_def);
 
 	return QR_module;
 }

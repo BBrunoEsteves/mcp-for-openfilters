@@ -4,8 +4,8 @@ independent transfer-matrix implementation."""
 import numpy as np
 import pytest
 
-import optical_filter
-from definitions import S, P, UNPOLARIZED
+from openfilters_core import optical_filter
+from openfilters_core.definitions import S, P, UNPOLARIZED
 
 from reference_tmm import rt
 

@@ -24,11 +24,11 @@
 import os
 import os.path
 import sys
-import imp
+import importlib.util
 import glob
 
-import config
-import main_directory
+from . import config
+from . import main_directory
 
 
 
@@ -177,12 +177,15 @@ class module(object):
 		self.module = None
 		
 		try:
-			file, path_name, description = imp.find_module(self.filename, [self.path])
+			path_name = os.path.join(self.path, self.filename + ".py")
+			spec = importlib.util.spec_from_file_location(self.filename, path_name)
+			file = None
 			
 			# Try to import the module. Catch all kind of exception since
 			# anything can happen during the import of the module.
 			try:
-				self.module = imp.load_module(self.filename, file, path_name, description)
+				self.module = importlib.util.module_from_spec(spec)
+				spec.loader.exec_module(self.module)
 			except Exception:
 				self.error = True
 				type_of_exception, value = sys.exc_info()[:2]
@@ -224,7 +227,6 @@ class module(object):
 		for submodule_description in self.description:
 			submodule_name = "?????"
 			try:
-				_locals = locals()
 				submodule_name = submodule_description[0]
 				submodule_function = getattr(self.module, submodule_description[1])
 				submodule_dialog = getattr(self.module, submodule_description[2])

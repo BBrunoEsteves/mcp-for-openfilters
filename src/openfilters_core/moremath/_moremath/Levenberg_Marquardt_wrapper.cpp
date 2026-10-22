@@ -211,9 +211,9 @@ double const * const Levenberg_Marquardt_Python_callback::f(double const * const
 
 	if (answer)
 	{
-		if (PyCObject_Check(answer))
+		if (PyCapsule_CheckExact(answer))
 		{
-			Y = (double *)PyCObject_AsVoidPtr(answer);
+			Y = (double *)PyCapsule_GetPointer(answer, NULL);
 			for (point = 0; point < this->nb_points; point++)
 				this->Y[point] = Y[point];
 		}
@@ -315,9 +315,9 @@ double const ** const Levenberg_Marquardt_Python_callback::df(double const * con
 
 	if (answer)
 	{
-		if (PyCObject_Check(answer))
+		if (PyCapsule_CheckExact(answer))
 		{
-			dY = (double **)PyCObject_AsVoidPtr(answer);
+			dY = (double **)PyCapsule_GetPointer(answer, NULL);
 			for (par = 0; par < this->nb_par; par++)
 				for (point = 0; point < this->nb_points; point++)
 					this->dY[par][point] = dY[par][point];
@@ -607,7 +607,7 @@ static void Levenberg_Marquardt_dealloc(Levenberg_Marquardt_object *self)
 	delete self->callback;
 	delete self->instance;
 
-	self->ob_type->tp_free((PyObject*)self);
+	Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
 
@@ -760,7 +760,7 @@ static PyObject * set_inequalities_wrapper(Levenberg_Marquardt_object *self, PyO
 		for (i = 0; i < self->nb_points; i++)
 		{
 			item = PyList_GetItem(inequalities_, i);
-			inequalities[i] = PyInt_AsLong(item);
+			inequalities[i] = PyLong_AsLong(item);
 		}
 	}
 
@@ -993,8 +993,7 @@ static PyMethodDef Levenberg_Marquardt_type_methods[] =
 
 
 static PyTypeObject Levenberg_Marquardt_type = {
-	PyObject_HEAD_INIT(NULL)
-	0,																					/* ob_size */
+	PyVarObject_HEAD_INIT(NULL, 0)
 	"Levenberg_Marquardt.Levenberg_Marquardt",	/* tp_name */
 	sizeof(Levenberg_Marquardt_object),					/* tp_basicsize */
 	0,																					/* tp_itemsize */
@@ -1055,7 +1054,8 @@ PyObject * init_Levenberg_Marquardt()
 
 	if (PyType_Ready(&Levenberg_Marquardt_type) < 0) return NULL;
 
-	module = Py_InitModule("moremath.Levenberg_Marquardt", Levenberg_Marquardt_methods);
+	static struct PyModuleDef module_def = {PyModuleDef_HEAD_INIT, "moremath.Levenberg_Marquardt", NULL, -1, Levenberg_Marquardt_methods};
+	module = PyModule_Create(&module_def);
 
 	if (!module) return NULL;
 

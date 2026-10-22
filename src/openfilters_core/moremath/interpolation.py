@@ -46,7 +46,7 @@ from __future__ import division
 import math
 import array
 
-from roots import roots_cubic
+from .roots import roots_cubic
 
 
 

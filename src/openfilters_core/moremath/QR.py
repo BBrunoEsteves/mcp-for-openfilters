@@ -33,7 +33,7 @@
 
 from math import sqrt
 
-import limits
+from . import limits
 
 
 

@@ -24,8 +24,8 @@
 
 
 
-import limits
-import linear_algebra
+from . import limits
+from . import linear_algebra
 
 
 

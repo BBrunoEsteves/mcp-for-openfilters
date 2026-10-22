@@ -30,13 +30,13 @@ import cmath
 
 # Import seperatly the elements of the abeles module to avoid the
 # loading of the dll if it exists.
-from definitions import *
-from N import N
-from sin2 import sin2
-from matrices import matrices
-from r_and_t import r_and_t
-from spectro import spectrum
-from phase import GD, GDD
+from .definitions import *
+from .N import N
+from .sin2 import sin2
+from .matrices import matrices
+from .r_and_t import r_and_t
+from .spectro import spectrum
+from .phase import GD, GDD
 
 
 

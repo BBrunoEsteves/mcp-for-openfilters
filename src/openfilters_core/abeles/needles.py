@@ -27,7 +27,7 @@
 import math
 import cmath
 
-from matrices import *
+from .matrices import *
 
 
 

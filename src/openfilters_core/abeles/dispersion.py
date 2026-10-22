@@ -26,7 +26,7 @@
 import math
 import warnings
 
-import PCHIP
+from . import PCHIP
 
 
 

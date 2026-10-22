@@ -24,7 +24,7 @@
 
 
 
-from matrices import *
+from .matrices import *
 
 
 

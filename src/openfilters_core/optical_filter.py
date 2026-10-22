@@ -40,15 +40,15 @@ except ImportError:
 	_eval = eval
 
 
-from definitions import *
-import config
-import abeles
-import materials
-import stack
-import graded
-import simple_parser
-import color
-import optimization_Fourier
+from .definitions import *
+from . import config
+from . import abeles
+from . import materials
+from . import stack
+from . import graded
+from . import simple_parser
+from . import color
+from . import optimization_Fourier
 
 
 
@@ -6830,7 +6830,7 @@ def parse_filter(lines, file_version, material_catalog = None):
 					if len(elements) > 1:
 						raise filter_error("Cannot provide an index for regular materials in %s" % keyword)
 					stack_materials[symbol] = (material_name, None)
-			symbols = stack_materials.keys()
+			symbols = list(stack_materials.keys())
 			for char in stack_formula:
 				if char in string.ascii_letters and not char in symbols:
 					raise filter_error("Undefined symbol in %s" % keyword)
@@ -7294,7 +7294,7 @@ def write_filter(filter, outfile, prefix = ""):
 			for line in lines:
 				outfile.write(prefix + "\t\t%s\n" % line)
 			outfile.write(prefix + "\tEnd\n")
-		for (symbol, material) in stack_materials.iteritems():
+		for (symbol, material) in stack_materials.items():
 			if material[1] is None:
 				outfile.write(prefix + "\t%s: %s\n" % (symbol, material[0]))
 			elif material[1] == stack.MIN:
@@ -7308,7 +7308,7 @@ def write_filter(filter, outfile, prefix = ""):
 	if stack_formula:
 		outfile.write(prefix + "BackStackFormula:\n")
 		outfile.write(prefix + "\tFormula: %s\n" % stack_formula)
-		for (symbol, material) in stack_materials.iteritems():
+		for (symbol, material) in stack_materials.items():
 			if material[1] is None:
 				outfile.write(prefix + "\t%s: %s\n" % (symbol, material[0]))
 			elif material[1] == stack.MIN:
