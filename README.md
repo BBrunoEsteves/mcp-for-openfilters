@@ -33,46 +33,47 @@ Example requests to Claude:
 
 ## Installation
 
-Requires Python ≥ 3.10.
+Requires Python ≥ 3.10. OpenFilters itself does **not** need to be installed: its calculation engine is
+built in (the OpenFilters GUI is only useful to open the `.ofp` files).
+
+### With the installer (recommended)
+
+From the [release page](https://github.com/BBrunoEsteves/openfilters-mcp/releases), download
+`install_openfilters_mcp.py` and the package for your computer (or all `.whl` files) into one folder, then:
 
 ```bash
-pip install openfilters-mcp
+python install_openfilters_mcp.py
 ```
 
-or from source:
+It creates a private environment in `~/.openfilters-mcp`, installs the package, registers the server in
+Claude Desktop (backing up its settings) and Claude Code, and runs a self-test. Then fully quit and reopen
+Claude Desktop. `--uninstall` removes it; `--from-github` downloads the packages with the GitHub CLI.
+
+Packages are built for Windows (64-bit), Linux (x86-64) and macOS (Apple Silicon), Python 3.10–3.14, with
+the compiled fast core included: no compiler needed.
+
+### Manually
 
 ```bash
-git clone <this repository>
-cd open_filters_connector
-python -m venv .venv
-.venv/Scripts/pip install -e .     # Windows (use .venv/bin/pip on macOS/Linux)
+pip install openfilters_mcp-<version>-<python>-<platform>.whl
+claude mcp add --scope user openfilters -- openfilters-mcp
 ```
 
-The fast C++ core is compiled during installation when a C++ compiler is available (Visual Studio
-Build Tools on Windows, Xcode command-line tools on macOS, gcc on Linux). Without one, everything
-still works using OpenFilters' pure-Python implementation, only slower. `server_info` tells you
-which one is active.
-
-### Register with Claude
-
-**Claude Code**
-
-```bash
-claude mcp add openfilters -- openfilters-mcp
-```
-
-**Claude Desktop** — add to `claude_desktop_config.json` (Settings → Developer → Edit config):
+For Claude Desktop, add to `claude_desktop_config.json` (Settings → Developer → Edit config):
 
 ```json
-{
-  "mcpServers": {
-    "openfilters": { "command": "openfilters-mcp" }
-  }
-}
+{"mcpServers": {"openfilters": {"command": "<full path to openfilters-mcp>"}}}
 ```
 
-If `openfilters-mcp` is not on your PATH, use the full path of the Python executable and
-`"args": ["-m", "openfilters_mcp"]`.
+### From source (development)
+
+```bash
+git clone https://github.com/BBrunoEsteves/openfilters-mcp
+cd openfilters-mcp
+python -m venv .venv
+.venv/Scripts/pip install -e ".[dev]"      # .venv/bin/pip on macOS/Linux
+python dev/fetch_compiled.py               # fast C++ core compiled by GitHub Actions (or build it locally)
+```
 
 ### Configuration
 
