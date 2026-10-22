@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+build/
+dist/
+*.egg-info/
+*.pyd
+*.so
+*.obj
+*.o
+# Pristine upstream clones kept for reference only (see src/openfilters_core/PROVENANCE.md)
+third_party/
