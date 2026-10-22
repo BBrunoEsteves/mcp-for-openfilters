@@ -54,4 +54,10 @@ perturb both faces; a design with no front layers is evaluated with a zero-thick
 Spectrum values use 6 significant figures; "OD" quantity = -log10 T; wait_seconds capped at 45 s
 (clients time out tool calls at ~60 s).
 
-Pending: user check of .ofp files in the OpenFilters GUI; make public, PyPI, MCP Registry, Claude plugin.
+Releases: pushing a tag v* makes CI publish a GitHub release with all wheels + scripts/install_openfilters_mcp.py
+(stdlib installer: private venv in ~/.openfilters-mcp/venv, registers in Claude Desktop and Claude Code).
+v0.1.0 released (private) 2026-10-23. Bump the version in pyproject.toml and src/openfilters_mcp/__init__.py
+before tagging the next one.
+
+Pending: make public (consider contacting Larouche/Martinu first), PyPI, MCP Registry, Claude plugin;
+Intel-Mac wheels if needed.
