@@ -7219,7 +7219,7 @@ def read_filter(filename, material_catalog = None):
 	
 	If the filter is not properly formatted, a parsing error is raised."""
 	
-	file = open(filename)
+	file = open(filename, "r", encoding="latin-1")
 	lines = file.readlines()
 	file.close()
 	

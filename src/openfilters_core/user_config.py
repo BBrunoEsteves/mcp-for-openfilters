@@ -99,7 +99,7 @@ def save_user_config():
 	
 	if user_config_filename:
 		try:
-			with open(user_config_filename, "w") as user_config_file:
+			with open(user_config_filename, "w", encoding="latin-1", errors="replace") as user_config_file:
 				user_config.write(user_config_file)
 		except IOError:
 			pass

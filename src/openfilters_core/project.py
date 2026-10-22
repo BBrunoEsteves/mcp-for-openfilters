@@ -460,7 +460,7 @@ def read_project(filename, material_catalog = None):
   is raised."""
 	
 	try:
-		file = open(filename)
+		file = open(filename, "r", encoding="latin-1")
 	except IOError:
 		raise project_error("This file does not exist")
 	

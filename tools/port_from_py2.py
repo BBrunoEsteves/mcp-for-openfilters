@@ -32,6 +32,10 @@ MECHANICAL = [
     # x = range(...)  (later indexed/mutated) ->   x = list(range(...))
     (re.compile(r"^(\s*[\w.]+\s*=\s*)range\((.*)\)\s*$", re.M), r"\1list(range(\2))"),
     (re.compile(r"^import ConfigParser$", re.M), "import configparser as ConfigParser"),
+    # OpenFilters data and project files are Latin-1; Python 2 read bytes, so
+    # make the encoding explicit instead of depending on the OS locale.
+    (re.compile(r'\bopen\((\w+)(?:, "r")?\)'), r'open(\1, "r", encoding="latin-1")'),
+    (re.compile(r'\bopen\((\w+), "w"\)'), r'open(\1, "w", encoding="latin-1", errors="replace")'),
 ]
 
 # Also matches one-line forms such as "if error: print 'message'".
@@ -221,9 +225,13 @@ Montreal), ported to Python 3 without the GUI. See PROVENANCE.md."""
 
 def main(original, fork, output):
     original, fork, output = map(pathlib.Path, (original, fork, output))
-    if output.exists():
-        shutil.rmtree(output)
-    shutil.copytree(original, output, ignore=lambda d, names: [n for n in names if n in EXCLUDE])
+    # Empty the output folder rather than deleting it (Windows refuses to
+    # delete a folder that is some process's working directory).
+    output.mkdir(parents=True, exist_ok=True)
+    for child in output.iterdir():
+        shutil.rmtree(child) if child.is_dir() else child.unlink()
+    shutil.copytree(original, output, dirs_exist_ok=True,
+                    ignore=lambda d, names: [n for n in names if n in EXCLUDE])
 
     for path in output.rglob("*.py"):
         raw = path.read_bytes()

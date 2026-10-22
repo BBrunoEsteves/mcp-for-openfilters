@@ -140,7 +140,8 @@ def add_material(name, model, description="", n=None, k=0.0, coefficients=None, 
         of_materials.parse_material(name, text.splitlines(True))
     except of_materials.material_error as error:
         raise EngineError(f"Invalid material: {error}") from error
-    with open(path, "w", encoding="utf-8") as outfile:
+    # Latin-1, like every OpenFilters data file (keeps them readable by the GUI).
+    with open(path, "w", encoding="latin-1", errors="replace") as outfile:
         outfile.write(text)
     catalog(reload=True)
     return next(row for row in list_materials(name) if row["name"] == name)

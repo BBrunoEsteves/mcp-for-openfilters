@@ -20,15 +20,18 @@ def sources(directory):
 
 
 if sys.platform == "win32":
-    compile_args = ["/O2", "/EHsc"]
+    # The module definitions use designated initializers (C++20 in MSVC).
+    compile_args = ["/O2", "/EHsc", "/std:c++20"]
 else:
     compile_args = ["-O3"]
+# M_PI is not defined by MSVC's <cmath> without this.
+macros = [("_USE_MATH_DEFINES", None)]
 
 extensions = [
     Extension("openfilters_core.abeles._abeles", sources(os.path.join("abeles", "_abeles")),
-              extra_compile_args=compile_args, language="c++"),
+              extra_compile_args=compile_args, define_macros=macros, language="c++"),
     Extension("openfilters_core.moremath._moremath", sources(os.path.join("moremath", "_moremath")),
-              extra_compile_args=compile_args, language="c++"),
+              extra_compile_args=compile_args, define_macros=macros, language="c++"),
 ]
 
 

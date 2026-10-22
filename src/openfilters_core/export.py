@@ -87,7 +87,7 @@ def export_index_profile(filename, filter, side = FRONT):
 	  filter          the filter;
 	  side            the side."""
 	
-	outfile = open(filename, "w")
+	outfile = open(filename, "w", encoding="latin-1", errors="replace")
 	
 	thickness, n = filter.get_index_profile(side)			
 	
@@ -113,7 +113,7 @@ def export_results_to_text(filename, results):
 	The results must be data_handler instances. All results are exported
 	in a single file."""
 	
-	outfile = open(filename, "w")
+	outfile = open(filename, "w", encoding="latin-1", errors="replace")
 	
 	for result in results:
 		

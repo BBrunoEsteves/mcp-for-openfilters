@@ -2411,7 +2411,7 @@ def read_material(name, directory = None):
 	
 	filename = os.path.join(directory, (name + ".mat"))
 	
-	infile = open(filename)
+	infile = open(filename, "r", encoding="latin-1")
 	lines = infile.readlines()
 	infile.close()
 	
@@ -2457,7 +2457,7 @@ def write_material(material, outfile = None, prefix = "", directory = None):
 	
 	if not outfile:
 		filename = os.path.join(directory, (name + ".mat"))
-		outfile = open(filename, "w")
+		outfile = open(filename, "w", encoding="latin-1", errors="replace")
 	
 	if description:
 		outfile.write(prefix + "Description: %s\n" % description)
@@ -2640,7 +2640,7 @@ def import_material(filename, name, description, nb_header_lines, wavelength_uni
 	imaginary part is negative."""
 	
 	try:
-		file = open(filename, "r")
+		file = open(filename, "r", encoding="latin-1")
 	except IOError:
 		raise material_error(name, "Impossible to open the file")
 	
