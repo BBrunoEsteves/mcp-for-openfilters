@@ -51,7 +51,8 @@ Workflow: list_materials -> describe_design / compute_spectrum -> evaluate_desig
 For many cases use run_batch (sweeps) and run_optimization_campaign (many starts, ranked, optional
 yield analysis); they return a job_id: poll job_status, then get_results.
 Plots are also saved as PNG files (paths in "plot_files"); some chat apps do not display tool images to
-the user, so always give the user the plot file paths. Results, CSV tables and
+the user, so ALWAYS give the user the plot file paths. optimize_design, evaluate_design and campaign
+get_results plot the design(s) against the targets automatically. Results, CSV tables and
 .ofp projects (openable in the OpenFilters GUI) are written to the data folder shown by server_info.
 """
 
@@ -118,6 +119,37 @@ def with_plots(out, pngs, name):
         paths.append(path)
     out["plot_files"] = paths
     return [out] + [Image(data=png, format="png") for png in pngs]
+
+
+async def targets_plot(designs, targets, title, name):
+    """Plot designs (list of (label, design, is_reference)) against the R/T/A
+    targets: one figure per (angle, polarization) used by the targets.
+    Returns (pngs, plot_files-ready) or ([], None) when nothing to draw."""
+    photometric = [t for t in targets if t.get("kind") in ("R", "T", "A")]
+    if not photometric:
+        return []
+    lo = min(t.get("from", t.get("wavelength", 1e9)) for t in photometric)
+    hi = max(t.get("to", t.get("wavelength", 0)) for t in photometric)
+    margin = max(0.15 * (hi - lo), 20.0)
+    wavelengths = {"from": max(lo - margin, 200.0), "to": hi + margin, "step": max((hi - lo + 2 * margin) / 600, 0.25)}
+    combos = []
+    for t in photometric:
+        key = (float(t.get("angle", 0.0)), str(t.get("polarization", "unpolarized")))
+        if key not in combos:
+            combos.append(key)
+    quantities = sorted({t["kind"] for t in photometric}, key="RTA".index)
+    pngs = []
+    for angle, pol in combos[:3]:
+        curves, wvls = [], None
+        for label, design, reference in designs:
+            r = await compute("spectra", design=design, quantities=quantities, wavelengths=wavelengths,
+                              angles=[angle], polarizations=[pol])
+            wvls = r["wavelengths"]
+            for s in r["series"]:
+                curves.append((f"{s['quantity']} {label}", s["quantity"], s["values"], reference))
+        shown = [t for t in photometric if (float(t.get("angle", 0.0)), str(t.get("polarization", "unpolarized"))) == (angle, pol)]
+        pngs.append(plotting.design_vs_targets(wvls, curves, shown, f"{title} — {angle:g}°, {pol}"))
+    return pngs
 
 
 Design = Annotated[dict[str, Any], Field(description="Design object (see server instructions): substrate, media, layers from the substrate outward or a formula.")]
@@ -339,10 +371,15 @@ async def compute_monitoring_curves(design: Design, wavelengths: list[float], an
 
 
 @mcp.tool()
-async def evaluate_design(design: Design, targets: Targets) -> dict:
+async def evaluate_design(design: Design, targets: Targets, plot: bool = True):
     """Merit (chi^2, OpenFilters' definition) of a design against targets, with per-target pass
     fraction and maximum deviation. all_targets_met is true when every point is within tolerance."""
-    return await compute("evaluate", design=design, target_specs=targets)
+    out = await compute("evaluate", design=design, target_specs=targets)
+    if plot:
+        pngs = await targets_plot([("design", design, False)], targets, "Design vs targets", "evaluation")
+        if pngs:
+            return with_plots(out, pngs, "evaluation")
+    return out
 
 
 @mcp.tool()
@@ -393,7 +430,10 @@ async def optimize_design(design: Design, targets: Targets, method: str = "needl
         r = manager().result(job_id, 0)
         if not r.get("ok"):
             raise ToolError(r.get("error"))
-        return {**{k: v for k, v in r["result"].items()}, "job_id": job_id, "outputs": out.get("outputs")}
+        result = {**r["result"], "job_id": job_id, "outputs": out.get("outputs")}
+        pngs = await targets_plot([("optimized", result["design"], False), ("start", design, True)],
+                                  targets, f"Optimized ({method})", "optimized")
+        return with_plots(result, pngs, "optimized") if pngs else result
     return out
 
 
@@ -550,11 +590,25 @@ async def list_jobs(limit: int = 20) -> dict:
 
 @mcp.tool()
 async def get_results(job_id: str, top_n: int = 10, sort_by: str | None = None, descending: bool = False,
-                      include_designs: bool = False) -> dict:
+                      include_designs: bool = False, plot: bool = True):
     """Result rows of a job (campaigns are ranked best first; batches in task order unless sort_by is
     given). Works on partial results while the job is running. include_designs adds the optimized
-    design JSON of the returned rows."""
+    design JSON of the returned rows. For finished campaigns, plots the top 3 designs against the targets."""
     out = checked(manager().results, job_id, top_n, sort_by, descending)
+    job = manager()._load(job_id)
+    if plot and job["kind"] == "campaign" and out["status"] == "done":
+        best = []
+        for row in out["rows"][:3]:
+            r = manager().result(job_id, row["task"])
+            if r.get("ok"):
+                best.append((f"#{row.get('rank', len(best) + 1)}", r["result"]["design"], False))
+        pngs = await targets_plot(best, job["meta"]["targets"], "Campaign: top designs", "campaign_top") if best else []
+        if include_designs:
+            for row in out["rows"]:
+                r = manager().result(job_id, row["task"])
+                if r.get("ok") and isinstance(r["result"], dict) and "design" in r["result"]:
+                    row["design"] = r["result"]["design"]
+        return with_plots(out, pngs, "campaign_top") if pngs else out
     if include_designs:
         for row in out["rows"]:
             r = manager().result(job_id, row["task"])

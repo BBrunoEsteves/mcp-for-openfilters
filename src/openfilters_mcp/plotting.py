@@ -6,6 +6,8 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+from matplotlib.ticker import PercentFormatter  # noqa: E402
 
 SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
 SURFACE, INK, INK_2, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#e4e3df"
@@ -31,9 +33,22 @@ def _figure(title, xlabel, ylabel):
     return fig, ax
 
 
-def _png(fig, ax, n_series):
-    if n_series >= 2:
-        ax.legend(fontsize=8, frameon=False, labelcolor=INK_2)
+def _photometric_axis(ax, values):
+    """Percent axis, zoomed in when everything is small (e.g. AR coatings)
+    so that low-reflectance detail is visible."""
+    top = float(np.nanmax(values)) if len(values) else 1.0
+    if top < 0.5:
+        ax.set_ylim(0.0, max(top * 1.15, 1e-3))
+    else:
+        ax.set_ylim(-0.02, 1.02)
+    ax.yaxis.set_major_formatter(PercentFormatter(1.0))
+
+
+def _png(fig, ax, n_series, legend_title=None):
+    if n_series >= 2 or legend_title:
+        legend = ax.legend(fontsize=8, frameon=False, labelcolor=INK_2, title=legend_title, title_fontsize=7)
+        if legend_title:
+            legend.get_title().set_color(INK_2)
     fig.tight_layout()
     buffer = io.BytesIO()
     fig.savefig(buffer, format="png", facecolor=SURFACE)
@@ -56,7 +71,7 @@ def spectra(result, title="Spectrum"):
             style = {"s": "-", "p": "--", "unpolarized": ":"}.get(s["polarization"], "-.")
             ax.plot(result["wavelengths"], s["values"], color=SERIES[i], linewidth=1.8, linestyle=style, label=label)
         if ylabel == "R/T/A":
-            ax.set_ylim(-0.02, 1.02)
+            _photometric_axis(ax, np.concatenate([np.asarray(x["values"]) for x in series[:MAX_SERIES]]))
         if len(series) > MAX_SERIES:
             ax.text(0.99, 0.01, f"{len(series) - MAX_SERIES} more series not drawn", transform=ax.transAxes,
                     ha="right", va="bottom", fontsize=7, color=INK_2)
@@ -87,3 +102,39 @@ def index_profile(design_rows, title="Index profile"):
         depth += row["thickness_nm"]
     ax.plot(xs, ns, color=SERIES[0], linewidth=1.8)
     return _png(fig, ax, 1)
+
+
+def design_vs_targets(wavelengths, curves, targets, title):
+    """Spectra of one or more designs with the photometric targets drawn on
+    top. curves: [(label, quantity, values, is_reference)]; targets: target
+    dicts (R/T/A kinds only are drawn)."""
+    fig, ax = _figure(title, "Wavelength (nm)", "R / T / A")
+    quantities = []
+    for label, quantity, values, reference in curves:
+        if quantity not in quantities:
+            quantities.append(quantity)
+        color = SERIES[quantities.index(quantity) % MAX_SERIES]
+        ax.plot(wavelengths, values, color=color, linewidth=1.0 if reference else 1.8,
+                linestyle="--" if reference else "-", alpha=0.6 if reference else 1.0, label=label)
+    for target in targets:
+        if target.get("kind") not in quantities:
+            continue
+        color = SERIES[quantities.index(target["kind"]) % MAX_SERIES]
+        marker = {">=": "^", "larger": "^", "min": "^", ">": "^",
+                  "<=": "v", "smaller": "v", "max": "v", "<": "v"}.get(str(target.get("inequality", "")).lower(), "o")
+        if "wavelength" in target:
+            ax.plot([target["wavelength"]], [target["value"]], marker=marker, color=INK, markersize=8, linestyle="none")
+        elif "points" in target:
+            pts = target["points"]
+            ax.plot([p[0] for p in pts], [p[1] for p in pts], color=INK, linewidth=2.5, alpha=0.5)
+        elif "from" in target:
+            ax.plot([target["from"], target["to"]], [target["value"]] * 2, color=INK, linewidth=2.5, alpha=0.5)
+            ax.plot([(target["from"] + target["to"]) / 2], [target["value"]], marker=marker, color=INK,
+                    markersize=7, linestyle="none")
+    target_values = [t.get("value", 0.0) for t in targets if t.get("kind") in quantities and "value" in t]
+    target_values += [p[1] for t in targets if t.get("kind") in quantities for p in t.get("points", [])]
+    _photometric_axis(ax, np.concatenate([np.asarray(c[2]) for c in curves] + [np.asarray(target_values, dtype=float)]))
+    note = "grey bars: targets (▲ ≥, ▼ ≤)"
+    if any(c[3] for c in curves):
+        note += "\ndashed: starting design"
+    return _png(fig, ax, len(curves), legend_title=note)
