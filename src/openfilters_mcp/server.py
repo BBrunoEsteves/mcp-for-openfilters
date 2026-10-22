@@ -49,7 +49,9 @@ Color targets: {"kind": "R_color", "color_space": "L*a*b*", "values": [L, a, b],
 Workflow: list_materials -> describe_design / compute_spectrum -> evaluate_design -> optimize_design
 (refine = thickness refinement, needle = adds layers, step = graded index) -> tolerance_analysis.
 For many cases use run_batch (sweeps) and run_optimization_campaign (many starts, ranked, optional
-yield analysis); they return a job_id: poll job_status, then get_results. Results, CSV tables and
+yield analysis); they return a job_id: poll job_status, then get_results.
+Plots are also saved as PNG files (paths in "plot_files"); some chat apps do not display tool images to
+the user, so always give the user the plot file paths. Results, CSV tables and
 .ofp projects (openable in the OpenFilters GUI) are written to the data folder shown by server_info.
 """
 
@@ -103,6 +105,21 @@ def stamp(name):
     return os.path.join(outputs_dir(), datetime.datetime.now().strftime("%Y%m%d-%H%M%S-") + name)
 
 
+def with_plots(out, pngs, name):
+    """Return the result plus the plots, and save each plot as a PNG so the
+    user can open it (some clients show tool images only to the model)."""
+    if isinstance(pngs, bytes):
+        pngs = [pngs]
+    paths = []
+    for i, png in enumerate(pngs):
+        path = stamp(f"{name}{'' if len(pngs) == 1 else f'_{i + 1}'}.png")
+        with open(path, "wb") as outfile:
+            outfile.write(png)
+        paths.append(path)
+    out["plot_files"] = paths
+    return [out] + [Image(data=png, format="png") for png in pngs]
+
+
 Design = Annotated[dict[str, Any], Field(description="Design object (see server instructions): substrate, media, layers from the substrate outward or a formula.")]
 Targets = Annotated[list[dict[str, Any]], Field(description="List of target objects (see server instructions).")]
 Wavelengths = Annotated[dict[str, float] | list[float] | None,
@@ -139,7 +156,7 @@ async def get_material_index(name: str, wavelengths: Wavelengths = None, plot: b
     if plot:
         png = plotting.curves(wvls, {"n": [r[1] for r in table], "k": [r[2] for r in table]},
                               f"{name} optical constants", "Wavelength (nm)", "n, k")
-        return [out, Image(data=png, format="png")]
+        return with_plots(out, png, f"index_{name}")
     return out
 
 
@@ -193,7 +210,7 @@ async def describe_design(design: Design, plot_index_profile: bool = False):
     total thickness and the normalized design JSON (e.g. a formula expanded into layers)."""
     out = await compute("describe", design=design)
     if plot_index_profile:
-        return [out, Image(data=plotting.index_profile(out["layers"]), format="png")]
+        return with_plots(out, plotting.index_profile(out["layers"]), "index_profile")
     return out
 
 
@@ -240,7 +257,7 @@ async def compute_spectrum(design: Design,
                 writer.writerow([w] + [s["values"][i] for s in result["series"]])
         out["csv"] = path
     if plot:
-        return [out] + [Image(data=png, format="png") for png in plotting.spectra(result)]
+        return with_plots(out, plotting.spectra(result), "spectrum")
     return out
 
 
@@ -261,7 +278,7 @@ async def compute_angle_scan(design: Design, wavelength: float, quantities: list
            "curves": {k: [round(v, 6) for v in vals] for k, vals in curves.items()}}
     if plot:
         png = plotting.curves(angle_list, curves, f"Angle scan at {wavelength:g} nm", "Angle of incidence (deg)", "Value")
-        return [out, Image(data=png, format="png")]
+        return with_plots(out, png, "angle_scan")
     return out
 
 
@@ -293,7 +310,7 @@ async def compute_electric_field(design: Design, wavelength: float, angle: float
     if plot:
         png = plotting.curves(r["position_nm"], {"|E|²": values}, f"Electric field at {wavelength:g} nm",
                               "Distance from substrate (nm)", "|E|² / |E_incident|²", r["layer_boundaries_nm"])
-        return [out, Image(data=png, format="png")]
+        return with_plots(out, png, "electric_field")
     return out
 
 
@@ -317,7 +334,7 @@ async def compute_monitoring_curves(design: Design, wavelengths: list[float], an
     if plot:
         png = plotting.curves(r["deposited_thickness_nm"], r["signal"], f"{mode.title()} monitoring",
                               "Deposited thickness (nm)", "Signal", r["layer_boundaries_nm"])
-        return [out, Image(data=png, format="png")]
+        return with_plots(out, png, "monitoring")
     return out
 
 

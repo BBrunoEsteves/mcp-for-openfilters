@@ -52,7 +52,9 @@ def spectra(result, title="Spectrum"):
         fig, ax = _figure(title, "Wavelength (nm)", ylabel)
         for i, s in enumerate(series[:MAX_SERIES]):
             label = f"{s['quantity']} {s['angle']:g}° {s['polarization']}"
-            ax.plot(result["wavelengths"], s["values"], color=SERIES[i], linewidth=1.8, label=label)
+            # Line style by polarization keeps coincident curves (e.g. s and p at 0°) visible.
+            style = {"s": "-", "p": "--", "unpolarized": ":"}.get(s["polarization"], "-.")
+            ax.plot(result["wavelengths"], s["values"], color=SERIES[i], linewidth=1.8, linestyle=style, label=label)
         if ylabel == "R/T/A":
             ax.set_ylim(-0.02, 1.02)
         if len(series) > MAX_SERIES:
