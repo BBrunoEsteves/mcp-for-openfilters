@@ -203,6 +203,8 @@ def build_filter(design, wavelengths=None):
         f.set_medium(design.get("incident_medium", "void"), FRONT)
         f.set_medium(design.get("exit_medium", design.get("incident_medium", "void")), BACK)
         f.set_consider_backside(bool(design.get("consider_backside", False)))
+        if "consider_backside_on_monitoring" in design:
+            f.set_consider_backside_on_monitoring(bool(design["consider_backside_on_monitoring"]))
         if "illuminant" in design:
             f.set_illuminant(design["illuminant"])
         if "observer" in design:
@@ -232,6 +234,13 @@ def _add_layer(f, layer, side, i):
         raise EngineError(f"layer {i} has no material")
     index = layer.get("index")
     position = f.get_nb_layers(side)
+    if layer.get("graded"):
+        graded = layer["graded"]
+        if not isinstance(graded, dict) or "steps" not in graded or "step_thicknesses" not in graded:
+            raise EngineError(f"graded layer {i} needs {{\"steps\": [...], \"step_thicknesses\": [...]}} (as returned by describe_design or load_project)")
+        f.add_graded_layer_from_steps(material, [int(x) for x in graded["steps"]],
+                                      [float(t) for t in graded["step_thicknesses"]], side=side)
+        return
     if "qwot" in layer:
         mat = _material(material)
         n = index if index is not None else mat.get_index(f.get_center_wavelength())
@@ -266,13 +275,15 @@ def design_from_filter(f):
         layers = []
         for i in range(f.get_nb_layers(side)):
             layer = {"material": f.get_layer_material_name(i, side)}
+            # Full precision, so a design round-trips to the same spectra.
+            layer["thickness"] = float(f.get_layer_thickness(i, side))
             if f.is_graded(i, side):
-                layer["graded"] = True
-                layer["thickness"] = round(float(f.get_layer_thickness(i, side)), 4)
-            else:
-                layer["thickness"] = round(float(f.get_layer_thickness(i, side)), 4)
-                if _material(layer["material"]).is_mixture():
-                    layer["index"] = round(float(f.get_layer_index(i, side)), 5)
+                step_thicknesses, steps = f.get_layer_step_profile(i, side)
+                layer["graded"] = {"step_thicknesses": [float(t) for t in step_thicknesses],
+                                   "steps": [int(x) for x in steps],
+                                   "indices_at_cw": [float(n) for n in f.get_layer_index(i, side)]}
+            elif _material(layer["material"]).is_mixture():
+                layer["index"] = float(f.get_layer_index(i, side))
             layers.append(layer)
         if layers or side == FRONT:
             design[key] = layers
@@ -398,14 +409,13 @@ def monitoring(design, wavelengths, angle=0.0, polarization="unpolarized", mode=
         thickness, signal = f.transmission_monitoring(wvls, float(angle), polarization_value(polarization))
     else:
         raise EngineError("mode must be reflection or transmission")
-    deposited, boundaries = [], []
-    curves = {f"{w:g}": [] for w in wvls}
-    for layer_thickness, layer_signal in zip(thickness, signal):
-        deposited += [float(x) for x in layer_thickness]
-        for w, values in zip(wvls, layer_signal):
-            curves[f"{w:g}"] += [float(v) for v in values]
-        boundaries.append(float(layer_thickness[-1]))
-    return {"deposited_thickness_nm": deposited, "signal": curves, "layer_boundaries_nm": boundaries}
+    # thickness[layer][point]; signal[wavelength][layer][point].
+    deposited = [float(x) for layer_thickness in thickness for x in layer_thickness]
+    boundaries = [float(layer_thickness[-1]) for layer_thickness in thickness]
+    curves = {f"{w:g}": [float(v) for layer_signal in signal[i] for v in layer_signal]
+              for i, w in enumerate(wvls)}
+    return {"deposited_thickness_nm": deposited, "signal": curves, "layer_boundaries_nm": boundaries,
+            "includes_backside": bool(f.get_consider_backside_on_monitoring())}
 
 
 # ---------------------------------------------------------------------------
@@ -618,7 +628,7 @@ def optimize(design, target_specs, method="needle", options=None, progress=None)
 # Tolerance analysis
 # ---------------------------------------------------------------------------
 
-def tolerance(design, target_specs, n_trials=200, thickness_error=None, index_error=None, seed=0):
+def tolerance(design, target_specs, n_trials=200, thickness_error=None, index_error=None, seed=0, keep_values=False):
     """Monte Carlo yield: perturb thicknesses (and optionally material
     indices) and count designs meeting all targets.
 
@@ -668,7 +678,9 @@ def tolerance(design, target_specs, n_trials=200, thickness_error=None, index_er
         passes += ok
         per_target_fail += [r["pass_fraction"] < 1 for r in rows]
     merits = np.array(merits)
-    return {"n_trials": int(n_trials), "yield": passes / float(n_trials), "nominal_passes": nominal_pass,
+    extra = {"chi2_values": merits.tolist(), "target_failures": per_target_fail.tolist()} if keep_values else {}
+    return {**extra, "n_trials": int(n_trials), "passes": int(passes), "yield": passes / float(n_trials),
+            "nominal_passes": nominal_pass,
             "nominal_chi2": float(nominal_eval.get_chi_2()),
             "chi2_median": float(np.median(merits)), "chi2_p90": float(np.percentile(merits, 90)),
             "target_failure_rate": [round(float(x) / n_trials, 4) for x in per_target_fail],
@@ -759,3 +771,9 @@ def save_project(path, designs, target_specs=None, comment=""):
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     of_project.write_project(p, path)
     return os.path.abspath(path)
+
+
+def acceleration_status():
+    from openfilters_core import abeles, moremath
+    return {"cpp_core_abeles": abeles.get_abeles_dll_import_success(),
+            "cpp_core_moremath": moremath.get_moremath_dll_import_success()}

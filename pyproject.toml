@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openfilters-mcp"
+version = "0.1.0"
+description = "MCP server that lets Claude design and optimize optical thin-film coatings with OpenFilters"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-2.0-or-later"
+license-files = ["LICENSE", "src/openfilters_core/gpl.txt"]
+authors = [{ name = "Bruno Esteves" }]
+keywords = ["thin film", "optical coating", "optics", "interference filter", "MCP", "Claude", "OpenFilters"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: C++",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Intended Audience :: Science/Research",
+]
+dependencies = ["mcp>=2.0", "numpy>=1.24", "matplotlib>=3.7"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+openfilters-mcp = "openfilters_mcp.server:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+openfilters_core = ["materials/*.mat", "color/**/*", "examples/*.ofp", "*.txt", "*.md", "LICENSE"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

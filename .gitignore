@@ -11,3 +11,4 @@ dist/
 *.o
 # Pristine upstream clones kept for reference only (see src/openfilters_core/PROVENANCE.md)
 third_party/
+.e2e_home/
