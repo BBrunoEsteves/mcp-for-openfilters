@@ -37,7 +37,15 @@ stdout in server or worker code (stdout is the MCP channel). User-facing errors:
 ## Status (2026-10-22)
 
 Done: Python 3 port validated (analytic + independent TMM, < 1e-9; needle derivatives vs finite differences),
-all optimizers working, 22 MCP tools working end to end, 39 tests. Private GitHub repo
+all optimizers working, 22 MCP tools working end to end, 42 tests. Private GitHub repo
 BBrunoEsteves/openfilters-mcp; CI compiles the C++ core and tests on Windows/macOS/Linux and builds wheels
 (cp310-cp314, runtime DLLs bundled). Compiled core is 15-30x faster than pure Python.
-Pending: register in Claude Desktop/Code, make public, PyPI, MCP Registry, Claude plugin submission.
+Registered locally (user scope) in Claude Code and Claude Desktop, pointing at .venv/Scripts/openfilters-mcp.exe;
+config backups in .config_backups/. Claude Desktop shows tool images only to the model, so plots are also saved
+as PNG files (plot_files). After changing server code, the user must fully quit and reopen Claude Desktop.
+
+Optimization notes: never pass min_thickness to OpenFilters' needle/step loops (they cycle add/remove);
+engine.optimize enforces it with bounded refinement (_enforce_min_thickness) and tracks the best design
+(_Monitor). Check script: dev/check_min_thickness.py.
+
+Pending: user check of .ofp files in the OpenFilters GUI; make public, PyPI, MCP Registry, Claude plugin.
