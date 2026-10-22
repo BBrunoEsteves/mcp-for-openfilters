@@ -167,3 +167,86 @@ def test_cycle_detection_stops_and_keeps_best_design():
     assert time.time() - t0 < 50
     best = dict(engine.describe(AR)["design"], layers=monitor.best_layers)
     assert engine.evaluate(best, AR_TARGETS)["merit_chi2"] < 5.0
+
+
+# --- two-sided designs -------------------------------------------------------
+
+FRONT = [{"material": "TiO2", "thickness": 90.0}, {"material": "SiO2", "thickness": 140.0},
+         {"material": "TiO2", "thickness": 60.0}]
+BACK = [{"material": "SiO2", "thickness": 120.0}, {"material": "TiO2", "thickness": 75.0}]
+WL = {"from": 400, "to": 1000, "step": 5}
+
+
+def two_sided(**extra):
+    # Substrate "L" (n = 1.5, k = 0) so that no substrate absorption enters the comparison.
+    return {"substrate": "L", "substrate_thickness_mm": 1, "consider_backside": True,
+            "layers": FRONT, "back_layers": BACK, **extra}
+
+
+def test_two_sided_spectrum_matches_incoherent_combination():
+    """T = T1 T2 / (1 - R1' R2') with R' seen from inside the substrate."""
+    one_sided = lambda layers: {"substrate": "L", "layers": layers}
+    front, back = one_sided(FRONT), one_sided(BACK)
+    T1 = engine.spectra(front, ["T"], WL)["series"][0]["values"]
+    R1r = engine.spectra(front, ["R"], WL, reverse=True)["series"][0]["values"]
+    T2 = engine.spectra(back, ["T"], WL)["series"][0]["values"]
+    R2r = engine.spectra(back, ["R"], WL, reverse=True)["series"][0]["values"]
+    expected = T1 * T2 / (1 - R1r * R2r)
+    T = engine.spectra(two_sided(), ["T"], WL)["series"][0]["values"]
+    np.testing.assert_allclose(T, expected, rtol=1e-9)
+
+
+def test_od_quantity():
+    s = engine.spectra(two_sided(), ["T", "OD"], WL)
+    np.testing.assert_allclose(s["series"][1]["values"], -np.log10(s["series"][0]["values"]), rtol=1e-12)
+
+
+def test_describe_reports_back_face_and_warns_when_ignored():
+    d = engine.describe(two_sided())
+    assert d["nb_back_layers"] == 2 and d["consider_backside"] and "warning" not in d
+    d = engine.describe(two_sided(consider_backside=False))
+    assert "warning" in d
+
+
+def test_two_sided_project_round_trip(tmp_path):
+    path = engine.save_project(str(tmp_path / "two_sided.ofp"), [two_sided()], AR_TARGETS)
+    text = open(path, encoding="latin-1").read()
+    assert text.count("BackLayer:") == 2 and "ConsiderBackside: 1" in text
+    loaded = engine.load_project(path)
+    assert len(loaded["designs"]) == 1
+    design = loaded["designs"][0]
+    assert design["consider_backside"] and len(design["back_layers"]) == 2
+
+
+def test_optimizer_keeps_back_layers_and_counts_them():
+    targets = [{"kind": "T", "from": 500, "to": 600, "step": 10, "value": 0.98, "tolerance": 0.01, "inequality": ">="}]
+    r = engine.optimize(two_sided(), targets, "refine", {"time_limit": 30})
+    back = r["design"]["back_layers"]
+    assert [l["thickness"] for l in back] == pytest.approx([l["thickness"] for l in BACK])
+    with_back = engine.evaluate(r["design"], targets)["merit_chi2"]
+    without_back = engine.evaluate(dict(r["design"], consider_backside=False), targets)["merit_chi2"]
+    assert with_back != pytest.approx(without_back)
+
+
+def test_tolerance_perturbs_back_face():
+    targets = [{"kind": "T", "from": 500, "to": 600, "step": 10, "value": 0.9, "tolerance": 0.01}]
+    design = dict(two_sided(), layers=[])  # only the back face is coated
+    r = engine.tolerance(design, targets, n_trials=10, thickness_error={"type": "relative", "sigma": 0.05},
+                         keep_values=True)
+    assert np.std(r["chi2_values"]) > 0
+
+
+def test_sensitivity_includes_back_face():
+    targets = [{"kind": "T", "from": 500, "to": 600, "step": 10, "value": 0.9, "tolerance": 0.01}]
+    rows = engine.sensitivity(two_sided(), targets)["layers"]
+    assert {r["side"] for r in rows} == {"front", "back"} and len(rows) == len(FRONT) + len(BACK)
+
+
+def test_bare_front_face_can_be_evaluated():
+    targets = [{"kind": "R", "wavelength": 550, "value": 0.0, "tolerance": 0.01}]
+    bare = {"substrate": "L", "layers": []}
+    R = engine.spectra(bare, ["R"], [550])["series"][0]["values"][0]
+    assert R == pytest.approx(0.04, abs=1e-6)  # ((1.5 - 1) / (1.5 + 1))^2
+    assert engine.evaluate(bare, targets)["merit_chi2"] == pytest.approx((R / 0.01) ** 2, rel=1e-9)
+    with pytest.raises(engine.EngineError):
+        engine.optimize(bare, targets, "needle")

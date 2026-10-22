@@ -294,19 +294,32 @@ def design_from_filter(f):
 def describe(design):
     f = build_filter(design)
     cw = f.get_center_wavelength()
-    rows = []
-    for i in range(f.get_nb_layers()):
-        thickness = float(f.get_layer_thickness(i))
-        material = f.get_layer_material_name(i)
-        row = {"#": i + 1, "material": material, "thickness_nm": round(thickness, 3)}
-        if not f.is_graded(i):
-            n = float(f.get_layer_index(i)) if _material(material).is_mixture() else _material(material).get_index(cw)
-            row["n@cw"] = round(n, 4)
-            row["qwot@cw"] = round(4 * n * thickness / cw, 4)
-        rows.append(row)
-    return {"layers": rows, "nb_layers": len(rows), "total_thickness_nm": round(float(f.get_total_thickness()), 3),
-            "center_wavelength": cw, "materials": sorted({r["material"] for r in rows}),
-            "design": design_from_filter(f)}
+
+    def side_rows(side):
+        rows = []
+        for i in range(f.get_nb_layers(side)):
+            thickness = float(f.get_layer_thickness(i, side))
+            material = f.get_layer_material_name(i, side)
+            row = {"#": i + 1, "material": material, "thickness_nm": round(thickness, 3)}
+            if not f.is_graded(i, side):
+                n = float(f.get_layer_index(i, side)) if _material(material).is_mixture()                     else _material(material).get_index(cw)
+                row["n@cw"] = round(n, 4)
+                row["qwot@cw"] = round(4 * n * thickness / cw, 4)
+            rows.append(row)
+        return rows
+
+    rows, back = side_rows(FRONT), side_rows(BACK)
+    out = {"layers": rows, "nb_layers": len(rows), "total_thickness_nm": round(float(f.get_total_thickness(FRONT)), 3),
+           "center_wavelength": cw, "materials": sorted({r["material"] for r in rows + back}),
+           "consider_backside": bool(f.get_consider_backside())}
+    if back:
+        out.update(back_layers=back, nb_back_layers=len(back),
+                   back_total_thickness_nm=round(float(f.get_total_thickness(BACK)), 3))
+        if not f.get_consider_backside():
+            out["warning"] = ("back_layers are defined but consider_backside is false, so calculations ignore "
+                              "the back face; set consider_backside: true to include it")
+    out["design"] = design_from_filter(f)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -318,8 +331,9 @@ QUANTITIES = {
     "R_phase": "reflection_phase", "T_phase": "transmission_phase",
     "R_GD": "reflection_GD", "T_GD": "transmission_GD",
     "R_GDD": "reflection_GDD", "T_GDD": "transmission_GDD",
+    "OD": "transmission",  # optical density, -log10(T)
 }
-REVERSIBLE = {"R", "T", "A"}
+REVERSIBLE = {"R", "T", "A", "OD"}
 
 
 def spectra(design, quantities=("R", "T"), wavelengths=None, angles=(0.0,), polarizations=("unpolarized",),
@@ -339,8 +353,11 @@ def spectra(design, quantities=("R", "T"), wavelengths=None, angles=(0.0,), pola
                 raise EngineError("angles must be in [0, 90)")
             for pol in polarizations:
                 values = method(float(angle), polarization_value(pol))
+                values = np.array([values[i] for i in range(len(wvls))], dtype=float)
+                if q == "OD":
+                    values = -np.log10(np.maximum(values, 1e-300))
                 series.append({"quantity": q, "angle": float(angle), "polarization": polarization_name(polarization_value(pol)),
-                               "values": np.array([values[i] for i in range(len(wvls))], dtype=float)})
+                               "values": values})
     return {"wavelengths": np.array(wvls), "series": series}
 
 
@@ -514,7 +531,12 @@ def build_targets(specs):
 
 def _evaluator(f, targets):
     """A refinement object prepared on a clone; used only to evaluate."""
-    optimizer = optimization_refinement(f.clone(), targets)
+    f = f.clone()
+    if f.get_nb_layers(FRONT) == 0:
+        # OpenFilters' merit code needs a front layer; a zero-thickness layer
+        # is optically invisible (identity characteristic matrix).
+        f.add_layer(f.get_substrate(), 0.0)
+    optimizer = optimization_refinement(f, targets)
     optimizer.calculate_values()
     return optimizer
 
@@ -682,6 +704,9 @@ def _run(method, design, targets, options, deadline, progress, floor=None):
     iterations); the design is the best one seen, not merely the last.
     floor (refine only): lower bound on every layer thickness."""
     f = build_filter(design)
+    if f.get_nb_layers(FRONT) == 0:
+        raise EngineError("optimization needs at least one front layer to start from (e.g. a thin layer of one "
+                          "of the coating materials); back layers are never optimized")
     o = METHODS[method](f, targets)
     if floor:
         # OpenFilters bounds thicknesses at 0; raise the bound to the floor.
@@ -793,10 +818,11 @@ def tolerance(design, target_specs, n_trials=200, thickness_error=None, index_er
     nominal_eval = _evaluator(base, targets)
     _, nominal_pass = target_report(nominal_eval, target_specs)
 
-    layers = nominal["layers"]
-    if any(l.get("graded") for l in layers):
+    # Both faces are perturbed (independently drawn errors per layer).
+    sides = [key for key in ("layers", "back_layers") if nominal.get(key)]
+    if any(l.get("graded") for key in sides for l in nominal[key]):
         raise EngineError("tolerance analysis does not support graded layers yet")
-    materials_used = sorted({l["material"] for l in layers})
+    materials_used = sorted({l["material"] for key in sides for l in nominal[key]})
     kind = thickness_error.get("type", "relative")
     sigma = float(thickness_error.get("sigma", 0.01))
     dist = thickness_error.get("distribution", "normal")
@@ -811,14 +837,15 @@ def tolerance(design, target_specs, n_trials=200, thickness_error=None, index_er
     merits, passes, per_target_fail = [], 0, np.zeros(len(target_specs))
     for _ in range(int(n_trials)):
         trial = dict(nominal)
-        d = np.array([l["thickness"] for l in layers])
-        e = draw(len(d))
-        if kind == "relative":
-            d = d * (1 + e + systematic)
-        else:
-            d = d + e + systematic * d
-        new_layers = [dict(l, thickness=max(float(t), 0.0)) for l, t in zip(layers, d)]
-        f = build_filter(dict(trial, layers=new_layers))
+        for key in sides:
+            d = np.array([l["thickness"] for l in nominal[key]])
+            e = draw(len(d))
+            if kind == "relative":
+                d = d * (1 + e + systematic)
+            else:
+                d = d + e + systematic * d
+            trial[key] = [dict(l, thickness=max(float(t), 0.0)) for l, t in zip(nominal[key], d)]
+        f = build_filter(trial)
         if idx_sigma:
             _scale_indices(f, {m: 1 + rng.normal(0.0, idx_sigma) for m in materials_used})
         ev = _evaluator(f, targets)
@@ -863,12 +890,17 @@ def sensitivity(design, target_specs, relative_step=0.01):
     targets = build_targets(target_specs)
     base = _evaluator(build_filter(nominal), targets).get_chi_2()
     rows = []
-    for i, layer in enumerate(nominal["layers"]):
-        layers = [dict(l) for l in nominal["layers"]]
-        layers[i]["thickness"] = layer["thickness"] * (1 + relative_step)
-        chi2 = _evaluator(build_filter(dict(nominal, layers=layers)), targets).get_chi_2()
-        rows.append({"#": i + 1, "material": layer["material"], "thickness_nm": layer["thickness"],
-                     "delta_chi2": round(float(chi2 - base), 6)})
+    for key, side in (("layers", "front"), ("back_layers", "back")):
+        if key == "back_layers" and not nominal.get("consider_backside"):
+            continue  # the back face does not enter the calculation
+        for i, layer in enumerate(nominal.get(key) or []):
+            if layer.get("graded"):
+                continue
+            layers = [dict(l) for l in nominal[key]]
+            layers[i]["thickness"] = layer["thickness"] * (1 + relative_step)
+            chi2 = _evaluator(build_filter(dict(nominal, **{key: layers})), targets).get_chi_2()
+            rows.append({"side": side, "#": i + 1, "material": layer["material"], "thickness_nm": layer["thickness"],
+                         "delta_chi2": round(float(chi2 - base), 6)})
     return {"base_chi2": float(base), "relative_step": relative_step, "layers": rows}
 
 

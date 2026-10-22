@@ -37,6 +37,16 @@ Layers are listed FROM THE SUBSTRATE OUTWARD (first layer touches the substrate)
 optional flags refine_thickness / add_needles (default true). Instead of layers, a stack formula:
   "formula": {"formula": "(HL)^8 H", "materials": {"H": "TiO2", "L": "SiO2"}}  (letters = quarter waves).
 
+Coatings on BOTH faces of the substrate are ONE design (= one OpenFilters filter): put the second face in
+"back_layers" (also listed from the substrate outward; or "back_formula") and set "consider_backside": true
+(the substrate is treated as thick/incoherent and both faces enter every R/T/A/OD result). Example:
+  {"substrate": "BK7", "substrate_thickness_mm": 1, "consider_backside": true,
+   "layers": [{"material": "TiO2", "thickness": 90.0}], "back_layers": [{"material": "SiO2", "thickness": 140.0}]}
+Never split one two-sided part into two designs. With consider_backside false (default) only the front face is
+computed, but an uncoated back face's ~4 % reflection is then also ignored. Optimizers (OpenFilters) vary only
+the FRONT layers; back layers stay fixed but count in the merit when consider_backside is true. To design both
+faces, optimize each face as its own one-sided design, then combine them into one design and evaluate it.
+
 A target is a JSON object (used by evaluate/optimize/tolerance):
   {"kind": "R"|"T"|"A"|"R_phase"|"T_phase"|"R_GD"|"T_GD"|"R_GDD"|"T_GDD"|"R_color"|"T_color",
    "angle": 0, "polarization": "unpolarized"|"s"|"p",
@@ -48,6 +58,8 @@ Color targets: {"kind": "R_color", "color_space": "L*a*b*", "values": [L, a, b],
 
 Workflow: list_materials -> describe_design / compute_spectrum -> evaluate_design -> optimize_design
 (refine = thickness refinement, needle = adds layers, step = graded index) -> tolerance_analysis.
+For high blocking use the "OD" quantity (optical density, -log10 T) rather than T.
+Tool calls time out after about 60 s in some apps: wait_seconds is capped at 45 s; long jobs return a job_id.
 For many cases use run_batch (sweeps) and run_optimization_campaign (many starts, ranked, optional
 yield analysis); they return a job_id: poll job_status, then get_results.
 Plots are also saved as PNG files (paths in "plot_files"); some chat apps do not display tool images to
@@ -239,22 +251,29 @@ def _read_table_file(path):
 @mcp.tool()
 async def describe_design(design: Design, plot_index_profile: bool = False):
     """Validate a design and list its layers (thickness, index and QWOT at the center wavelength),
-    total thickness and the normalized design JSON (e.g. a formula expanded into layers)."""
+    total thickness and the normalized design JSON (e.g. a formula expanded into layers). Two-sided
+    designs also list back_layers (with a warning if consider_backside is false)."""
     out = await compute("describe", design=design)
     if plot_index_profile:
         return with_plots(out, plotting.index_profile(out["layers"]), "index_profile")
     return out
 
 
+def sig(value, digits=6):
+    """Round to significant figures, so tiny values (deep blocking) are not
+    reported as 0."""
+    return float(f"{float(value):.{digits}g}")
+
+
 def _summarize_series(wvls, values, n_points):
     import numpy as np
     i_min, i_max = int(np.argmin(values)), int(np.argmax(values))
-    summary = {"min": round(float(values[i_min]), 6), "at_nm_min": float(wvls[i_min]),
-               "max": round(float(values[i_max]), 6), "at_nm_max": float(wvls[i_max]),
-               "mean": round(float(np.mean(values)), 6)}
+    summary = {"min": sig(values[i_min]), "at_nm_min": float(wvls[i_min]),
+               "max": sig(values[i_max]), "at_nm_max": float(wvls[i_max]),
+               "mean": sig(np.mean(values))}
     if n_points:
         idx = np.unique(np.linspace(0, len(wvls) - 1, min(n_points, len(wvls))).round().astype(int))
-        summary["samples"] = [[float(wvls[i]), round(float(values[i]), 6)] for i in idx]
+        summary["samples"] = [[float(wvls[i]), sig(values[i])] for i in idx]
     return summary
 
 
@@ -271,7 +290,9 @@ async def compute_spectrum(design: Design,
     """Compute R, T, A, phase, GD or GDD spectra versus wavelength for one design at one or more
     angles and polarizations. Returns, per series, min/max/mean and `sample_points` evenly spaced
     samples (set sample_points=0 for statistics only); full data go to a CSV when save_csv=true.
-    reverse=true illuminates from the substrate side (R, T, A only)."""
+    reverse=true illuminates from the substrate side (R, T, A, OD only). Quantity "OD" is optical density
+    (-log10 T), best for blocking specs; values are given to 6 significant figures. Two-sided designs
+    (back_layers + consider_backside: true) are computed with both faces."""
     result = await compute("spectra", design=design, quantities=quantities, wavelengths=wavelengths,
                            angles=angles, polarizations=polarizations, reverse=reverse)
     wvls = result["wavelengths"]
@@ -393,8 +414,11 @@ async def layer_sensitivity(design: Design, targets: Targets, relative_step: flo
 # Optimization and campaigns (background jobs)
 # ---------------------------------------------------------------------------
 
+MAX_WAIT = 45.0  # stay under the ~60 s tool-call timeout of some clients
+
+
 async def _wait(job_id, wait_seconds):
-    deadline = time.time() + wait_seconds
+    deadline = time.time() + min(max(float(wait_seconds), 0.0), MAX_WAIT)
     while time.time() < deadline:
         status = manager().status(job_id)
         if status["status"] != "running":
@@ -413,13 +437,14 @@ async def optimize_design(design: Design, targets: Targets, method: str = "needl
                               "result: thin layers are clamped or removed and the design re-refined with that bound), "
                               "max_layers, max_total_thickness (nm), needle_materials (list), nb_needles, nb_steps, "
                               "automatic (default true)"))] = None,
-                          wait_seconds: float = 60.0) -> dict:
+                          wait_seconds: float = 40.0) -> dict:
     """Optimize a design with OpenFilters: method "refine" (thicknesses only), "needle" (refine and
     insert new layers until no improvement) or "step" (graded/step index, needs a mixture material).
-    Waits up to wait_seconds; if not finished, returns a job_id to poll. Returns the best design found
+    Waits up to wait_seconds (max 45); if not finished, returns a job_id to poll. Returns the best design found
     (not merely the last), stop_reason (converged, time_limit, cycling, max_layers, ...), thinnest_layer_nm,
     and an .ofp project (start + optimized) openable in OpenFilters. One run finds a local optimum; for
-    hard specifications use run_optimization_campaign (many starts)."""
+    hard specifications use run_optimization_campaign (many starts). Only FRONT layers are optimized;
+    back_layers (if any) stay fixed and count in the merit when consider_backside is true."""
     checked(engine.build_targets, targets)
     job_id = manager().submit("optimize", [{"op": "optimize", "params": {"method": method},
                                             "args": {"design": design, "target_specs": targets,
@@ -555,10 +580,10 @@ async def tolerance_analysis(design: Design, targets: Targets, n_trials: int = 5
                                  '{"type": "relative"|"absolute", "sigma": 0.01 (fraction) or nm, '
                                  '"distribution": "normal"|"uniform", "systematic": 0.0 (common relative offset)}'))] = None,
                              index_error: Annotated[dict[str, Any] | None, Field(description='{"sigma": 0.005} relative index error, drawn per material per trial')] = None,
-                             seed: int = 0, wait_seconds: float = 60.0) -> dict:
+                             seed: int = 0, wait_seconds: float = 40.0) -> dict:
     """Monte Carlo yield: random thickness (and optional index) errors; a trial passes when every target
     is met. Runs in parallel; returns yield with 95 % interval, merit statistics and the failure rate
-    of each target."""
+    of each target. Both faces of a two-sided design are perturbed."""
     checked(engine.build_targets, targets)
     n_trials = int(n_trials)
     if not 1 <= n_trials <= 1000000:
@@ -637,6 +662,8 @@ async def load_project(path: str) -> dict:
 async def save_project(path: str, designs: list[dict[str, Any]], targets: list[dict[str, Any]] | None = None,
                        comment: str = "") -> dict:
     """Write designs (and optional targets) to an .ofp project that opens in the OpenFilters GUI.
+    Each design becomes ONE filter in the project; a part coated on both faces must be a single design
+    with back_layers and consider_backside: true (written as BackLayer lines), not two designs.
     A relative path is placed in the data folder's projects directory."""
     if not os.path.isabs(path):
         path = os.path.join(settings.projects_dir(), path)

@@ -37,7 +37,7 @@ stdout in server or worker code (stdout is the MCP channel). User-facing errors:
 ## Status (2026-10-22)
 
 Done: Python 3 port validated (analytic + independent TMM, < 1e-9; needle derivatives vs finite differences),
-all optimizers working, 22 MCP tools working end to end, 42 tests. Private GitHub repo
+all optimizers working, 22 MCP tools working end to end, 50 tests. Private GitHub repo
 BBrunoEsteves/openfilters-mcp; CI compiles the C++ core and tests on Windows/macOS/Linux and builds wheels
 (cp310-cp314, runtime DLLs bundled). Compiled core is 15-30x faster than pure Python.
 Registered locally (user scope) in Claude Code and Claude Desktop, pointing at .venv/Scripts/openfilters-mcp.exe;
@@ -47,5 +47,11 @@ as PNG files (plot_files). After changing server code, the user must fully quit 
 Optimization notes: never pass min_thickness to OpenFilters' needle/step loops (they cycle add/remove);
 engine.optimize enforces it with bounded refinement (_enforce_min_thickness) and tracks the best design
 (_Monitor). Check script: dev/check_min_thickness.py.
+
+Two-sided parts: ONE design with back_layers + consider_backside: true (documented in the server instructions
+after a session split a part into two designs). Optimizers vary front layers only; tolerance/sensitivity
+perturb both faces; a design with no front layers is evaluated with a zero-thickness placeholder layer.
+Spectrum values use 6 significant figures; "OD" quantity = -log10 T; wait_seconds capped at 45 s
+(clients time out tool calls at ~60 s).
 
 Pending: user check of .ofp files in the OpenFilters GUI; make public, PyPI, MCP Registry, Claude plugin.

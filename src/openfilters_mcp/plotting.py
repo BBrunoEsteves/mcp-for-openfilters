@@ -13,7 +13,7 @@ SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a
 SURFACE, INK, INK_2, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#e4e3df"
 MAX_SERIES = len(SERIES)
 
-UNITS = {"R": "Reflectance", "T": "Transmittance", "A": "Absorptance", "R_phase": "Phase (deg)",
+UNITS = {"R": "Reflectance", "T": "Transmittance", "A": "Absorptance", "OD": "Optical density", "R_phase": "Phase (deg)",
          "T_phase": "Phase (deg)", "R_GD": "GD (fs)", "T_GD": "GD (fs)", "R_GDD": "GDD (fs²)", "T_GDD": "GDD (fs²)"}
 
 
