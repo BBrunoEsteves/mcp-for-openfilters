@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.ofp text eol=lf
+*.mat text eol=lf
+*.png binary
+*.ico binary
+*.icns binary
