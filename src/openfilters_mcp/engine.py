@@ -39,16 +39,32 @@ class EngineError(ValueError):
 # ---------------------------------------------------------------------------
 
 _catalog = None
+_catalog_signature = None
+
+
+def _user_materials_signature(user_dir):
+    """Names, sizes and modification times of the user's material files.
+    Each worker process keeps its own catalog, so this is how a worker
+    notices materials added, overwritten or copied in by anyone else."""
+    entries = []
+    for entry in os.scandir(user_dir):
+        if entry.name.lower().endswith(".mat"):
+            stat = entry.stat()
+            entries.append((entry.name, stat.st_size, stat.st_mtime_ns))
+    return tuple(sorted(entries))
 
 
 def catalog(reload=False):
     """Built-in OpenFilters materials plus the user's own material folder
-    (user materials take precedence)."""
-    global _catalog
-    if _catalog is None or reload:
-        user_dir = settings.materials_dir()
+    (user materials take precedence). Reloaded whenever the user folder
+    changes."""
+    global _catalog, _catalog_signature
+    user_dir = settings.materials_dir()
+    signature = (user_dir, _user_materials_signature(user_dir))
+    if _catalog is None or reload or signature != _catalog_signature:
         _catalog = of_materials.material_catalogs(
             [of_materials.material_catalog(user_dir), of_materials.material_catalog()])
+        _catalog_signature = signature
     return _catalog
 
 

@@ -250,3 +250,18 @@ def test_bare_front_face_can_be_evaluated():
     assert engine.evaluate(bare, targets)["merit_chi2"] == pytest.approx((R / 0.01) ** 2, rel=1e-9)
     with pytest.raises(engine.EngineError):
         engine.optimize(bare, targets, "needle")
+
+
+def test_catalog_sees_materials_written_by_other_processes():
+    """Regression: each worker kept the catalog it loaded first, so materials
+    added (or overwritten) by another process were missing or stale."""
+    import os
+    from openfilters_mcp import settings
+    engine.catalog()  # cached in this process
+    path = os.path.join(settings.materials_dir(), "ExternalMat.mat")
+    with open(path, "w", encoding="latin-1") as f:  # written behind the cache's back
+        f.write("Description: test\nKind: regular\nModel: constant\nProperties: 1.7\n")
+    assert engine.material_N("ExternalMat", [550])[0].real == pytest.approx(1.7)
+    with open(path, "w", encoding="latin-1") as f:  # overwritten with a different index
+        f.write("Description: test, longer description\nKind: regular\nModel: constant\nProperties: 2.1\n")
+    assert engine.material_N("ExternalMat", [550])[0].real == pytest.approx(2.1)
