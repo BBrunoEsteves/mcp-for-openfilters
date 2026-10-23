@@ -1,4 +1,5 @@
 import asyncio
+import re
 
 from openfilters_mcp import server
 
@@ -20,9 +21,12 @@ def test_prompts_render_with_their_defaults():
     for p in prompts:
         required = {a.name: "{}" for a in p.arguments or [] if a.required}
         text = asyncio.run(server.mcp.get_prompt(p.name, required)).messages[0].content.text
-        assert "{" not in text.replace("{}", ""), p.name  # every placeholder filled
+        assert not re.search(r"\{[a-z_]+\}", text), p.name  # every placeholder filled
 
 
-def test_example_resources_list_the_openfilters_examples():
-    contents = list(asyncio.run(server.mcp.read_resource("openfilters://examples")))
-    assert '"AR"' in contents[0].content and '"Edge"' in contents[0].content
+def test_each_example_is_its_own_resource():
+    # Claude Desktop lists fixed resources in its attach menu, not resource templates.
+    uris = {str(r.uri) for r in asyncio.run(server.mcp.list_resources())}
+    assert {"openfilters://examples/AR", "openfilters://examples/Edge"} <= uris
+    contents = list(asyncio.run(server.mcp.read_resource("openfilters://examples/Edge")))
+    assert '"designs"' in contents[0].content

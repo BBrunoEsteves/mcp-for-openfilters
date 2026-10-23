@@ -82,6 +82,13 @@ GitHub, catalogue cached 30 days in <data>/cache; formulas 1-9 as in the databas
 open-world), textbook validation tests (tests/test_textbook.py), prompts and resources (server.py), progress
 notifications in _wait (Context injected; hidden from schemas). Fixed: user materials named like built-in ones were
 ignored (OpenFilters prefers the LAST catalog in material_catalogs). Note: OpenFilters ships materials named H and L.
+Bugs found in real use (AR campaign, fixed): inequality "met" used the tolerance (now strict); OpenFilters'
+LM step can NaN every thickness with a layer at 0 nm, and NaN designs evaluated as R = 0 -> chi2 0, met, yield 1
+(_Monitor stops on non-finite, _run never returns non-finite, _continue_needles restarts without 0 nm layers,
+build_filter refuses NaN); OpenFilters' needle search only takes interior minima, so edge improvements ended the
+needle method (_edge_needle + _continue_needles insert a 1 nm layer at the best edge). Both OpenFilters behaviours
+were checked against the original Python 2 sources: ported Python files identical apart from imports; C++ maths
+files identical, wrappers only mechanical Python 3 C-API changes.
 Output schemas deliberately not added (Claude reads the text; plots can't be described; drift would break tools).
 Private-repo CI minutes cost 10x on macOS and 2x on Windows; they reset monthly (next
 2026-11-01, or free once public. CI now tests only Linux on ordinary pushes.

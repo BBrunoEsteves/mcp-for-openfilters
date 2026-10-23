@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Fix: inequality targets ("R <= 0.2 %") counted as met whenever the value was within the tolerance
+  (default 1 % absolute); they are now met only where they hold. The tolerance still weights the merit.
+- Fix: OpenFilters' optimizer can turn every thickness into NaN (a layer pinned at 0 nm); such designs scored
+  chi2 = 0, "met all targets" and 100 % yield and ranked first in campaigns. The optimizer now stops, keeps the
+  best finite design and restarts without the 0 nm layers; NaN thicknesses are refused everywhere.
+- Needle method: where OpenFilters stops because its best needle lies at a layer edge (it only accepts minima
+  inside layers), the connector inserts a thin layer there and continues while the merit improves
+  (`edge_needles_added` in the result). 0 nm layers are removed from results.
+- Each OpenFilters example project is its own resource (selectable in Claude Desktop's attach menu).
+- The antireflection prompt and the campaign tool explain that `n_layers` only sizes the starting designs and
+  pass `max_layers` to limit the result.
 - Fix: a user material with the same name as a built-in one (e.g. your own `TiO2`) was silently ignored
   in favour of the built-in data.
 - `search_refractiveindex` and `import_refractiveindex_material`: any entry of the refractiveindex.info

@@ -278,8 +278,11 @@ def _add_layer(f, layer, side, i):
         thickness = float(layer["thickness"])
     else:
         raise EngineError(f"layer {i} needs thickness (nm) or qwot")
-    if thickness < 0:
-        raise EngineError(f"layer {i} has a negative thickness")
+    # A NaN thickness evaluates as an empty coating (R = 0) and would pass "<=" targets.
+    if not math.isfinite(thickness) or thickness < 0:
+        raise EngineError(f"layer {i} has an invalid thickness ({thickness}); it must be a finite number >= 0")
+    if index is not None and not math.isfinite(float(index)):
+        raise EngineError(f"layer {i} has an invalid index ({index})")
     f.add_layer(material, thickness, side=side, index=index)
     for flag, setter in _LAYER_FLAGS:
         if flag in layer:
@@ -607,9 +610,12 @@ def target_report(optimizer, specs):
     ineq = np.array(optimizer.all_inequalities)
     deviation = goal - calc
     # Satisfied inequalities do not contribute (as in OpenFilters).
-    ok_ineq = ((ineq < 0) & (calc <= goal)) | ((ineq > 0) & (calc >= goal))
+    slack = 1e-9 * np.maximum(np.abs(goal), 1.0)
+    ok_ineq = ((ineq < 0) & (calc <= goal + slack)) | ((ineq > 0) & (calc >= goal - slack))
     deviation[ok_ineq] = 0.0
-    passed = np.abs(deviation) <= tol * (1 + 1e-9)
+    # An inequality ("R <= 0.2 %") is met only when it holds: its tolerance only weights the
+    # merit. An equality is met within its tolerance. Non-finite values never pass.
+    passed = np.where(ineq != 0, ok_ineq, np.abs(deviation) <= tol * (1 + 1e-9)) & np.isfinite(calc)
     rows = []
     starts = list(optimizer.target_starting_position) + [len(calc)]
     for i, spec in enumerate(specs):
@@ -650,6 +656,12 @@ class _Monitor:
         count = o.nb_front_layers
         thickness = sum(_flat(o.front_thickness))
         chi2 = o.get_chi_2()
+        if not (math.isfinite(thickness) and math.isfinite(chi2)):
+            # OpenFilters' Levenberg-Marquardt step can turn every thickness into NaN
+            # (seen with layers pinned at 0 nm); stop and keep the best design so far.
+            self.stop_reason = "numerical_error"
+            o.stop()
+            return
         within_limits = (not self.max_layers or count <= self.max_layers) and \
                         (not self.max_total_thickness or thickness <= self.max_total_thickness)
         if within_limits and chi2 and chi2 < self.best_chi2 * (1 - 1e-12):
@@ -757,10 +769,44 @@ def _enforce_min_thickness(design, targets, options, deadline, progress, floor, 
     return current, chi2, removed, iterations
 
 
-def _run(method, design, targets, options, deadline, progress, floor=None):
+def _finite(design):
+    return all(math.isfinite(t) for l in design["layers"]
+               for t in (l["graded"]["step_thicknesses"] if l.get("graded") else [l["thickness"]]))
+
+
+def _edge_needle(o):
+    """Where OpenFilters' needle method stopped for lack of needles: the most
+    negative merit derivative at a layer edge, as (insert position in the
+    front layers, material name), or None.
+
+    OpenFilters only inserts needles at minima strictly inside a layer, so an
+    improvement at an interface or at the outer surface (dMF still falling at
+    the edge of the layer) ends the needle method although the merit would
+    improve. Uses the dMF profile of its last needle search."""
+    if getattr(o, "can_add_needles", True) or not getattr(o, "dMF", None):
+        return None
+    best = None
+    for i_material, material_nb in enumerate(o.needle_material_nbs):
+        for i_parameter, (kind, layer_nb) in enumerate(o.parameters):
+            values = o.dMF[i_material][i_parameter] if i_parameter < len(o.dMF[i_material]) else []
+            if kind != THICKNESS or len(values) < 2:
+                continue
+            for value, position in ((values[0], layer_nb), (values[-1], layer_nb + 1)):
+                neighbours = [o.front_layers[k] for k in (position - 1, position) if 0 <= k < o.nb_front_layers]
+                if material_nb in neighbours:
+                    continue  # same material as a neighbour: that is a thickness change, not a new layer
+                if value < 0 and (best is None or value < best[0]):
+                    best = (value, position, o.materials[material_nb].get_name())
+    return best and best[1:]
+
+
+def _run(method, design, targets, options, deadline, progress, floor=None, info=None):
     """One OpenFilters optimization. Returns (design, chi2, stop_reason,
-    iterations); the design is the best one seen, not merely the last.
-    floor (refine only): lower bound on every layer thickness."""
+    iterations); the design is the best one seen, not merely the last, and
+    never one with non-finite thicknesses.
+    floor (refine only): lower bound on every layer thickness.
+    info (dict, optional): receives "edge_needle" (see _edge_needle) when the
+    returned design is the needle method's final state."""
     f = build_filter(design)
     if f.get_nb_layers(FRONT) == 0:
         raise EngineError("optimization needs at least one front layer to start from (e.g. a thin layer of one "
@@ -788,19 +834,79 @@ def _run(method, design, targets, options, deadline, progress, floor=None):
     o.go()
     o.copy_to_filter()
     final_design = design_from_filter(f)
-    final_chi2 = _evaluator(f, targets).get_chi_2()
-    limits_ok = (not options.get("max_layers") or f.get_nb_layers() <= options["max_layers"]) and \
-                (not options.get("max_total_thickness") or f.get_total_thickness() <= options["max_total_thickness"])
+    finite = _finite(final_design)
+    final_chi2 = _evaluator(f, targets).get_chi_2() if finite else float("inf")
+    limits_ok = finite and (not options.get("max_layers") or f.get_nb_layers() <= options["max_layers"]) and \
+        (not options.get("max_total_thickness") or f.get_total_thickness() <= options["max_total_thickness"])
     best_design, best_chi2 = (final_design, final_chi2) if limits_ok else (None, float("inf"))
     if monitor.best_layers is not None:
         candidate = dict(final_design, layers=monitor.best_layers)
-        chi2 = _evaluator(build_filter(candidate), targets).get_chi_2()
-        if chi2 < best_chi2:
-            best_design, best_chi2 = candidate, chi2
-    if best_design is None:  # never within the limits: report the last design
-        best_design, best_chi2 = final_design, final_chi2
+        if _finite(candidate):
+            chi2 = _evaluator(build_filter(candidate), targets).get_chi_2()
+            if chi2 < best_chi2:
+                best_design, best_chi2 = candidate, chi2
+    if best_design is None:
+        if finite:  # never within the limits: report the last design
+            best_design, best_chi2 = final_design, final_chi2
+        else:
+            best_design, best_chi2 = design, _evaluator(build_filter(design), targets).get_chi_2()
     stop = monitor.stop_reason or ("converged" if o.get_stop_criteria_met() else "finished")
+    if info is not None and method == "needle" and best_design is final_design and not monitor.stop_reason:
+        info["edge_needle"] = _edge_needle(o)
     return best_design, float(best_chi2), stop, o.get_iteration()
+
+
+EDGE_NEEDLE_NM = 1.0
+MAX_CONTINUATIONS = 20
+
+
+def _drop_empty_layers(layers):
+    """Remove layers thinner than 1 pm (left at OpenFilters' 0 nm bound) and merge
+    the identical neighbours they separated."""
+    merged = []
+    for layer in layers:
+        if not layer.get("graded") and layer["thickness"] < 1e-3:
+            continue
+        prev = merged[-1] if merged else None
+        if prev and not prev.get("graded") and not layer.get("graded") and prev["material"] == layer["material"] \
+                and abs(prev.get("index", 0.0) - layer.get("index", 0.0)) < 1e-9:
+            prev["thickness"] += layer["thickness"]
+        else:
+            merged.append(dict(layer))
+    return merged
+
+
+def _continue_needles(current, chi2, stop, info, targets, options, deadline, progress):
+    """Carry on where OpenFilters' needle method stops early: restart once after a
+    numerical failure (without the 0 nm layers that trigger it), and insert a thin
+    layer at the best layer edge while that improves the merit (see _edge_needle).
+    Returns (design, chi2, stop, iterations, edge needles inserted)."""
+    iterations = inserted = 0
+    restarted = False
+    max_layers = options.get("max_layers")
+    for _ in range(MAX_CONTINUATIONS):
+        if time.time() >= deadline or chi2 <= 0.0:
+            break
+        if stop == "numerical_error" and not restarted:
+            restarted = True
+            layers = _drop_empty_layers(current["layers"])
+        elif stop in ("converged", "finished") and info.get("edge_needle"):
+            position, material = info["edge_needle"]
+            if max_layers and len(current["layers"]) + 1 > max_layers:
+                break
+            layers = [dict(l) for l in current["layers"]]
+            layers.insert(position, {"material": material, "thickness": EDGE_NEEDLE_NM})
+        else:
+            break
+        info = {}
+        candidate, c_chi2, c_stop, its = _run("needle", dict(current, layers=layers), targets, options,
+                                              deadline, progress, info=info)
+        iterations += its
+        if not c_chi2 < chi2 * (1 - 1e-4):
+            break
+        inserted += stop != "numerical_error"
+        current, chi2, stop = candidate, c_chi2, c_stop
+    return current, chi2, stop, iterations, inserted
 
 
 def optimization_description(method, initial_chi2, chi2, all_pass, min_thickness, stop):
@@ -832,7 +938,13 @@ def optimize(design, target_specs, method="needle", options=None, progress=None)
     cw = design["center_wavelength"]
     initial = _evaluator(build_filter(design), targets).get_chi_2()
 
-    current, chi2, stop, iterations = _run(method, design, targets, options, deadline, progress)
+    info = {}
+    edge_needles = 0
+    current, chi2, stop, iterations = _run(method, design, targets, options, deadline, progress, info=info)
+    if method == "needle":
+        current, chi2, stop, its, edge_needles = _continue_needles(
+            current, chi2, stop, info, targets, options, deadline, progress)
+        iterations += its
     removed, rounds = 0, 1
     if min_thickness:
         best = None
@@ -853,6 +965,8 @@ def optimize(design, target_specs, method="needle", options=None, progress=None)
         if _thin_layers(current["layers"], min_thickness * (1 - 1e-9)):
             stop = "min_thickness_not_reached"
 
+    # 0 nm layers (left at OpenFilters' lower bound) are optically invisible: drop them.
+    current = dict(current, layers=_drop_empty_layers(current["layers"]) or current["layers"])
     f = build_filter(current)
     final = _evaluator(f, targets)
     rows, all_pass = target_report(final, target_specs)
@@ -865,7 +979,8 @@ def optimize(design, target_specs, method="needle", options=None, progress=None)
             "all_targets_met": all_pass, "targets": rows, "iterations": iterations, "stop_reason": stop,
             "nb_layers": f.get_nb_layers(), "total_thickness_nm": round(float(f.get_total_thickness()), 3),
             "thinnest_layer_nm": round(min(thicknesses), 3) if thicknesses else None,
-            "thin_layers_removed": removed, "rounds": rounds if min_thickness else 1,
+            "thin_layers_removed": removed, "edge_needles_added": edge_needles,
+            "rounds": rounds if min_thickness else 1,
             "elapsed_s": round(time.time() - start, 2), "design": current}
 
 

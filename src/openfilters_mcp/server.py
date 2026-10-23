@@ -57,7 +57,9 @@ A target is a JSON object (used by evaluate/optimize/tolerance):
    single wavelength:  "wavelength": 1064, "value": 0.995, "tolerance": 0.001,
    or a band:          "from": 400, "to": 700, "step": 5, "value": 0.9 (or "points": [[wl, value, tol], ...]),
    "inequality": "equal" | ">=" | "<=",  "direction": "normal"|"reverse"}
-Use ">=" / "<=" for specifications like "R > 99 %". Phase/GD/GDD targets need s or p polarization.
+Use ">=" / "<=" for specifications like "R > 99 %": such a target is met only where it holds (its tolerance,
+default 0.01, only weights the merit); an "equal" target is met within its tolerance. Phase/GD/GDD targets need
+s or p polarization.
 Color targets: {"kind": "R_color", "color_space": "L*a*b*", "values": [L, a, b], "tolerances": [1, 1, 1]}.
 
 Materials missing from list_materials: search_refractiveindex then import_refractiveindex_material (downloads
@@ -606,9 +608,13 @@ async def run_optimization_campaign(targets: Targets,
                                     starts: Annotated[list[dict[str, Any]] | None, Field(description="Explicit starting designs.")] = None,
                                     random_starts: Annotated[dict[str, Any] | None, Field(description=(
                                         'Generate starts: {"count": 50, "materials": ["Ta2O5", "SiO2"], "n_layers": [5, 25], '
-                                        '"thickness": [20, 200], "substrate": "BK7", "seed": 1, ...other design keys}'))] = None,
+                                        '"thickness": [20, 200], "substrate": "BK7", "seed": 1, ...other design keys}. '
+                                        'n_layers only sizes the starting designs: the needle method adds layers, so '
+                                        'limit the result with options max_layers.'))] = None,
                                     methods: list[str] = ["needle"],
-                                    options: dict[str, Any] | None = None,
+                                    options: Annotated[dict[str, Any] | None, Field(description=(
+                                        "Same as optimize_design options, applied to every optimization "
+                                        "(e.g. max_layers, min_thickness, time_limit)."))] = None,
                                     top_n: int = 10,
                                     tolerance: Annotated[dict[str, Any] | None, Field(description=(
                                         'Optional yield stage on the top_n designs: {"n_trials": 200, "thickness_error": '
@@ -766,18 +772,25 @@ async def materials_resource() -> dict:
     return {"materials": await compute("list_materials", name_filter=None)}
 
 
-@mcp.resource("openfilters://examples", title="OpenFilters example projects", mime_type="application/json")
-def examples_resource() -> dict:
-    """The example projects shipped with OpenFilters (read one at openfilters://examples/<name>)."""
-    return {"examples": [{"name": n, "uri": f"openfilters://examples/{n}"} for n in _example_names()]}
+EXAMPLE_TOPICS = {"AR": "antireflection coating", "Beamsplitter": "beam splitter", "Color": "color target",
+                  "Edge": "edge filter", "Fourier": "Fourier-method inhomogeneous design",
+                  "Ramp": "graded-index ramp", "Rugate": "rugate filter"}
 
 
-@mcp.resource("openfilters://examples/{name}", title="OpenFilters example project", mime_type="application/json")
-async def example_resource(name: str) -> dict:
-    """Designs and targets of one OpenFilters example project (AR, Beamsplitter, Color, Edge, ...)."""
-    if name not in _example_names():
-        raise ToolError(f"unknown example {name}; choose from {', '.join(_example_names())}")
-    return await compute("load_project", path=os.path.join(EXAMPLES_DIR, name + ".ofp"))
+def _register_example(name):
+    # One fixed resource per example: apps list fixed resources in their attach menus,
+    # but not resource templates.
+    async def example() -> dict:
+        return await compute("load_project", path=os.path.join(EXAMPLES_DIR, name + ".ofp"))
+
+    topic = EXAMPLE_TOPICS.get(name, "example project")
+    mcp.resource(f"openfilters://examples/{name}", name=f"example_{name}", title=f"OpenFilters example: {name}",
+                 description=f"Designs and targets of the OpenFilters {name} example ({topic}).",
+                 mime_type="application/json")(example)
+
+
+for _name in _example_names():
+    _register_example(_name)
 
 
 # ---------------------------------------------------------------------------
@@ -791,14 +804,17 @@ _CLOSING = ("Report whether the targets are met, the layer list, the yield and t
 @mcp.prompt(title="Design an antireflection coating")
 def design_antireflection(substrate: str = "BK7", from_nm: str = "420", to_nm: str = "680",
                           max_reflectance_percent: str = "0.5", max_angle_deg: str = "0",
-                          materials: str = "Ta2O5, SiO2") -> str:
+                          materials: str = "Ta2O5, SiO2", max_layers: str = "10") -> str:
     """Antireflection coating over a band, optimized from many starts and checked for yield."""
     return f"""Design an antireflection coating on {substrate} with the OpenFilters tools.
-Specification: R <= {max_reflectance_percent} % (unpolarized) from {from_nm} to {to_nm} nm, at angles 0 to {max_angle_deg} deg;
-materials {materials} (check them with list_materials; if one is missing, find it with search_refractiveindex).
-1. Write the targets: one R target with inequality "<=" over the band (step about 5 nm) for each angle needed.
-2. Run run_optimization_campaign with about 40 random starts (2 to 10 layers, the listed materials, the substrate),
-   the needle method, top_n 5 and a tolerance stage (1 % relative thickness error, 200 trials).
+Specification: R <= {max_reflectance_percent} % (unpolarized) from {from_nm} to {to_nm} nm, at angles 0 to {max_angle_deg} deg,
+at most {max_layers} layers; materials {materials} (check them with list_materials; if one is missing, find it with
+search_refractiveindex).
+1. Write the targets: one R target with inequality "<=" over the band (step about 5 nm) for each angle needed
+   (values as fractions; an inequality counts as met only when it holds at every point).
+2. Run run_optimization_campaign with about 40 random starts (random_starts n_layers [2, {max_layers}], the listed
+   materials, the substrate), the needle method, options {{"max_layers": {max_layers}}} (n_layers only sizes the
+   starting designs), top_n 5 and a tolerance stage (1 % relative thickness error, 200 trials).
 3. Poll job_status, then get_results; pick the simplest design that meets the targets with a good yield.
 {_CLOSING}"""
 
