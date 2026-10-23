@@ -3,8 +3,13 @@ calculation engine built in. Nothing else to install besides Python.
 
 ## Changes in this version
 
-- The installer now finds the Microsoft Store version of Claude Desktop on Windows (and the Claude Code
-  bundled with it); before, it skipped registering the server there.
+- `.ofp` projects now carry everything the OpenFilters GUI can use: targets (Claude is asked to always
+  pass them, and warned when a project is saved without them, which left Design/Optimize disabled in the
+  GUI), a wavelength range covering the targets, design descriptions, needle materials, step spacing and
+  per-layer flags. These are also read back when a project is loaded.
+- Optimization and campaign results describe how each design was made (method, merit before and after,
+  targets met, minimum thickness; campaigns add rank, start and yield).
+- Fix: optimization ignored per-layer flags, so layers marked as fixed were still refined.
 
 ## Install
 
