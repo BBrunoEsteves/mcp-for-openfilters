@@ -54,26 +54,36 @@ def server_command(venv_dir):
         else os.path.join(venv_dir, "bin", "openfilters-mcp")
 
 
-def desktop_config_path():
+def desktop_data_dirs():
+    """Existing Claude Desktop user-data folders (where claude_desktop_config.json lives).
+
+    On Windows the Microsoft Store version keeps its data in %LOCALAPPDATA%\\Claude-Data\\claude_<id>
+    (older Store versions: the package's virtualized %LOCALAPPDATA%\\Packages\\Claude_<id>\\LocalCache\\
+    Roaming\\Claude, which only holds a .user-data-left.* marker once the data has moved out).
+    """
     if sys.platform == "win32":
-        return os.path.join(os.environ.get("APPDATA", ""), "Claude", "claude_desktop_config.json")
-    if sys.platform == "darwin":
-        return os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
-    return os.path.expanduser("~/.config/Claude/claude_desktop_config.json")
+        appdata, local = os.environ.get("APPDATA", ""), os.environ.get("LOCALAPPDATA", "")
+        candidates = [os.path.join(appdata, "Claude")]
+        candidates += sorted(glob.glob(os.path.join(local, "Claude-Data", "claude_*")))
+        candidates += [folder for folder in sorted(glob.glob(os.path.join(
+                           local, "Packages", "Claude_*", "LocalCache", "Roaming", "Claude")))
+                       if not glob.glob(os.path.join(folder, ".user-data-left.*"))]
+    elif sys.platform == "darwin":
+        candidates = [os.path.expanduser("~/Library/Application Support/Claude")]
+    else:
+        candidates = [os.path.expanduser("~/.config/Claude")]
+    return [folder for folder in candidates if os.path.isdir(folder)]
 
 
 def find_claude_cli():
-    """The `claude` command, or the copy bundled with Claude Desktop."""
+    """The `claude` command, or the newest copy bundled with Claude Desktop."""
     found = shutil.which("claude")
     if found:
         return found
-    if sys.platform == "win32":
-        pattern = os.path.join(os.environ.get("APPDATA", ""), "Claude", "claude-code", "*", "*", "claude.exe")
-    elif sys.platform == "darwin":
-        pattern = os.path.expanduser("~/Library/Application Support/Claude/claude-code/*/*/claude")
-    else:
-        pattern = os.path.expanduser("~/.config/Claude/claude-code/*/*/claude")
-    candidates = sorted(glob.glob(pattern), key=os.path.getmtime)
+    executable = "claude.exe" if sys.platform == "win32" else "claude"
+    candidates = [path for folder in desktop_data_dirs()
+                  for path in glob.glob(os.path.join(folder, "claude-code", "*", "*", executable))]
+    candidates.sort(key=os.path.getmtime)
     return candidates[-1] if candidates else None
 
 
@@ -143,11 +153,21 @@ def self_test(venv_dir):
     say(f"  OK: calculation works ({result.stdout.strip()})")
 
 
+def desktop_config_paths(config_path=None):
+    if config_path:
+        return [config_path]
+    return [os.path.join(folder, "claude_desktop_config.json") for folder in desktop_data_dirs()]
+
+
 def register_desktop(command, config_path=None):
-    path = config_path or desktop_config_path()
-    if not os.path.isdir(os.path.dirname(path)):
-        say(f"Claude Desktop not found ({os.path.dirname(path)} does not exist); skipping.")
-        return
+    paths = desktop_config_paths(config_path)
+    if not paths:
+        say("Claude Desktop not found; skipping. Install it, then run this installer again.")
+    for path in paths:
+        register_desktop_config(command, path)
+
+
+def register_desktop_config(command, path):
     config = {}
     if os.path.exists(path):
         with open(path, encoding="utf-8") as infile:
@@ -165,7 +185,7 @@ def register_desktop(command, config_path=None):
     with open(tmp, "w", encoding="utf-8") as outfile:
         json.dump(config, outfile, indent=2)
     os.replace(tmp, path)
-    say("Registered in Claude Desktop.")
+    say(f"Registered in Claude Desktop ({path}).")
 
 
 def register_claude_code(command):
@@ -184,8 +204,9 @@ def register_claude_code(command):
 
 
 def uninstall(args):
-    path = args.desktop_config or desktop_config_path()
-    if not args.no_desktop and os.path.exists(path):
+    for path in [] if args.no_desktop else desktop_config_paths(args.desktop_config):
+        if not os.path.exists(path):
+            continue
         with open(path, encoding="utf-8") as infile:
             config = json.load(infile)
         if NAME in config.get("mcpServers", {}):
@@ -193,7 +214,7 @@ def uninstall(args):
             del config["mcpServers"][NAME]
             with open(path, "w", encoding="utf-8") as outfile:
                 json.dump(config, outfile, indent=2)
-            say("Removed from Claude Desktop.")
+            say(f"Removed from Claude Desktop ({path}).")
     cli = find_claude_cli()
     if cli and not args.no_claude_code:
         subprocess.run([cli, "mcp", "remove", "--scope", "user", NAME], capture_output=True, text=True)
