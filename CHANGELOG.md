@@ -6,6 +6,9 @@
   in favour of the built-in data.
 - `search_refractiveindex` and `import_refractiveindex_material`: any entry of the refractiveindex.info
   database (tabulated data or dispersion formulas), downloaded on demand.
+- Prompts (ready-made workflows: antireflection, mirror, edge filter/dichroic, band-pass, manufacturing
+  review) and resources (format guide, materials, OpenFilters example projects).
+- `optimize_design` and `tolerance_analysis` send progress notifications while they wait.
 - Validation against closed-form textbook results (quarter-wave AR, absentee layer, V-coat, Brewster angle,
   quarter-wave stack peak and stop-band width, energy conservation).
 - Every tool has a title and annotations (read-only, destructive, local), as Claude's directory requires.

@@ -43,7 +43,7 @@ DESTRUCTIVE in server.py; required by Claude's directory, checked by tests/test_
 ## Status (2026-10-22)
 
 Done: Python 3 port validated (analytic + independent TMM, < 1e-9; needle derivatives vs finite differences),
-all optimizers working, 22 MCP tools working end to end, 50 tests. Private GitHub repo
+all optimizers working, 24 MCP tools + 5 prompts + resources working end to end, 77 tests. Private GitHub repo
 BBrunoEsteves/openfilters-mcp; CI compiles the C++ core and tests on Windows/macOS/Linux and builds wheels
 (cp310-cp314, runtime DLLs bundled). Compiled core is 15-30x faster than pure Python.
 Registered locally (user scope) in Claude Code and Claude Desktop, pointing at .venv/Scripts/openfilters-mcp.exe;
@@ -77,6 +77,12 @@ Pending, in order: email Larouche/Martinu (draft in email_draft_larouche_martinu
 public; PyPI trusted publisher (project openfilters-mcp, workflow ci.yml, environment pypi) then set
 PUBLISH_PYPI; README install via uvx; MCP Registry (mcp-publisher, server.json); pack the .mcpb (needs the PyPI
 package) and submit to Claude's directory; plugin validate (`claude plugin validate ./claude-plugin`).
-Planned features: refractiveindex.info search + on-demand import (database is on GitHub; check license);
-validation against published designs; MCP prompts/resources; progress notifications; output schemas.
+Added 2026-10-23 (unreleased): refractiveindex.info search/import (refractiveindex.py; CC0 database read from
+GitHub, catalogue cached 30 days in <data>/cache; formulas 1-9 as in the database's nkexplorer.py; tools annotated
+open-world), textbook validation tests (tests/test_textbook.py), prompts and resources (server.py), progress
+notifications in _wait (Context injected; hidden from schemas). Fixed: user materials named like built-in ones were
+ignored (OpenFilters prefers the LAST catalog in material_catalogs). Note: OpenFilters ships materials named H and L.
+Output schemas deliberately not added (Claude reads the text; plots can't be described; drift would break tools).
+Private-repo CI minutes cost 10x on macOS and 2x on Windows; they reset monthly (next
+2026-11-01, or free once public. CI now tests only Linux on ordinary pushes.
 Intel-Mac / Linux-ARM wheels if needed (source installs work, compiled if a compiler is present).

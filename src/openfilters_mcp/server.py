@@ -17,7 +17,7 @@ from typing import Annotated, Any
 
 from pydantic import Field
 
-from mcp.server.mcpserver import Image, MCPServer
+from mcp.server.mcpserver import Context, Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
@@ -470,12 +470,22 @@ async def layer_sensitivity(design: Design, targets: Targets, relative_step: flo
 MAX_WAIT = 45.0  # stay under the ~60 s tool-call timeout of some clients
 
 
-async def _wait(job_id, wait_seconds):
-    deadline = time.time() + min(max(float(wait_seconds), 0.0), MAX_WAIT)
+async def _wait(job_id, wait_seconds, ctx=None):
+    """Wait for a job, sending progress notifications to clients that asked for them
+    (tasks done of total, or elapsed seconds for a single-task job)."""
+    start = time.time()
+    deadline = start + min(max(float(wait_seconds), 0.0), MAX_WAIT)
     while time.time() < deadline:
         status = manager().status(job_id)
         if status["status"] != "running":
             break
+        if ctx is not None:
+            if status["tasks_total"] > 1:
+                await ctx.report_progress(status["tasks_done"], status["tasks_total"],
+                                          f"{status['tasks_done']} of {status['tasks_total']} tasks")
+            else:
+                elapsed = time.time() - start
+                await ctx.report_progress(elapsed, None, f"{status['label']}: {elapsed:.0f} s")
         await asyncio.sleep(0.5)
     status = manager().status(job_id)
     if status["status"] == "running":
@@ -490,7 +500,7 @@ async def optimize_design(design: Design, targets: Targets, method: str = "needl
                               "result: thin layers are clamped or removed and the design re-refined with that bound), "
                               "max_layers, max_total_thickness (nm), needle_materials (list), nb_needles, nb_steps, "
                               "automatic (default true)"))] = None,
-                          wait_seconds: float = 40.0) -> dict:
+                          wait_seconds: float = 40.0, ctx: Context = None) -> dict:
     """Optimize a design with OpenFilters: method "refine" (thicknesses only), "needle" (refine and
     insert new layers until no improvement) or "step" (graded/step index, needs a mixture material).
     Waits up to wait_seconds (max 45); if not finished, returns a job_id to poll. Returns the best design found
@@ -503,7 +513,7 @@ async def optimize_design(design: Design, targets: Targets, method: str = "needl
                                             "args": {"design": design, "target_specs": targets,
                                                      "method": method, "options": options}}],
                               meta={"design": design, "targets": targets}, label=f"optimize ({method})")
-    out = await _wait(job_id, wait_seconds)
+    out = await _wait(job_id, wait_seconds, ctx)
     if out.get("status") == "done":
         r = manager().result(job_id, 0)
         if not r.get("ok"):
@@ -633,7 +643,7 @@ async def tolerance_analysis(design: Design, targets: Targets, n_trials: int = 5
                                  '{"type": "relative"|"absolute", "sigma": 0.01 (fraction) or nm, '
                                  '"distribution": "normal"|"uniform", "systematic": 0.0 (common relative offset)}'))] = None,
                              index_error: Annotated[dict[str, Any] | None, Field(description='{"sigma": 0.005} relative index error, drawn per material per trial')] = None,
-                             seed: int = 0, wait_seconds: float = 40.0) -> dict:
+                             seed: int = 0, wait_seconds: float = 40.0, ctx: Context = None) -> dict:
     """Monte Carlo yield: random thickness (and optional index) errors; a trial passes when every target
     is met. Runs in parallel; returns yield with 95 % interval, merit statistics and the failure rate
     of each target. Both faces of a two-sided design are perturbed."""
@@ -648,7 +658,7 @@ async def tolerance_analysis(design: Design, targets: Targets, n_trials: int = 5
                            "thickness_error": thickness_error, "index_error": index_error, "seed": seed * 100003 + i}}
                  for i, size in enumerate(sizes) if size]
     job_id = manager().submit("tolerance", task_list, label="tolerance analysis")
-    out = await _wait(job_id, wait_seconds)
+    out = await _wait(job_id, wait_seconds, ctx)
     if out.get("status") == "done":
         return {"job_id": job_id, **out.get("summary", {})}
     return out
@@ -731,6 +741,133 @@ async def save_project(path: str, designs: list[dict[str, Any]], targets: list[d
         result["warning"] = ("Saved without targets: in the OpenFilters GUI the Design/Optimize menu is disabled "
                              "until targets are added. Save again with the targets if there are any.")
     return result
+
+
+# ---------------------------------------------------------------------------
+# Resources: reference material a user can attach to a conversation
+# ---------------------------------------------------------------------------
+
+EXAMPLES_DIR = os.path.join(os.path.dirname(os.path.dirname(engine.__file__)), "openfilters_core", "examples")
+
+
+def _example_names():
+    return sorted(f[:-4] for f in os.listdir(EXAMPLES_DIR) if f.endswith(".ofp"))
+
+
+@mcp.resource("openfilters://guide", title="Design and target format", mime_type="text/plain")
+def guide_resource() -> str:
+    """How designs, targets and units are written for the OpenFilters tools."""
+    return INSTRUCTIONS
+
+
+@mcp.resource("openfilters://materials", title="Available materials", mime_type="application/json")
+async def materials_resource() -> dict:
+    """Built-in and user materials with n,k at a few wavelengths."""
+    return {"materials": await compute("list_materials", name_filter=None)}
+
+
+@mcp.resource("openfilters://examples", title="OpenFilters example projects", mime_type="application/json")
+def examples_resource() -> dict:
+    """The example projects shipped with OpenFilters (read one at openfilters://examples/<name>)."""
+    return {"examples": [{"name": n, "uri": f"openfilters://examples/{n}"} for n in _example_names()]}
+
+
+@mcp.resource("openfilters://examples/{name}", title="OpenFilters example project", mime_type="application/json")
+async def example_resource(name: str) -> dict:
+    """Designs and targets of one OpenFilters example project (AR, Beamsplitter, Color, Edge, ...)."""
+    if name not in _example_names():
+        raise ToolError(f"unknown example {name}; choose from {', '.join(_example_names())}")
+    return await compute("load_project", path=os.path.join(EXAMPLES_DIR, name + ".ofp"))
+
+
+# ---------------------------------------------------------------------------
+# Prompts: ready-made design workflows (slash commands in Claude Code)
+# ---------------------------------------------------------------------------
+
+_CLOSING = ("Report whether the targets are met, the layer list, the yield and the plot file paths; save the best "
+            "designs with their targets using save_project so they open in the OpenFilters GUI.")
+
+
+@mcp.prompt(title="Design an antireflection coating")
+def design_antireflection(substrate: str = "BK7", from_nm: str = "420", to_nm: str = "680",
+                          max_reflectance_percent: str = "0.5", max_angle_deg: str = "0",
+                          materials: str = "Ta2O5, SiO2") -> str:
+    """Antireflection coating over a band, optimized from many starts and checked for yield."""
+    return f"""Design an antireflection coating on {substrate} with the OpenFilters tools.
+Specification: R <= {max_reflectance_percent} % (unpolarized) from {from_nm} to {to_nm} nm, at angles 0 to {max_angle_deg} deg;
+materials {materials} (check them with list_materials; if one is missing, find it with search_refractiveindex).
+1. Write the targets: one R target with inequality "<=" over the band (step about 5 nm) for each angle needed.
+2. Run run_optimization_campaign with about 40 random starts (2 to 10 layers, the listed materials, the substrate),
+   the needle method, top_n 5 and a tolerance stage (1 % relative thickness error, 200 trials).
+3. Poll job_status, then get_results; pick the simplest design that meets the targets with a good yield.
+{_CLOSING}"""
+
+
+@mcp.prompt(title="Design a high reflector (mirror)")
+def design_mirror(wavelength_nm: str = "1064", min_reflectance_percent: str = "99.9", bandwidth_nm: str = "40",
+                  angle_deg: str = "0", substrate: str = "FusedSilica", materials: str = "Ta2O5, SiO2") -> str:
+    """Dielectric mirror: quarter-wave stack sized from theory, then refined; field and yield checked."""
+    return f"""Design a dielectric mirror on {substrate} with the OpenFilters tools.
+Specification: R >= {min_reflectance_percent} % over {bandwidth_nm} nm centred on {wavelength_nm} nm at {angle_deg} deg;
+materials {materials} (H = high index, L = low index).
+1. Start from the quarter-wave stack formula "(HL)^p H" at {wavelength_nm} nm and increase p until compute_spectrum
+   reaches the reflectance (use the "OD" quantity when the blocking is very high).
+2. Write the R target (value as a fraction, inequality ">=") and refine with optimize_design (method "refine");
+   use "needle" only if the band is not covered.
+3. Check compute_electric_field at {wavelength_nm} nm (position of the |E|^2 peak, for laser damage) and
+   tolerance_analysis.
+{_CLOSING}"""
+
+
+@mcp.prompt(title="Design an edge filter or dichroic")
+def design_edge_filter(pass_from_nm: str = "600", pass_to_nm: str = "800", min_transmittance_percent: str = "95",
+                       block_from_nm: str = "400", block_to_nm: str = "550", max_transmittance_percent: str = "1",
+                       angle_deg: str = "0", substrate: str = "BK7", materials: str = "TiO2, SiO2") -> str:
+    """Long-pass, short-pass or dichroic filter with a pass band and a blocking band."""
+    return f"""Design an edge filter or dichroic on {substrate} with the OpenFilters tools, at {angle_deg} deg incidence
+(at oblique incidence, write s and p targets separately).
+Specification: T >= {min_transmittance_percent} % from {pass_from_nm} to {pass_to_nm} nm and
+T <= {max_transmittance_percent} % from {block_from_nm} to {block_to_nm} nm; materials {materials}.
+1. Write a T ">=" target for the pass band and a T "<=" target for the blocking band (or an OD ">=" target for
+   deep blocking).
+2. Start from a quarter-wave stack centred in the blocking band with half-thickness end layers, for example
+   "(0.5L H 0.5L)^p" for a long-pass edge; check it with compute_spectrum, then optimize_design with the needle
+   method to flatten the pass band.
+3. For a hard specification, run run_optimization_campaign from about 30 random starts and compare.
+{_CLOSING}"""
+
+
+@mcp.prompt(title="Design a narrow band-pass filter")
+def design_bandpass(center_nm: str = "532", fwhm_nm: str = "10", min_peak_transmittance_percent: str = "90",
+                    block_from_nm: str = "400", block_to_nm: str = "700", substrate: str = "FusedSilica",
+                    materials: str = "Ta2O5, SiO2") -> str:
+    """Fabry-Perot band-pass: cavities and mirror pairs sized from theory, then optimized."""
+    return f"""Design a narrow band-pass filter on {substrate} with the OpenFilters tools.
+Specification: peak T >= {min_peak_transmittance_percent} % at {center_nm} nm, FWHM about {fwhm_nm} nm, and T <= 1 %
+from {block_from_nm} to {block_to_nm} nm outside the pass band; materials {materials}.
+1. Start from a single cavity "(HL)^p HH (LH)^p" at {center_nm} nm and choose p from the FWHM with compute_spectrum
+   (more pairs give a narrower band); join two or three cavities with an L layer for steeper edges.
+2. Write targets (T ">=" at the pass-band centre, T "<=" in the stop bands on either side) and refine with
+   optimize_design.
+3. Check the angle shift with compute_angle_scan and the yield with tolerance_analysis (cavities are sensitive).
+{_CLOSING}"""
+
+
+@mcp.prompt(title="Review a design for manufacturing")
+def review_for_manufacturing(design_json: str, targets_json: str = "", thickness_error_percent: str = "1",
+                             monitoring_wavelength_nm: str = "") -> str:
+    """Yield, sensitive layers, electric field and monitoring signals of an existing design."""
+    targets = targets_json or "none given: ask for the specification, or derive targets from the purpose of the design"
+    monitoring = monitoring_wavelength_nm or "a suitable monitoring wavelength"
+    return f"""Review this coating design for manufacturing with the OpenFilters tools.
+Design: {design_json}
+Targets: {targets}
+1. describe_design (layers, total thickness, thinnest layer) and evaluate_design against the targets.
+2. tolerance_analysis with {thickness_error_percent} % relative thickness error (500 trials), and layer_sensitivity to
+   name the layers that need the tightest control.
+3. compute_electric_field at the main wavelength (where is the |E|^2 peak?) and compute_monitoring_curves at
+   {monitoring} (signal at the end of each layer).
+Summarize the risks and suggest changes, such as removing very thin layers or re-optimizing with min_thickness."""
 
 
 def main():

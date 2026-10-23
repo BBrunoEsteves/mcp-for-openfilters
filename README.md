@@ -36,6 +36,12 @@ Example requests to Claude:
 * *"Where is the electric-field peak of this mirror at 1064 nm, and what monitoring signal should I
   expect at 633 nm at the end of each layer?"*
 
+Ready-made workflows (prompts) appear as `/` commands in Claude Code and in the attachment menu of Claude
+Desktop: **design an antireflection coating**, **a mirror**, **an edge filter or dichroic**, **a narrow band-pass
+filter**, and **review a design for manufacturing**. The design-format guide, the material list and the
+OpenFilters example projects are available as resources (`openfilters://guide`, `openfilters://materials`,
+`openfilters://examples/<name>`). Long optimizations and yield analyses report progress to apps that show it.
+
 ## Installation
 
 Requires Python ≥ 3.10. OpenFilters itself does **not** need to be installed: its calculation engine is

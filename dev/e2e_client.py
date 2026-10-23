@@ -54,9 +54,15 @@ async def main(home):
             show("bad input", await call("evaluate_design", {"design": {"layers": [["Unobtainium", 10]]}, "targets": TARGETS}))
             opt = show("optimize_design", await call("optimize_design", {
                 "design": MIRROR, "targets": TARGETS, "method": "needle", "options": {"time_limit": 60}}), 400)
+            progress = []
+
+            async def on_progress(done, total, message):
+                progress.append((done, total, message))
+
             show("tolerance_analysis", await call("tolerance_analysis", {
-                "design": opt["design"], "targets": TARGETS, "n_trials": 200,
-                "thickness_error": {"type": "relative", "sigma": 0.01}}), 600)
+                "design": opt["design"], "targets": TARGETS, "n_trials": 2000,
+                "thickness_error": {"type": "relative", "sigma": 0.01}}, progress_callback=on_progress), 600)
+            print(f"progress notifications: {len(progress)}, last: {progress[-1] if progress else None}")
             batch = show("run_batch", await call("run_batch", {
                 "operation": "spectrum",
                 "template": {"design": {"substrate": "FusedSilica", "center_wavelength": "$cw",
