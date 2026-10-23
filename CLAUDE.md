@@ -56,7 +56,8 @@ Spectrum values use 6 significant figures; "OD" quantity = -log10 T; wait_second
 
 Releases: pushing a tag v* makes CI publish a GitHub release with all wheels + scripts/install_openfilters_mcp.py
 (stdlib installer: private venv in ~/.openfilters-mcp/venv, registers in Claude Desktop and Claude Code).
-v0.1.0 released (private) 2026-10-23. Bump the version in pyproject.toml and src/openfilters_mcp/__init__.py
+v0.1.0 released (private) 2026-10-23; v0.1.1 (installer finds the Microsoft Store Claude Desktop, whose data is in
+%LOCALAPPDATA%\Claude-Data\claude_<id>) 2026-10-23. Update scripts/RELEASE_NOTES.md (release text) and bump the version in pyproject.toml and src/openfilters_mcp/__init__.py
 before tagging the next one.
 
 Pending: make public (consider contacting Larouche/Martinu first), PyPI, MCP Registry, Claude plugin;
