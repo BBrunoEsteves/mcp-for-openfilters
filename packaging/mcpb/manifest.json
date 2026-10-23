@@ -58,6 +58,14 @@
       "description": "Add a material"
     },
     {
+      "name": "search_refractiveindex",
+      "description": "Search refractiveindex.info"
+    },
+    {
+      "name": "import_refractiveindex_material",
+      "description": "Import a refractiveindex.info material"
+    },
+    {
       "name": "describe_design",
       "description": "Describe a design"
     },

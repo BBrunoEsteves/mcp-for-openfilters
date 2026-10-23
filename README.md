@@ -18,7 +18,7 @@ Montréal.*
 
 | Area | Tools |
 |---|---|
-| Materials | `list_materials`, `get_material_index`, `add_material` (constant, Cauchy, Sellmeier, n,k tables from files) |
+| Materials | `list_materials`, `get_material_index`, `add_material` (constant, Cauchy, Sellmeier, n,k tables from files), `search_refractiveindex` + `import_refractiveindex_material` (any of the ~3,500 entries of the [refractiveindex.info](https://refractiveindex.info) database, downloaded on demand) |
 | Single design | `describe_design`, `compute_spectrum` (R/T/A, phase, GD, GDD; s/p/unpolarized; any angle; reverse side), `compute_angle_scan`, `compute_color`, `compute_electric_field`, `compute_monitoring_curves` |
 | Targets & merit | `evaluate_design`, `layer_sensitivity` |
 | Optimization | `optimize_design` — OpenFilters' refinement, **needle** and **step** methods |
@@ -32,6 +32,7 @@ Example requests to Claude:
   at most 40 layers of Ta2O5/SiO2. Run 100 needle optimizations from random starts and rank the
   best 10 by yield at ±1 % thickness error."*
 * *"Add my ALD Al2O3 from this ellipsometry file and sweep the AR coating thickness ±10 %."*
+* *"Find thin-film HfO2 data on refractiveindex.info, import it and redo the mirror with it."*
 * *"Where is the electric-field peak of this mirror at 1064 nm, and what monitoring signal should I
   expect at 633 nm at the end of each layer?"*
 
@@ -126,7 +127,8 @@ Emil Kleijn; `_moremath` is ported by the same script. See `src/openfilters_core
 
 ## Privacy
 
-Everything runs on your computer: no data is sent anywhere and there is no telemetry. See
+Everything runs on your computer: no data is sent anywhere and there is no telemetry. The only network
+access is downloading public refractiveindex.info data when you ask for it. See
 [PRIVACY.md](PRIVACY.md).
 
 ## Citing

@@ -81,6 +81,10 @@ async def main(home):
             show("list_jobs", await call("list_jobs", {"limit": 5}), 400)
             saved = show("save_project", await call("save_project", {"path": "e2e_test", "designs": [MIRROR], "targets": TARGETS}))
             show("load_project", await call("load_project", {"path": saved["path"]}), 300)
+            # Needs internet access (refractiveindex.info database on GitHub).
+            show("search_refractiveindex", await call("search_refractiveindex", {"query": "HfO2", "limit": 3}), 400)
+            show("import_refractiveindex_material", await call("import_refractiveindex_material", {
+                "page": "main/SiO2/nk/Malitson", "overwrite": True}), 400)
 
 
 if __name__ == "__main__":

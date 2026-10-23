@@ -21,7 +21,7 @@ from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
-from . import __version__, engine, jobs, plotting, settings, tasks
+from . import __version__, engine, jobs, plotting, refractiveindex, settings, tasks
 
 INSTRUCTIONS = """\
 OpenFilters thin-film optical coating design (Larouche & Martinu, Polytechnique Montréal).
@@ -59,6 +59,9 @@ A target is a JSON object (used by evaluate/optimize/tolerance):
    "inequality": "equal" | ">=" | "<=",  "direction": "normal"|"reverse"}
 Use ">=" / "<=" for specifications like "R > 99 %". Phase/GD/GDD targets need s or p polarization.
 Color targets: {"kind": "R_color", "color_space": "L*a*b*", "values": [L, a, b], "tolerances": [1, 1, 1]}.
+
+Materials missing from list_materials: search_refractiveindex then import_refractiveindex_material (downloads
+public data from refractiveindex.info; prefer thin-film entries for coatings and give the user the references).
 
 Workflow: list_materials -> describe_design / compute_spectrum -> evaluate_design -> optimize_design
 (refine = thickness refinement, needle = adds layers, step = graded index) -> tolerance_analysis.
@@ -170,11 +173,14 @@ async def targets_plot(designs, targets, title, name):
 
 Design = Annotated[dict[str, Any], Field(description="Design object (see server instructions): substrate, media, layers from the substrate outward or a formula.")]
 Targets = Annotated[list[dict[str, Any]], Field(description="List of target objects (see server instructions).")]
-# Everything runs locally (open_world_hint False). Read-only tools only save plots and CSV tables in the
-# data folder; job tools also write job files there; DESTRUCTIVE tools may replace a file or stop work.
+# Everything runs locally (open_world_hint False) except the refractiveindex.info tools (WEB_*), which
+# download public data. Read-only tools only save plots, CSV tables and caches in the data folder; job tools
+# also write job files there; DESTRUCTIVE tools may replace a file or stop work.
 READ = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 JOB = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False)
 DESTRUCTIVE = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=True, open_world_hint=False)
+WEB_READ = ToolAnnotations(read_only_hint=True, open_world_hint=True)
+WEB_WRITE = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=True, open_world_hint=True)
 Wavelengths = Annotated[dict[str, float] | list[float] | None,
                         Field(description='{"from": 380, "to": 1100, "step": 1} or an explicit list of wavelengths (nm).')]
 
@@ -232,6 +238,44 @@ async def add_material(name: str, model: str, description: str = "",
     return await compute("add_material", name=name, model=model, description=description, n=n, k=k,
                          coefficients=coefficients, table=table, wavelength_unit=wavelength_unit,
                          overwrite=overwrite)
+
+
+@mcp.tool(title="Search refractiveindex.info", annotations=WEB_READ)
+async def search_refractiveindex(query: str, shelf: str | None = None, limit: int = 25,
+                                 refresh: bool = False) -> dict:
+    """Search the refractiveindex.info database of optical constants (public domain) by material
+    name, formula or author, e.g. "Ta2O5", "silicon nitride", "HfO2 thin film", "N-BK7". Each result
+    gives a `page` id to pass to import_refractiveindex_material, the source (author, year, range) and
+    a category such as "Experimental data: thin film" or "bulk": thin-film data usually suit coatings
+    best. shelf limits the search: main (inorganic), organic, glass, other, specs (supplier data sheets),
+    popular_glass. The catalogue is downloaded once and cached for 30 days (refresh=true updates it)."""
+    return await asyncio.to_thread(checked, refractiveindex.search, query, shelf, limit, refresh)
+
+
+@mcp.tool(title="Import a refractiveindex.info material", annotations=WEB_WRITE)
+async def import_refractiveindex_material(page: str, name: str | None = None,
+                                          from_nm: float | None = None, to_nm: float | None = None,
+                                          overwrite: bool = False, plot: bool = False):
+    """Download one refractiveindex.info entry (`page` from search_refractiveindex) and add it to the
+    user's materials as an n,k table, usable in designs like any other material. Tabulated data and
+    dispersion formulas are both converted; k = 0 when the entry gives none. name defaults to
+    <book>_<page> (e.g. Ta2O5_Bright-amorphous); from_nm/to_nm crop the table. Returns the material,
+    its wavelength range, the references (cite them when using the data) and the web page."""
+    doc = await asyncio.to_thread(checked, refractiveindex.load_page, page)
+    table = checked(refractiveindex.to_table, doc, from_nm, to_nm)
+    page = page.strip().removesuffix(".yml")
+    name = name or refractiveindex.default_name(page)
+    summary = await compute("add_material", name=name, model="table", table=table, wavelength_unit="nm",
+                            description=f"refractiveindex.info {page}", overwrite=overwrite)
+    out = {"material": summary, "wavelength_range_nm": [table[0][0], table[-1][0]], "points": len(table),
+           "absorbing": any(row[2] > 0 for row in table), "references": refractiveindex.references(doc),
+           "comments": refractiveindex._plain(doc.get("COMMENTS", "")), "web_page": refractiveindex.page_url(page)}
+    if plot:
+        wvls = [row[0] for row in table]
+        png = plotting.curves(wvls, {"n": [row[1] for row in table], "k": [row[2] for row in table]},
+                              f"{name} (refractiveindex.info)", "Wavelength (nm)", "n, k")
+        return with_plots(out, png, f"index_{name}")
+    return out
 
 
 def _read_table_file(path):
