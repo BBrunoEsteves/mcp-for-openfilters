@@ -19,6 +19,7 @@ from pydantic import Field
 
 from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.types import ToolAnnotations
 
 from . import __version__, engine, jobs, plotting, settings, tasks
 
@@ -169,6 +170,11 @@ async def targets_plot(designs, targets, title, name):
 
 Design = Annotated[dict[str, Any], Field(description="Design object (see server instructions): substrate, media, layers from the substrate outward or a formula.")]
 Targets = Annotated[list[dict[str, Any]], Field(description="List of target objects (see server instructions).")]
+# Everything runs locally (open_world_hint False). Read-only tools only save plots and CSV tables in the
+# data folder; job tools also write job files there; DESTRUCTIVE tools may replace a file or stop work.
+READ = ToolAnnotations(read_only_hint=True, open_world_hint=False)
+JOB = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False)
+DESTRUCTIVE = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=True, open_world_hint=False)
 Wavelengths = Annotated[dict[str, float] | list[float] | None,
                         Field(description='{"from": 380, "to": 1100, "step": 1} or an explicit list of wavelengths (nm).')]
 
@@ -177,7 +183,7 @@ Wavelengths = Annotated[dict[str, float] | list[float] | None,
 # Server and materials
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
+@mcp.tool(title="Server information", annotations=READ)
 async def server_info() -> dict:
     """Version, data folder, worker count and whether the compiled C++ core is in use."""
     accel = await compute("acceleration_status")
@@ -185,14 +191,14 @@ async def server_info() -> dict:
             **accel, "materials_folder": settings.materials_dir(), "jobs_folder": settings.jobs_dir()}
 
 
-@mcp.tool()
+@mcp.tool(title="List materials", annotations=READ)
 async def list_materials(name_filter: str | None = None) -> dict:
     """List available materials (built-in OpenFilters library plus the user's own) with n,k at a few
     wavelengths. Mixtures (variable composition) report their index range at 550 nm."""
     return {"materials": await compute("list_materials", name_filter=name_filter)}
 
 
-@mcp.tool()
+@mcp.tool(title="Material optical constants", annotations=READ)
 async def get_material_index(name: str, wavelengths: Wavelengths = None, plot: bool = False):
     """Tabulate n and k of a regular material over wavelengths (default 300-2000 nm, 50 nm steps)."""
     wvls = engine._wavelength_list(wavelengths, default=(300.0, 2000.0, 50.0)) if wavelengths is not None \
@@ -207,7 +213,7 @@ async def get_material_index(name: str, wavelengths: Wavelengths = None, plot: b
     return out
 
 
-@mcp.tool()
+@mcp.tool(title="Add a material", annotations=DESTRUCTIVE)
 async def add_material(name: str, model: str, description: str = "",
                        n: float | None = None, k: float = 0.0,
                        coefficients: list[float] | None = None,
@@ -251,7 +257,7 @@ def _read_table_file(path):
 # Single-design calculations
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
+@mcp.tool(title="Describe a design", annotations=READ)
 async def describe_design(design: Design, plot_index_profile: bool = False):
     """Validate a design and list its layers (thickness, index and QWOT at the center wavelength),
     total thickness and the normalized design JSON (e.g. a formula expanded into layers). Two-sided
@@ -280,7 +286,7 @@ def _summarize_series(wvls, values, n_points):
     return summary
 
 
-@mcp.tool()
+@mcp.tool(title="Compute spectrum", annotations=READ)
 async def compute_spectrum(design: Design,
                            quantities: list[str] = ["R", "T"],
                            wavelengths: Wavelengths = None,
@@ -317,7 +323,7 @@ async def compute_spectrum(design: Design,
     return out
 
 
-@mcp.tool()
+@mcp.tool(title="Angle scan", annotations=READ)
 async def compute_angle_scan(design: Design, wavelength: float, quantities: list[str] = ["R", "T"],
                              angles: Annotated[dict[str, float], Field(description='{"from": 0, "to": 85, "step": 1}')] = {"from": 0, "to": 85, "step": 1},
                              polarizations: list[str] = ["s", "p", "unpolarized"], plot: bool = True):
@@ -338,7 +344,7 @@ async def compute_angle_scan(design: Design, wavelength: float, quantities: list
     return out
 
 
-@mcp.tool()
+@mcp.tool(title="Coating color", annotations=READ)
 async def compute_color(design: Design, angles: list[float] = [0.0], mode: str = "reflection",
                         polarization: str = "unpolarized", illuminant: str = "CIE-D65",
                         observer: str = "CIE-1931") -> dict:
@@ -348,7 +354,7 @@ async def compute_color(design: Design, angles: list[float] = [0.0], mode: str =
                          illuminant=illuminant, observer=observer)
 
 
-@mcp.tool()
+@mcp.tool(title="Electric field in the coating", annotations=READ)
 async def compute_electric_field(design: Design, wavelength: float, angle: float = 0.0,
                                  polarization: str = "s", plot: bool = True):
     """Standing-wave |E|^2 inside the coating (relative to the incident wave), e.g. for laser-damage
@@ -370,7 +376,7 @@ async def compute_electric_field(design: Design, wavelength: float, angle: float
     return out
 
 
-@mcp.tool()
+@mcp.tool(title="Optical monitoring curves", annotations=READ)
 async def compute_monitoring_curves(design: Design, wavelengths: list[float], angle: float = 0.0,
                                     polarization: str = "unpolarized", mode: str = "transmission",
                                     plot: bool = True):
@@ -394,7 +400,7 @@ async def compute_monitoring_curves(design: Design, wavelengths: list[float], an
     return out
 
 
-@mcp.tool()
+@mcp.tool(title="Evaluate a design", annotations=READ)
 async def evaluate_design(design: Design, targets: Targets, plot: bool = True):
     """Merit (chi^2, OpenFilters' definition) of a design against targets, with per-target pass
     fraction and maximum deviation. all_targets_met is true when every point is within tolerance."""
@@ -406,7 +412,7 @@ async def evaluate_design(design: Design, targets: Targets, plot: bool = True):
     return out
 
 
-@mcp.tool()
+@mcp.tool(title="Layer sensitivity", annotations=READ)
 async def layer_sensitivity(design: Design, targets: Targets, relative_step: float = 0.01) -> dict:
     """Change in merit when each layer thickness is increased by relative_step (default 1 %), to find
     the layers that need the tightest deposition control."""
@@ -433,7 +439,7 @@ async def _wait(job_id, wait_seconds):
     return manager().results(job_id, top_n=10)
 
 
-@mcp.tool()
+@mcp.tool(title="Optimize a design", annotations=JOB)
 async def optimize_design(design: Design, targets: Targets, method: str = "needle",
                           options: Annotated[dict[str, Any] | None, Field(description=(
                               "time_limit (s, default 300), max_iterations, min_thickness (nm; guaranteed in the "
@@ -494,7 +500,7 @@ def _expand(template, parameters, mode):
     return [(dict(zip(names, combo)), substitute(template, dict(zip(names, combo)))) for combo in combos]
 
 
-@mcp.tool()
+@mcp.tool(title="Run a parameter sweep", annotations=JOB)
 async def run_batch(operation: str,
                     template: Annotated[dict[str, Any], Field(description=(
                         'Arguments of the operation, where any value written "$name" (or "${name}" inside a '
@@ -541,7 +547,7 @@ def _random_starts(spec, count, seed):
     return starts
 
 
-@mcp.tool()
+@mcp.tool(title="Run an optimization campaign", annotations=JOB)
 async def run_optimization_campaign(targets: Targets,
                                     starts: Annotated[list[dict[str, Any]] | None, Field(description="Explicit starting designs.")] = None,
                                     random_starts: Annotated[dict[str, Any] | None, Field(description=(
@@ -577,7 +583,7 @@ async def run_optimization_campaign(targets: Targets,
             "note": "poll job_status, then get_results"}
 
 
-@mcp.tool()
+@mcp.tool(title="Tolerance (yield) analysis", annotations=JOB)
 async def tolerance_analysis(design: Design, targets: Targets, n_trials: int = 500,
                              thickness_error: Annotated[dict[str, Any] | None, Field(description=(
                                  '{"type": "relative"|"absolute", "sigma": 0.01 (fraction) or nm, '
@@ -604,19 +610,19 @@ async def tolerance_analysis(design: Design, targets: Targets, n_trials: int = 5
     return out
 
 
-@mcp.tool()
+@mcp.tool(title="Job status", annotations=READ)
 async def job_status(job_id: str) -> dict:
     """Progress of a background job (tasks done/total, failures, ETA, output files when done)."""
     return checked(manager().status, job_id)
 
 
-@mcp.tool()
+@mcp.tool(title="List jobs", annotations=READ)
 async def list_jobs(limit: int = 20) -> dict:
     """Most recent background jobs, newest first."""
     return {"jobs": manager().list(limit)}
 
 
-@mcp.tool()
+@mcp.tool(title="Get job results", annotations=READ)
 async def get_results(job_id: str, top_n: int = 10, sort_by: str | None = None, descending: bool = False,
                       include_designs: bool = False, plot: bool = True):
     """Result rows of a job (campaigns are ranked best first; batches in task order unless sort_by is
@@ -645,7 +651,7 @@ async def get_results(job_id: str, top_n: int = 10, sort_by: str | None = None, 
     return out
 
 
-@mcp.tool()
+@mcp.tool(title="Cancel a job", annotations=DESTRUCTIVE)
 async def cancel_job(job_id: str) -> dict:
     """Cancel the pending tasks of a background job."""
     return checked(manager().cancel, job_id)
@@ -655,13 +661,13 @@ async def cancel_job(job_id: str) -> dict:
 # OpenFilters project files
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
+@mcp.tool(title="Load an OpenFilters project", annotations=READ)
 async def load_project(path: str) -> dict:
     """Read an OpenFilters .ofp project: returns its designs (as design JSON) and targets."""
     return await compute("load_project", path=path)
 
 
-@mcp.tool()
+@mcp.tool(title="Save an OpenFilters project", annotations=DESTRUCTIVE)
 async def save_project(path: str, designs: list[dict[str, Any]], targets: list[dict[str, Any]] | None = None,
                        comment: str = "") -> dict:
     """Write designs and their targets to an .ofp project that opens in the OpenFilters GUI.

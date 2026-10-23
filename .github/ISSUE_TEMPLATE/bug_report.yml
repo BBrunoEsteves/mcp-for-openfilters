@@ -1,0 +1,21 @@
+name: Bug report
+description: Something gives a wrong result, an error or a crash
+labels: [bug]
+body:
+  - type: textarea
+    attributes:
+      label: What happened
+      description: What you asked Claude, what the tool returned, and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Design and targets
+      description: The design / target JSON or the .ofp file, if relevant (remove anything confidential).
+      render: json
+  - type: input
+    attributes:
+      label: Versions
+      description: Output of "Run openfilters server_info" (version, compiled core), operating system, Claude app.
+    validations:
+      required: true

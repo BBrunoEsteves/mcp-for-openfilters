@@ -1,0 +1,10 @@
+name: Feature request
+description: A calculation, tool or workflow you would like
+labels: [enhancement]
+body:
+  - type: textarea
+    attributes:
+      label: What you want to do
+      description: The coating design task, and what is missing or awkward today.
+    validations:
+      required: true

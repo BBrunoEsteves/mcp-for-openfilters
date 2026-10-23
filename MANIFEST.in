@@ -1,0 +1,5 @@
+# C++ headers are not picked up from setup.py's sources; without them a source build
+# silently falls back to the slow pure-Python core.
+recursive-include src/openfilters_core *.h *.cpp
+include PRIVACY.md
+global-exclude *.pyd *.so *.dll *.dylib __pycache__/*

@@ -1,0 +1,13 @@
+{
+  "name": "openfilters",
+  "owner": {
+    "name": "Bruno Esteves"
+  },
+  "plugins": [
+    {
+      "name": "openfilters",
+      "source": "./claude-plugin",
+      "description": "Design, simulate and optimize optical thin-film coatings with the OpenFilters engine."
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.BBrunoEsteves/openfilters-mcp",
+  "title": "OpenFilters",
+  "description": "Design, simulate and optimize optical thin-film coatings with the OpenFilters engine.",
+  "repository": {
+    "url": "https://github.com/BBrunoEsteves/openfilters-mcp",
+    "source": "github"
+  },
+  "version": "0.1.2",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "openfilters-mcp",
+      "version": "0.1.2",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

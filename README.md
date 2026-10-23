@@ -1,4 +1,5 @@
 # OpenFilters MCP
+<!-- mcp-name: io.github.BBrunoEsteves/openfilters-mcp -->
 
 Design, simulate and optimize **optical thin-film coatings** by talking to Claude.
 
@@ -9,6 +10,9 @@ compact summaries; the server does the computing — in parallel on all CPU core
 results to disk, including `.ofp` project files that open in the OpenFilters GUI.
 
 > Claude orchestrates; the server computes. One tool call can launch a whole campaign.
+
+*Unofficial: this project is not affiliated with or endorsed by the OpenFilters authors or Polytechnique
+Montréal.*
 
 ## What it can do
 
@@ -119,6 +123,11 @@ the refinement and needle optimizations of the OpenFilters examples.
 `tools/port_from_py2.py`, an auditable script (mechanical Python 2 → 3 conversions, a short list of
 targeted fixes, package-relative imports). The `_abeles` C++ extension uses the Python 3 C-API port by
 Emil Kleijn; `_moremath` is ported by the same script. See `src/openfilters_core/PROVENANCE.md`.
+
+## Privacy
+
+Everything runs on your computer: no data is sent anywhere and there is no telemetry. See
+[PRIVACY.md](PRIVACY.md).
 
 ## Citing
 

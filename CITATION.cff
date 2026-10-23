@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software, please cite it and the OpenFilters paper below, whose calculation
+  engine it is built on.
+title: "OpenFilters MCP: thin-film optical coating design with Claude"
+type: software
+authors:
+  - family-names: Esteves
+    given-names: Bruno
+repository-code: "https://github.com/BBrunoEsteves/openfilters-mcp"
+license: GPL-2.0-or-later
+version: 0.1.2
+date-released: "2026-10-23"
+keywords:
+  - thin film
+  - optical coating
+  - interference filter
+  - MCP
+references:
+  - type: article
+    title: "OpenFilters: open-source software for the design, optimization, and synthesis of optical filters"
+    authors:
+      - family-names: Larouche
+        given-names: Stéphane
+      - family-names: Martinu
+        given-names: Ludvik
+    journal: Applied Optics
+    volume: 47
+    issue: 13
+    start: C219
+    end: C230
+    year: 2008
+    doi: 10.1364/AO.47.00C219
