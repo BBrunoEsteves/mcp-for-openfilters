@@ -115,7 +115,8 @@ A target:
 
 The test suite (`pytest`) checks the ported core against analytic results (quarter-wave stacks) and
 an independent transfer-matrix implementation (dispersive dielectrics, absorbing metals, 0–60°,
-s/p/unpolarized; agreement < 1e-9), round-trips every example project through `.ofp` files, and runs
+s/p/unpolarized; agreement < 1e-9) and textbook closed forms (quarter-wave antireflection and absentee
+layers, V-coat zero, Brewster angle, quarter-wave stack peak reflectance and stop-band width), round-trips every example project through `.ofp` files, and runs
 the refinement and needle optimizations of the OpenFilters examples.
 
 ## How the port was made

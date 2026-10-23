@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Fix: a user material with the same name as a built-in one (e.g. your own `TiO2`) was silently ignored
+  in favour of the built-in data.
+- `search_refractiveindex` and `import_refractiveindex_material`: any entry of the refractiveindex.info
+  database (tabulated data or dispersion formulas), downloaded on demand.
+- Validation against closed-form textbook results (quarter-wave AR, absentee layer, V-coat, Brewster angle,
+  quarter-wave stack peak and stop-band width, energy conservation).
 - Every tool has a title and annotations (read-only, destructive, local), as Claude's directory requires.
 - Source package: the C++ headers were missing, so installs from source silently used the slow
   pure-Python core. CI now checks that a source install builds the compiled core.

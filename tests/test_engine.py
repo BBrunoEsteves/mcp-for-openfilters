@@ -317,3 +317,14 @@ def test_needle_result_keeps_needle_materials():
                                                    "needle_materials": ["SiO2", "TiO2"]})
     assert sorted(r["design"]["needle_materials"]) == ["SiO2", "TiO2"]
     assert "needle method" in r["design"]["description"]
+
+
+def test_user_material_overrides_built_in_one_of_the_same_name():
+    # OpenFilters ships TiO2; a user's own TiO2 must be the one used everywhere.
+    built_in = engine.material_N("TiO2", [550.0])[0]
+    engine.add_material("TiO2", "constant", n=2.0)
+    assert engine.material_N("TiO2", [550.0])[0] == pytest.approx(2.0) != built_in
+    [row] = [r for r in engine.list_materials("TiO2") if r["name"] == "TiO2"]
+    assert row["source"] == "user" and row["n,k"]["550"][0] == pytest.approx(2.0)
+    d = {"substrate": "FusedSilica", "center_wavelength": 550, "layers": [{"material": "TiO2", "qwot": 1}]}
+    assert engine.describe(d)["layers"][0]["n@cw"] == pytest.approx(2.0)

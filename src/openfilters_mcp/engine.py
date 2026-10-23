@@ -63,8 +63,9 @@ def catalog(reload=False):
     user_dir = settings.materials_dir()
     signature = (user_dir, _user_materials_signature(user_dir))
     if _catalog is None or reload or signature != _catalog_signature:
+        # OpenFilters prefers the catalog LAST in the list, so the user's goes last.
         _catalog = of_materials.material_catalogs(
-            [of_materials.material_catalog(user_dir), of_materials.material_catalog()])
+            [of_materials.material_catalog(), of_materials.material_catalog(user_dir)])
         _catalog_signature = signature
     return _catalog
 
