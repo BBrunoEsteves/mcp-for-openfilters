@@ -34,8 +34,11 @@ A design is a JSON object:
    "layers": [{"material": "TiO2", "thickness": 58.6}, {"material": "SiO2", "qwot": 1.0}, ...]}
 Layers are listed FROM THE SUBSTRATE OUTWARD (first layer touches the substrate). A layer may give
 "thickness" (nm) or "qwot" (quarter-wave optical thickness at center_wavelength); mixtures need "index";
-optional flags refine_thickness / add_needles (default true). Instead of layers, a stack formula:
+optional flags refine_thickness / add_needles (default true), refine_index / add_steps / preserve_ot (mixtures).
+Instead of layers, a stack formula:
   "formula": {"formula": "(HL)^8 H", "materials": {"H": "TiO2", "L": "SiO2"}}  (letters = quarter waves).
+Optional design fields kept in .ofp projects: "description", "needle_materials" (names), "step_spacing",
+"wavelength_range" ({"from", "to", "step"}: what the OpenFilters GUI analyses).
 
 Coatings on BOTH faces of the substrate are ONE design (= one OpenFilters filter): put the second face in
 "back_layers" (also listed from the substrate outward; or "back_formula") and set "consider_backside": true
@@ -661,15 +664,23 @@ async def load_project(path: str) -> dict:
 @mcp.tool()
 async def save_project(path: str, designs: list[dict[str, Any]], targets: list[dict[str, Any]] | None = None,
                        comment: str = "") -> dict:
-    """Write designs (and optional targets) to an .ofp project that opens in the OpenFilters GUI.
+    """Write designs and their targets to an .ofp project that opens in the OpenFilters GUI.
+    ALWAYS pass the targets the designs were optimized or evaluated against: the GUI's Design/Optimize
+    menu stays disabled in a project without targets, so the user could not continue the work there.
     Each design becomes ONE filter in the project; a part coated on both faces must be a single design
     with back_layers and consider_backside: true (written as BackLayer lines), not two designs.
+    Keep the fields optimize_design returns in each design (description, needle_materials, layer flags)
+    and put anything else worth keeping (method, settings, yield) in comment or a design's description.
     A relative path is placed in the data folder's projects directory."""
     if not os.path.isabs(path):
         path = os.path.join(settings.projects_dir(), path)
     if not path.lower().endswith(".ofp"):
         path += ".ofp"
-    return {"path": await compute("save_project", path=path, designs=designs, target_specs=targets, comment=comment)}
+    result = {"path": await compute("save_project", path=path, designs=designs, target_specs=targets, comment=comment)}
+    if not targets:
+        result["warning"] = ("Saved without targets: in the OpenFilters GUI the Design/Optimize menu is disabled "
+                             "until targets are added. Save again with the targets if there are any.")
+    return result
 
 
 def main():

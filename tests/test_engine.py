@@ -265,3 +265,55 @@ def test_catalog_sees_materials_written_by_other_processes():
     with open(path, "w", encoding="latin-1") as f:  # overwritten with a different index
         f.write("Description: test, longer description\nKind: regular\nModel: constant\nProperties: 2.1\n")
     assert engine.material_N("ExternalMat", [550])[0].real == pytest.approx(2.1)
+
+
+def test_project_keeps_settings_for_the_gui(tmp_path):
+    """What the OpenFilters GUI needs to continue the work: targets, needle
+    materials, step spacing, descriptions, layer flags, a useful wavelength range."""
+    design = {"substrate": "BK7", "description": "made by a test", "needle_materials": ["TiO2", "SiO2"],
+              "step_spacing": 0.02,
+              "layers": [{"material": "TiO2", "thickness": 100, "refine_thickness": False},
+                         {"material": "SiO2", "thickness": 150, "add_needles": False}]}
+    path = engine.save_project(str(tmp_path / "gui.ofp"), [design], TARGETS)
+    text = open(path, encoding="latin-1").read()
+    assert text.count("Target:") == 2
+    assert "Description: made by a test" in text and "NeedleMaterials: TiO2 SiO2" in text
+    assert "StepSpacing: 0.020000" in text and "MinimumThickness: 0.000000" in text
+    loaded = engine.load_project(path)["designs"][0]
+    assert loaded["description"] == "made by a test" and loaded["needle_materials"] == ["TiO2", "SiO2"]
+    assert loaded["step_spacing"] == pytest.approx(0.02)
+    r = loaded["wavelength_range"]
+    assert r["from"] <= 600 and r["to"] >= 1130 and (r["to"] - r["from"]) / r["step"] <= 2000
+    assert loaded["layers"][0] == {"material": "TiO2", "thickness": 100.0, "refine_thickness": False,
+                                  "add_needles": False}  # OpenFilters: no needles in a fixed layer
+    assert loaded["layers"][1] == {"material": "SiO2", "thickness": 150.0, "add_needles": False}
+
+
+def test_target_wavelength_range():
+    assert engine.target_wavelength_range(None) is None
+    assert engine.target_wavelength_range([{"kind": "R", "wavelength": 1064, "value": 1}]) == \
+        {"from": 1010.0, "to": 1120.0, "step": 0.1}
+    color = engine.target_wavelength_range([{"kind": "R_color", "values": [50, 0, 0]}])
+    assert color["from"] <= 380 and color["to"] >= 780
+
+
+def test_optimizer_honours_layer_flags_and_describes_its_result():
+    start = {"substrate": "BK7", "layers": [{"material": "TiO2", "thickness": 40, "refine_thickness": False},
+                                            {"material": "SiO2", "thickness": 60}]}
+    targets = [{"kind": "R", "from": 500, "to": 600, "step": 10, "value": 0.0, "tolerance": 0.01}]
+    r = engine.optimize(start, targets, "refine", {"time_limit": 30, "min_thickness": 5})
+    layers = r["design"]["layers"]
+    assert layers[0] == {"material": "TiO2", "thickness": 40.0, "refine_thickness": False, "add_needles": False}
+    assert layers[1]["thickness"] != pytest.approx(60.0)
+    description = r["design"]["description"]
+    assert "refine method" in description and "minimum layer thickness 5 nm" in description
+    assert f"chi2 {r['initial_chi2']:.6g} -> {r['merit_chi2']:.6g}" in description
+
+
+def test_needle_result_keeps_needle_materials():
+    start = {"substrate": "BK7", "layers": [{"material": "TiO2", "thickness": 80}, {"material": "SiO2", "thickness": 120}]}
+    targets = [{"kind": "R", "from": 500, "to": 600, "step": 10, "value": 0.0, "tolerance": 0.01}]
+    r = engine.optimize(start, targets, "needle", {"time_limit": 30, "max_iterations": 5,
+                                                   "needle_materials": ["SiO2", "TiO2"]})
+    assert sorted(r["design"]["needle_materials"]) == ["SiO2", "TiO2"]
+    assert "needle method" in r["design"]["description"]

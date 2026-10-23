@@ -343,7 +343,8 @@ def finalize_optimize(manager, job):
     if r.get("ok"):
         meta = job["meta"]
         path = os.path.join(job["folder"], "optimized.ofp")
-        engine.save_project(path, [meta["design"], r["result"]["design"]], meta["targets"],
+        start = dict(meta["design"], description=meta["design"].get("description") or "Starting design (before optimization)")
+        engine.save_project(path, [start, r["result"]["design"]], meta["targets"],
                             "Filter 1: starting design; filter 2: optimized design")
         outputs["project"] = path
     _finish_table(manager, job, manager.rows(job["id"]), outputs)
@@ -406,6 +407,11 @@ def finalize_campaign(manager, job):
         rows.sort(key=rank_key)
     top = [r for r in rows if "error" not in r][:meta["top_n"]]
     designs = [manager.result(job["id"], r["task"])["result"]["design"] for r in top]
+    for rank, (row, design) in enumerate(zip(top, designs)):
+        label = f"Campaign {job['id']}, rank {rank + 1} (start {row['task']})"
+        if row.get("yield") is not None:
+            label += f", yield {row['yield']:.1%}"
+        design["description"] = label + ". " + design.get("description", "")
     outputs = {}
     if designs:
         path = os.path.join(job["folder"], "top_designs.ofp")

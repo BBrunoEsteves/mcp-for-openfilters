@@ -22,6 +22,7 @@ from openfilters_core import optical_filter
 from openfilters_core import project as of_project
 from openfilters_core import targets as of_targets
 from openfilters_core import version as of_version
+from openfilters_mcp import __version__
 from openfilters_core.definitions import BACK, FRONT, P, S, UNPOLARIZED
 from openfilters_core.optimization_needles import optimization_needles
 from openfilters_core.optimization_refinement import THICKNESS, optimization_refinement
@@ -226,6 +227,16 @@ def build_filter(design, wavelengths=None):
             f.set_illuminant(design["illuminant"])
         if "observer" in design:
             f.set_observer(design["observer"])
+        # Settings saved in .ofp projects so they are kept when the GUI opens them.
+        if design.get("description"):
+            f.set_description(" ".join(str(design["description"]).split()))
+        if design.get("needle_materials"):
+            f.set_needle_materials([str(m) for m in design["needle_materials"]])
+        if design.get("step_spacing"):
+            f.set_step_spacing(float(design["step_spacing"]))
+        if wavelengths is None and design.get("wavelength_range"):
+            r = design["wavelength_range"]
+            f.set_wavelengths_by_range(float(r["from"]), float(r["to"]), float(r.get("step", 1.0)))
         for side, key, formula_key in ((FRONT, "layers", "formula"), (BACK, "back_layers", "back_formula")):
             if design.get(formula_key):
                 formula = design[formula_key]
@@ -269,10 +280,24 @@ def _add_layer(f, layer, side, i):
     if thickness < 0:
         raise EngineError(f"layer {i} has a negative thickness")
     f.add_layer(material, thickness, side=side, index=index)
-    for flag, setter in (("refine_thickness", f.set_refine_layer_thickness), ("refine_index", f.set_refine_layer_index),
-                         ("add_needles", f.set_add_needles), ("add_steps", f.set_add_steps)):
+    for flag, setter in _LAYER_FLAGS:
         if flag in layer:
-            setter(position, bool(layer[flag]), side)
+            getattr(f, "set_" + setter)(position, bool(layer[flag]), side)
+
+
+# Per-layer optimization flags: design key -> OpenFilters set_/get_ suffix.
+_LAYER_FLAGS = (("refine_thickness", "refine_layer_thickness"), ("refine_index", "refine_layer_index"),
+                ("preserve_ot", "preserve_OT"), ("add_needles", "add_needles"), ("add_steps", "add_steps"))
+# OpenFilters' defaults for filter settings that design_from_filter reports only when changed.
+_DEFAULT_WAVELENGTH_RANGE = (300.0, 1000.0, 1.0)
+_DEFAULT_STEP_SPACING = 0.01
+
+
+def _default_layer_flags(side, mixture):
+    """The flags optical_filter.add_layer gives a new layer."""
+    front = side == FRONT
+    return {"refine_thickness": front, "refine_index": front and mixture, "preserve_ot": False,
+            "add_needles": front, "add_steps": front and mixture}
 
 
 def design_from_filter(f):
@@ -288,19 +313,35 @@ def design_from_filter(f):
         "consider_backside": bool(f.get_consider_backside()),
         "center_wavelength": f.get_center_wavelength(),
     }
+    if f.get_description():
+        design["description"] = f.get_description()
+    if f.get_needle_materials():
+        design["needle_materials"] = list(f.get_needle_materials())
+    if f.get_step_spacing() != _DEFAULT_STEP_SPACING:
+        design["step_spacing"] = f.get_step_spacing()
+    wavelength_range = tuple(float(x) for x in f.get_wavelengths_by_range())
+    if wavelength_range[2] > 0 and wavelength_range != _DEFAULT_WAVELENGTH_RANGE:
+        design["wavelength_range"] = dict(zip(("from", "to", "step"), wavelength_range))
     for side, key in ((FRONT, "layers"), (BACK, "back_layers")):
         layers = []
         for i in range(f.get_nb_layers(side)):
             layer = {"material": f.get_layer_material_name(i, side)}
             # Full precision, so a design round-trips to the same spectra.
             layer["thickness"] = float(f.get_layer_thickness(i, side))
+            mixture = _material(layer["material"]).is_mixture()
             if f.is_graded(i, side):
                 step_thicknesses, steps = f.get_layer_step_profile(i, side)
                 layer["graded"] = {"step_thicknesses": [float(t) for t in step_thicknesses],
                                    "steps": [int(x) for x in steps],
                                    "indices_at_cw": [float(n) for n in f.get_layer_index(i, side)]}
-            elif _material(layer["material"]).is_mixture():
+            elif mixture:
                 layer["index"] = float(f.get_layer_index(i, side))
+            # Only flags that differ from what a new layer gets, to keep designs short.
+            defaults = _default_layer_flags(side, mixture)
+            for flag, getter in _LAYER_FLAGS:
+                value = bool(getattr(f, "get_" + getter)(i, side))
+                if value != defaults[flag]:
+                    layer[flag] = value
             layers.append(layer)
         if layers or side == FRONT:
             design[key] = layers
@@ -761,6 +802,17 @@ def _run(method, design, targets, options, deadline, progress, floor=None):
     return best_design, float(best_chi2), stop, o.get_iteration()
 
 
+def optimization_description(method, initial_chi2, chi2, all_pass, min_thickness, stop):
+    """One line saying how a design was made, stored as the filter description in .ofp projects
+    (the format has no fields for the optimizer settings)."""
+    text = (f"Optimized with OpenFilters MCP {__version__} on {time.strftime('%Y-%m-%d')}: {method} method, "
+            f"merit chi2 {initial_chi2:.6g} -> {chi2:.6g}, all targets met: {'yes' if all_pass else 'no'}")
+    if min_thickness:
+        text += (f", minimum layer thickness {min_thickness:g} nm enforced by the connector "
+                 "(MinimumThickness left at 0: OpenFilters' needle and step methods cycle with it)")
+    return text + f", stop: {stop}."
+
+
 def optimize(design, target_specs, method="needle", options=None, progress=None):
     """Optimize a design and return the best design found.
 
@@ -806,6 +858,8 @@ def optimize(design, target_specs, method="needle", options=None, progress=None)
     if time.time() >= deadline and stop not in ("max_layers", "max_total_thickness", "min_thickness_not_reached"):
         stop = "time_limit"
     thicknesses = [l["thickness"] for l in current["layers"] if not l.get("graded")]
+    current = dict(current, description=optimization_description(
+        method, initial, final.get_chi_2(), all_pass, min_thickness, stop))
     return {"method": method, "initial_chi2": float(initial), "merit_chi2": float(final.get_chi_2()),
             "all_targets_met": all_pass, "targets": rows, "iterations": iterations, "stop_reason": stop,
             "nb_layers": f.get_nb_layers(), "total_thickness_nm": round(float(f.get_total_thickness()), 3),
@@ -957,11 +1011,37 @@ def _target_to_spec(t):
     return spec
 
 
+def target_wavelength_range(target_specs):
+    """A wavelength range for the GUI's analysis that covers every target, with a margin,
+    or None without targets."""
+    wavelengths = []
+    for spec in target_specs or []:
+        if str(spec.get("kind", "")).endswith("_color"):
+            wavelengths += [380.0, 780.0]
+        if "wavelength" in spec:
+            wavelengths.append(float(spec["wavelength"]))
+        wavelengths += [float(spec[key]) for key in ("from", "to") if key in spec]
+        wavelengths += [float(point[0]) for point in spec.get("points") or []]
+    if not wavelengths:
+        return None
+    low, high = min(wavelengths), max(wavelengths)
+    margin = max(0.1 * (high - low), 50.0)
+    low, high = max(math.floor((low - margin) / 10) * 10, 10.0), math.ceil((high + margin) / 10) * 10
+    # About 2000 points at most, as in the GUI's own default range.
+    step = next(s for s in (0.1, 0.2, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0) if (high - low) / s <= 2000 or s == 50.0)
+    return {"from": float(low), "to": float(high), "step": step}
+
+
 def save_project(path, designs, target_specs=None, comment=""):
+    """Write an .ofp project. Designs without a wavelength_range get one covering the targets,
+    so the GUI analyses the region that matters."""
     p = of_project.project(catalog())
     if comment:
         p.set_comment(comment)
+    wavelength_range = target_wavelength_range(target_specs)
     for design in designs:
+        if wavelength_range and not design.get("wavelength_range"):
+            design = dict(design, wavelength_range=wavelength_range)
         p.add_filter(build_filter(design))
     for t in build_targets(target_specs) if target_specs else []:
         p.add_target(t)
