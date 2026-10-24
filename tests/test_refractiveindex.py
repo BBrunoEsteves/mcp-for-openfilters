@@ -33,12 +33,16 @@ def test_cauchy_formula_5():
     assert rii.formula_n(5, [1.5, 0.004, -2], np.array([0.5]))[0] == pytest.approx(1.5 + 0.004 / 0.25)
 
 
-def test_separate_n_and_k_grids_are_merged_where_both_exist():
+def test_separate_n_and_k_grids_keep_the_whole_n_range():
+    # Entries often give k over part of the n range (ZnS: n 0.4-14 um, k 0.4-1 um); the import used to
+    # keep only the overlap, so the infrared n was extrapolated (n = 21 at 10 um).
     doc = {"DATA": [{"type": "tabulated n", "data": "0.4 2.0\n0.6 1.9\n0.8 1.8"},
                     {"type": "tabulated k", "data": "0.5 0.01\n1.0 0.0"}]}
-    rows = rii.to_table(doc)
-    assert [r[0] for r in rows] == [500.0, 600.0, 800.0]
-    assert rows[0][1] == pytest.approx(1.95) and rows[1][2] == pytest.approx(0.008)
+    notes = []
+    rows = rii.to_table(doc, notes=notes)
+    assert [r[0] for r in rows] == [400.0, 500.0, 600.0, 800.0]
+    assert rows[0][2] == 0 and rows[1][1] == pytest.approx(1.95) and rows[2][2] == pytest.approx(0.008)
+    assert notes and "set to 0" in notes[0]
 
 
 def test_crop_keeps_one_point_beyond_each_end():

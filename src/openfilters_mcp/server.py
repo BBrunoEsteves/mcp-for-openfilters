@@ -291,12 +291,14 @@ async def import_refractiveindex_material(page: str, name: str | None = None,
     <book>_<page> (e.g. Ta2O5_Bright-amorphous); from_nm/to_nm crop the table. Returns the material,
     its wavelength range, the references (cite them when using the data) and the web page."""
     doc = await asyncio.to_thread(checked, refractiveindex.load_page, page)
-    table = checked(refractiveindex.to_table, doc, from_nm, to_nm)
+    notes = []
+    table = checked(refractiveindex.to_table, doc, from_nm, to_nm, notes)
     page = page.strip().removesuffix(".yml")
     name = name or refractiveindex.default_name(page)
     summary = await compute("add_material", name=name, model="table", table=table, wavelength_unit="nm",
                             description=f"refractiveindex.info {page}", overwrite=overwrite)
     out = {"material": summary, "wavelength_range_nm": [table[0][0], table[-1][0]], "points": len(table),
+           **({"notes": notes} if notes else {}),
            "absorbing": any(row[2] > 0 for row in table),
            "absorbing_ranges_nm": _crossing_ranges([r[0] for r in table], [r[2] for r in table], 1e-6),
            "references": refractiveindex.references(doc),

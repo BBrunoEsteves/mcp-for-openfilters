@@ -68,7 +68,7 @@ def spectra(result, title="Spectrum"):
         for i, s in enumerate(series[:MAX_SERIES]):
             label = f"{s['quantity']} {s['angle']:g}° {s['polarization']}"
             # Line style by polarization keeps coincident curves (e.g. s and p at 0°) visible.
-            style = {"s": "-", "p": "--", "unpolarized": ":"}.get(s["polarization"], "-.")
+            style = {"unpolarized": "-", "s": "--", "p": "-."}.get(s["polarization"], ":")
             ax.plot(result["wavelengths"], s["values"], color=SERIES[i], linewidth=1.8, linestyle=style, label=label)
         if ylabel == "R/T/A":
             _photometric_axis(ax, np.concatenate([np.asarray(x["values"]) for x in series[:MAX_SERIES]]))
@@ -109,13 +109,18 @@ def design_vs_targets(wavelengths, curves, targets, title):
     top. curves: [(label, quantity, values, is_reference)]; targets: target
     dicts (R/T/A kinds only are drawn)."""
     fig, ax = _figure(title, "Wavelength (nm)", "R / T / A")
-    quantities = []
+    quantities, designs = [], []
     for label, quantity, values, reference in curves:
         if quantity not in quantities:
             quantities.append(quantity)
-        color = SERIES[quantities.index(quantity) % MAX_SERIES]
+        # One colour per design (labels are "<quantity> <design>"), one line style per quantity.
+        design = label.split(" ", 1)[-1]
+        if design not in designs:
+            designs.append(design)
+        color = SERIES[designs.index(design) % MAX_SERIES]
+        style = "--" if reference else ("-", "-.", ":")[quantities.index(quantity) % 3]
         ax.plot(wavelengths, values, color=color, linewidth=1.0 if reference else 1.8,
-                linestyle="--" if reference else "-", alpha=0.6 if reference else 1.0, label=label)
+                linestyle=style, alpha=0.6 if reference else 1.0, label=label)
     for target in targets:
         if target.get("kind") not in quantities:
             continue

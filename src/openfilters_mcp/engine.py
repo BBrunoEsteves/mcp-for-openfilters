@@ -540,6 +540,13 @@ def spectra(design, quantities=("R", "T"), wavelengths=None, angles=(0.0,), pola
     return {"wavelengths": np.array(wvls), "series": series, "warnings": warnings}
 
 
+def _srgb_encode(v):
+    """sRGB transfer curve: OpenFilters' RGB is linear, and a hex colour built from linear values is
+    far too dark (#0a327e instead of #367bbb)."""
+    v = min(max(float(v), 0.0), 1.0)
+    return 12.92 * v if v <= 0.0031308 else 1.055 * v ** (1 / 2.4) - 0.055
+
+
 def color(design, angles=(0.0,), polarization="unpolarized", illuminant="CIE-D65", observer="CIE-1931",
           mode="reflection"):
     if mode not in ("reflection", "transmission"):
@@ -557,10 +564,11 @@ def color(design, angles=(0.0,), polarization="unpolarized", illuminant="CIE-D65
         x, y, _ = c.xyY()
         L, a, b = c.Lab()
         _, C, h = c.LChab()
-        R, G, B = c.RGB()
+        linear = c.RGB()  # OpenFilters: linear RGB (Rec. 709 / sRGB primaries), clipped to [0, 1]
+        srgb = [_srgb_encode(v) for v in linear]
         out.append({"angle": float(angle), "XYZ": [X, Y, Z], "xy": [x, y], "Lab": [L, a, b], "LCh": [L, C, h],
-                    "sRGB": [R, G, B],
-                    "hex": "#%02x%02x%02x" % tuple(int(round(max(0.0, min(1.0, v)) * 255)) for v in (R, G, B)),
+                    "sRGB": srgb, "linear_RGB": list(linear),
+                    "hex": "#%02x%02x%02x" % tuple(int(round(v * 255)) for v in srgb),
                     "out_of_gamut": bool(c.get_RGB_error())})
     return {"illuminant": illuminant, "observer": observer, "mode": mode,
             "polarization": polarization_name(polarization_value(polarization)), "colors": out}

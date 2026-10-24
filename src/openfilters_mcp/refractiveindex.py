@@ -138,7 +138,7 @@ def formula_n(number, coefficients, wl):
     raise EngineError(f"unknown dispersion formula {number}")
 
 
-def to_table(doc, from_nm=None, to_nm=None):
+def to_table(doc, from_nm=None, to_nm=None, notes=None):
     """Rows [wavelength_nm, n, k] from a database page, on the union of its n
     and k grids where both are defined (k = 0 when the page gives none)."""
     n = k = None
@@ -168,12 +168,15 @@ def to_table(doc, from_nm=None, to_nm=None):
         wl_k, k_values = k
         order = np.argsort(wl_k)
         wl_k, k_values = wl_k[order], k_values[order]
-        lo, hi = max(wl_n[0], wl_k[0]), min(wl_n[-1], wl_k[-1])
-        if lo >= hi:
-            raise EngineError("the n and k data of this entry do not overlap in wavelength")
-        grid = np.union1d(wl_n, wl_k)
-        grid = grid[(grid >= lo) & (grid <= hi)]
-        n_on, k_on = np.interp(grid, wl_n, n_values), np.interp(grid, wl_k, k_values)
+        # Keep the whole n range (entries often give k over a small part of it, e.g. ZnS: n 0.4-14 um,
+        # k 0.4-1 um); outside the k data the material is taken as transparent (k = 0).
+        grid = np.union1d(wl_n, wl_k[(wl_k >= wl_n[0]) & (wl_k <= wl_n[-1])])
+        n_on = np.interp(grid, wl_n, n_values)
+        inside = (grid >= wl_k[0]) & (grid <= wl_k[-1])
+        k_on = np.where(inside, np.interp(grid, wl_k, k_values), 0.0)
+        if notes is not None and not inside.all():
+            notes.append(f"k is given only from {wl_k[0] * 1000:g} to {wl_k[-1] * 1000:g} nm; it is set to 0 "
+                         "(transparent) elsewhere")
     nm = grid * 1000.0
     keep = np.isfinite(n_on) & np.isfinite(k_on) & (n_on > 0)
     nm, n_on, k_on = nm[keep], n_on[keep], np.abs(k_on[keep])
