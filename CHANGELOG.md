@@ -3,6 +3,14 @@
 ## 0.1.3 — 2026-10-24
 
 - `remove_material` tool.
+- Fix: refractiveindex.info entries whose id contains a space (495 of them, e.g. "Rodriguez-de Marcos") could
+  not be imported.
+- Unknown design or layer keys are refused with a "did you mean" suggestion (a misspelt key was ignored).
+- `compute_spectrum` and `compute_angle_scan` can return threshold ranges ({"above": 0.999}, {"below": ...},
+  interpolated edges) and the FWHM of a peak ({"half_max": true}); summaries use 8 significant figures.
+- `compute_angle_scan` returns per-curve min/max with the angle where each occurs, samples and the angle range,
+  instead of every value rounded to 6 decimals.
+- Imports report where the material absorbs (`absorbing_ranges_nm`).
 - Fix (porting bug): optimizations ran OpenFilters' slow pure-Python solver even with the compiled core installed;
   they now use the compiled one (about 3x faster).
 - Fix: group delay and GDD were reported in s and s^2 (labelled fs, fs^2), and GD/GDD targets were compared in

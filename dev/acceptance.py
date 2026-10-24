@@ -137,10 +137,12 @@ async def run(c, k, offline):
             abs(spec["series"][1]["min"] + math.log10(1 - R_MIRROR)) < 1e-3 and os.path.isfile(spec["csv"]))
     brewster = math.degrees(math.atan(NS))
     scan, _ = await c.ok("compute_angle_scan", {"design": design([("AT_A", 0)]), "wavelength": W0, "quantities": ["R"],
-                                                "angles": {"from": round(brewster, 2) - 0.02, "to": round(brewster, 2) + 0.02,
-                                                           "step": 0.01}, "polarizations": ["p"], "plot": False})
-    k.check("compute_angle_scan: p reflectance vanishes at Brewster's angle", min(scan["curves"]["R p"]) < 1e-6,
-            f"min Rp {min(scan['curves']['R p']):.2e} near {brewster:.2f} deg")
+                                                "angles": {"from": 50, "to": 62, "step": 0.01},
+                                                "polarizations": ["p"], "plot": False})
+    rp = scan["curves"]["R p"]
+    k.check("compute_angle_scan: p reflectance vanishes at Brewster's angle, located by the summary",
+            rp["min"] < 1e-6 and abs(rp["at_deg_min"] - brewster) < 0.01,
+            f"min Rp {rp['min']:.2e} at {rp['at_deg_min']} deg vs {brewster:.3f}")
     color, _ = await c.ok("compute_color", {"design": MIRROR, "angles": [0, 45]})
     k.check("compute_color: two angles with L*a*b* and hex",
             len(color["colors"]) == 2 and all(len(x["Lab"]) == 3 and x["hex"].startswith("#") for x in color["colors"]))

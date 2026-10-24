@@ -61,3 +61,30 @@ def test_empty_prompt_boxes_use_the_defaults():
     assert "coating on BK7" in text and "materials TiO2, SiO2." in text
     described = next(p for p in asyncio.run(server.mcp.list_prompts()) if p.name == "design_mirror").arguments
     assert all(a.description and a.description.startswith("Default:") for a in described)
+
+
+def _first(result):
+    return result[0] if isinstance(result, list) else result
+
+
+def test_threshold_ranges_and_fwhm_match_the_batch_1_references():
+    mirror = {"substrate": "FusedSilica", "center_wavelength": 1064,
+              "formula": {"formula": "(HL)^15 H", "materials": {"H": "TiO2", "L": "SiO2"}}}
+    out = _first(asyncio.run(server.compute_spectrum(mirror, ["R"], {"from": 900, "to": 1300, "step": 1},
+                                                     threshold={"above": 0.999}, plot=False)))
+    [[start, end]] = out["series"][0]["ranges_above_0.999"]
+    assert 956 < start < 957.5 and 1196.5 < end < 1198
+    assert out["series"][0]["max"] > 0.999995  # 8 significant figures show 99.9995x %
+    fp = {"substrate": "FusedSilica", "center_wavelength": 532,
+          "formula": {"formula": "(HL)^5 HH (LH)^5", "materials": {"H": "TiO2", "L": "SiO2"}}}
+    out = _first(asyncio.run(server.compute_spectrum(fp, ["T"], {"from": 529, "to": 535, "step": 0.05},
+                                                     threshold={"half_max": True}, plot=False)))
+    assert abs(out["series"][0]["fwhm"] - 1.14) < 0.02
+
+
+def test_angle_scan_summary_finds_brewster():
+    bare = {"substrate": "BK7", "layers": [{"material": "SiO2", "thickness": 0}]}
+    out = _first(asyncio.run(server.compute_angle_scan(bare, 550, ["R"], {"from": 50, "to": 62, "step": 0.01},
+                                                       ["p"], plot=False)))
+    curve = out["curves"]["R p"]
+    assert abs(curve["at_deg_min"] - 56.63) < 0.02 and len(curve["samples"]) <= 25

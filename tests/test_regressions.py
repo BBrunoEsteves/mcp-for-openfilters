@@ -168,3 +168,19 @@ def test_a_solver_step_past_the_deadline_stops_the_optimization(monkeypatch):
     monkeypatch.setattr(engine, "DEADLINE_GRACE", 0.0)
     result = engine.optimize(ar_design([27.26, 29.49, 82.03, 100.53]), AR_TARGETS, "needle", {"time_limit": 1e-6})
     assert result["stop_reason"] == "time_limit" and math.isfinite(result["merit_chi2"])
+
+
+def test_unknown_design_keys_are_refused_with_a_suggestion():
+    with pytest.raises(engine.EngineError, match="did you mean 'substrate_thickness_mm'"):
+        engine.describe({"substrate": "BK7", "substrate_thickness": 1e6, "layers": []})
+    with pytest.raises(engine.EngineError, match="did you mean 'thickness'"):
+        engine.describe({"substrate": "BK7", "layers": [{"material": "SiO2", "thicknes": 10}]})
+
+
+def test_refractiveindex_page_ids_may_contain_spaces(monkeypatch):
+    # 495 catalogue pages have spaces ("main/MgF2/nk/Rodriguez-de Marcos") and were refused.
+    from openfilters_mcp import refractiveindex
+    fetched = []
+    monkeypatch.setattr(refractiveindex, "_fetch", lambda path: fetched.append(path) or "DATA: []")
+    refractiveindex.load_page("main/MgF2/nk/Rodriguez-de Marcos")
+    assert fetched == ["data/main/MgF2/nk/Rodriguez-de Marcos.yml"]

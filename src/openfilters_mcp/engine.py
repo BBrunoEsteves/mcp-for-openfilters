@@ -179,7 +179,7 @@ def remove_material(name):
     catalog(reload=True)
     still = name in catalog().get_material_names()
     return {"removed": name, "file": path,
-            "note": f"the built-in '{name}' is used again" if still else f"'{name}' no longer exists"}
+            "note": f"removed; the built-in '{name}' is used again" if still else "removed"}
 
 
 def _index_str(n, k):
@@ -225,10 +225,30 @@ def polarization_name(value):
     return {S: "s", P: "p", UNPOLARIZED: "unpolarized"}.get(value, f"{value:g}deg")
 
 
+DESIGN_KEYS = {"substrate", "incident_medium", "exit_medium", "center_wavelength", "consider_backside",
+               "substrate_thickness_mm", "consider_backside_on_monitoring", "illuminant", "observer", "description",
+               "needle_materials", "step_spacing", "wavelength_range", "layers", "back_layers", "formula",
+               "back_formula", "name", "notes"}
+LAYER_KEYS = {"material", "thickness", "qwot", "index", "graded", "refine_thickness", "refine_index", "preserve_ot",
+              "add_needles", "add_steps"}
+
+
+def _check_keys(obj, valid, what):
+    """A misspelt key (e.g. substrate_thickness) would otherwise be ignored silently."""
+    unknown = sorted(set(obj) - valid)
+    if unknown:
+        import difflib
+        hints = [f"{k!r}" + (f" (did you mean {m[0]!r}?)" if (m := difflib.get_close_matches(k, valid, 1)) else "")
+                 for k in unknown]
+        raise EngineError(f"unknown {what} key{'s' if len(unknown) > 1 else ''} {', '.join(hints)}; "
+                          f"valid keys: {', '.join(sorted(valid))}")
+
+
 def build_filter(design, wavelengths=None):
     """Create an OpenFilters filter from a design dict."""
     if not isinstance(design, dict):
         raise EngineError("design must be an object")
+    _check_keys(design, DESIGN_KEYS, "design")
     f = optical_filter.optical_filter(catalog())
     try:
         f.set_center_wavelength(float(design.get("center_wavelength", 550.0)))
@@ -284,6 +304,7 @@ def _add_layer(f, layer, side, i):
     material = layer.get("material")
     if material is None:
         raise EngineError(f"layer {i} has no material")
+    _check_keys(layer, LAYER_KEYS, f"layer {i}")
     index = layer.get("index")
     position = f.get_nb_layers(side)
     if layer.get("graded"):

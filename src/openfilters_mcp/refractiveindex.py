@@ -9,6 +9,7 @@ import html
 import os
 import re
 import time
+import urllib.parse
 import urllib.request
 
 import numpy as np
@@ -27,7 +28,8 @@ _entries_cache = {}
 
 def _fetch(path):
     try:
-        with urllib.request.urlopen(BASE + path, timeout=30) as response:
+        # Page ids can contain spaces ("Rodriguez-de Marcos"): percent-encode them for the URL.
+        with urllib.request.urlopen(BASE + urllib.parse.quote(path, safe="/"), timeout=30) as response:
             return response.read().decode("utf-8")
     except Exception as error:  # URLError, HTTPError, timeout
         raise EngineError(f"cannot download {path} from the refractiveindex.info database: {error}") from error
@@ -103,7 +105,7 @@ def search(query, shelf=None, limit=25, refresh=False):
 
 def load_page(page):
     page = page.strip().removesuffix(".yml")
-    if ".." in page or not re.fullmatch(r"[\w\-+.(),%/]+", page):
+    if ".." in page or not re.fullmatch(r"[\w\-+.(),%/ ]+", page):
         raise EngineError(f"invalid page id {page!r}: use the `page` of a search_refractiveindex result")
     return yaml.load(_fetch(f"data/{page}.yml"), Loader=_Loader)
 

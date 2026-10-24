@@ -179,7 +179,8 @@ async def targets_plot(designs, targets, title, name):
 # The formats are spelled out here too, not only in the server instructions: some apps do not
 # show those instructions to the model, but every app passes on parameter descriptions.
 Design = Annotated[dict[str, Any], Field(description=(
-    'Design: {"substrate": "BK7", "incident_medium": "void", "center_wavelength": 550, "layers": '
+    'Design: {"substrate": "BK7", "incident_medium": "void", "center_wavelength": 550, "substrate_thickness_mm": 1, '
+    '"layers": '
     '[{"material": "TiO2", "thickness": 58.6}, {"material": "SiO2", "qwot": 1}]} with layers listed FROM THE '
     'SUBSTRATE OUTWARD (thickness in nm, or qwot = quarter waves at center_wavelength), or instead of layers '
     '"formula": {"formula": "(HL)^8 H", "materials": {"H": "TiO2", "L": "SiO2"}}. A part coated on both faces is '
@@ -273,9 +274,9 @@ async def search_refractiveindex(query: str, shelf: str | None = None, limit: in
                                  refresh: bool = False) -> dict:
     """Search the refractiveindex.info database of optical constants (public domain) by material
     name, formula or author, e.g. "Ta2O5", "silicon nitride", "HfO2 thin film", "N-BK7". Each result
-    gives a `page` id to pass to import_refractiveindex_material, the source (author, year, range) and
-    a category such as "Experimental data: thin film" or "bulk": thin-film data usually suit coatings
-    best. shelf limits the search: main (inorganic), organic, glass, other, specs (supplier data sheets),
+    gives a `page` id to pass to import_refractiveindex_material (pass it exactly, spaces included), the
+    source (author, year, range) and the database's category for it, e.g. "Thin film", "Amorphous thin
+    film" or "Experimental data: bulk, thick film": thin-film data usually suit coatings best. shelf limits the search: main (inorganic), organic, glass, other, specs (supplier data sheets),
     popular_glass. The catalogue is downloaded once and cached for 30 days (refresh=true updates it)."""
     return await asyncio.to_thread(checked, refractiveindex.search, query, shelf, limit, refresh)
 
@@ -296,7 +297,9 @@ async def import_refractiveindex_material(page: str, name: str | None = None,
     summary = await compute("add_material", name=name, model="table", table=table, wavelength_unit="nm",
                             description=f"refractiveindex.info {page}", overwrite=overwrite)
     out = {"material": summary, "wavelength_range_nm": [table[0][0], table[-1][0]], "points": len(table),
-           "absorbing": any(row[2] > 0 for row in table), "references": refractiveindex.references(doc),
+           "absorbing": any(row[2] > 0 for row in table),
+           "absorbing_ranges_nm": _crossing_ranges([r[0] for r in table], [r[2] for r in table], 1e-6),
+           "references": refractiveindex.references(doc),
            "comments": refractiveindex._plain(doc.get("COMMENTS", "")), "web_page": refractiveindex.page_url(page)}
     if plot:
         wvls = [row[0] for row in table]
@@ -346,15 +349,52 @@ def sig(value, digits=6):
     return float(f"{float(value):.{digits}g}")
 
 
-def _summarize_series(wvls, values, n_points):
+def _crossing_ranges(x, values, level, above=True):
+    """[start, end] ranges of x where values >= level (or <= level), with edges interpolated
+    linearly between the points on either side of each crossing."""
+    import numpy as np
+    x, values = np.asarray(x, dtype=float), np.asarray(values, dtype=float)
+    inside = values >= level if above else values <= level
+    ranges, i = [], 0
+    while i < len(x):
+        if not inside[i]:
+            i += 1
+            continue
+        j = i
+        while j + 1 < len(x) and inside[j + 1]:
+            j += 1
+
+        def edge(a, b):  # a outside, b inside
+            return float(x[a] + (level - values[a]) * (x[b] - x[a]) / (values[b] - values[a])) if values[b] != values[a] else float(x[b])
+        start = edge(i - 1, i) if i > 0 else float(x[i])
+        end = edge(j + 1, j) if j + 1 < len(x) else float(x[j])
+        ranges.append([round(start, 4), round(end, 4)])
+        i = j + 1
+    return ranges
+
+
+def _summarize_series(x, values, n_points, axis="nm", threshold=None):
+    """Statistics with 8 significant figures (99.99955 % must not read 0.999996), the position of
+    min and max, evenly spaced samples, and optional threshold ranges / FWHM."""
     import numpy as np
     i_min, i_max = int(np.argmin(values)), int(np.argmax(values))
-    summary = {"min": sig(values[i_min]), "at_nm_min": float(wvls[i_min]),
-               "max": sig(values[i_max]), "at_nm_max": float(wvls[i_max]),
-               "mean": sig(np.mean(values))}
+    summary = {"min": sig(values[i_min], 8), f"at_{axis}_min": round(float(x[i_min]), 6),
+               "max": sig(values[i_max], 8), f"at_{axis}_max": round(float(x[i_max]), 6),
+               "mean": sig(np.mean(values), 8)}
     if n_points:
-        idx = np.unique(np.linspace(0, len(wvls) - 1, min(n_points, len(wvls))).round().astype(int))
-        summary["samples"] = [[float(wvls[i]), sig(values[i])] for i in idx]
+        idx = np.unique(np.linspace(0, len(x) - 1, min(n_points, len(x))).round().astype(int))
+        summary["samples"] = [[round(float(x[i]), 6), sig(values[i], 8)] for i in idx]
+    if threshold:
+        if "above" in threshold:
+            summary[f"ranges_above_{threshold['above']:g}"] = _crossing_ranges(x, values, float(threshold["above"]))
+        if "below" in threshold:
+            summary[f"ranges_below_{threshold['below']:g}"] = _crossing_ranges(x, values, float(threshold["below"]), False)
+        if threshold.get("half_max"):
+            half = values[i_max] / 2.0
+            peak = next((r for r in _crossing_ranges(x, values, half) if r[0] <= x[i_max] <= r[1]), None)
+            if peak:
+                summary["fwhm"] = round(peak[1] - peak[0], 6)
+                summary["half_max_edges"] = peak
     return summary
 
 
@@ -366,6 +406,10 @@ async def compute_spectrum(design: Design,
                            polarizations: list[str] = ["unpolarized"],
                            reverse: bool = False,
                            sample_points: int = 25,
+                           threshold: Annotated[dict[str, Any] | None, Field(description=(
+                               '{"above": 0.999} or {"below": 0.01}: ranges where each series is above/below the '
+                               'level, edges interpolated (e.g. the high-reflection band of a mirror); {"half_max": true}: '
+                               'FWHM of the highest peak (e.g. a band-pass)'))] = None,
                            plot: bool = True,
                            save_csv: bool = False):
     """Compute R, T, A, phase, GD or GDD spectra versus wavelength for one design at one or more
@@ -383,7 +427,7 @@ async def compute_spectrum(design: Design,
         out["warnings"] = result["warnings"]
     for s in result["series"]:
         out["series"].append({"quantity": s["quantity"], "angle": s["angle"], "polarization": s["polarization"],
-                              **_summarize_series(wvls, s["values"], sample_points)})
+                              **_summarize_series(wvls, s["values"], sample_points, threshold=threshold)})
     if save_csv:
         path = stamp("spectrum.csv")
         with open(path, "w", newline="", encoding="utf-8") as outfile:
@@ -401,8 +445,12 @@ async def compute_spectrum(design: Design,
 @mcp.tool(title="Angle scan", annotations=READ)
 async def compute_angle_scan(design: Design, wavelength: float, quantities: list[str] = ["R", "T"],
                              angles: Annotated[dict[str, float], Field(description='{"from": 0, "to": 85, "step": 1}')] = {"from": 0, "to": 85, "step": 1},
-                             polarizations: list[str] = ["s", "p", "unpolarized"], plot: bool = True):
-    """R/T/A (or phase) versus angle of incidence at a single wavelength."""
+                             polarizations: list[str] = ["s", "p", "unpolarized"], sample_points: int = 25,
+                             threshold: Annotated[dict[str, Any] | None, Field(description=(
+                                 'as in compute_spectrum, over angle'))] = None, plot: bool = True):
+    """R/T/A (or phase) versus angle of incidence at a single wavelength. Per curve: min/max with the angle
+    where each occurs (e.g. Brewster's angle is at_deg_min of "R p"), mean, `sample_points` evenly spaced
+    samples (0 for statistics only) and optional threshold ranges."""
     angle_list = engine._wavelength_list(angles)
     if angle_list[-1] >= 90:
         raise ToolError("angles must stay below 90")
@@ -411,8 +459,9 @@ async def compute_angle_scan(design: Design, wavelength: float, quantities: list
     curves = {}
     for s in result["series"]:
         curves.setdefault(f"{s['quantity']} {s['polarization']}", []).append(float(s["values"][0]))
-    out = {"wavelength_nm": wavelength, "angles": angle_list,
-           "curves": {k: [round(v, 6) for v in vals] for k, vals in curves.items()}}
+    out = {"wavelength_nm": wavelength, "angle_range_deg": [angle_list[0], angle_list[-1]], "n_angles": len(angle_list),
+           "curves": {k: _summarize_series(angle_list, vals, sample_points, axis="deg", threshold=threshold)
+                      for k, vals in curves.items()}}
     if result.get("warnings"):
         out["warnings"] = result["warnings"]
     if plot:
