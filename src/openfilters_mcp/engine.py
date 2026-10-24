@@ -165,6 +165,20 @@ def add_material(name, model, description="", n=None, k=0.0, coefficients=None, 
     return next(row for row in list_materials(name) if row["name"] == name)
 
 
+def remove_material(name):
+    """Delete a material from the user folder (built-in materials cannot be removed)."""
+    path = os.path.join(settings.materials_dir(), str(name) + ".mat")
+    if not name or any(c in name for c in r'\/:*?"<>| ') or not os.path.isfile(path):
+        builtin = name in of_materials.material_catalog().get_material_names()
+        raise EngineError(f"'{name}' is not in your material folder" + (
+            " (it is a built-in OpenFilters material, which cannot be removed)" if builtin else ""))
+    os.remove(path)
+    catalog(reload=True)
+    still = name in catalog().get_material_names()
+    return {"removed": name, "file": path,
+            "note": f"the built-in '{name}' is used again" if still else f"'{name}' no longer exists"}
+
+
 def _index_str(n, k):
     k = abs(float(k))
     return f"{float(n):.8g}" if k == 0 else f"{float(n):.8g}-{k:.8g}j"
@@ -270,19 +284,29 @@ def _add_layer(f, layer, side, i):
         f.add_graded_layer_from_steps(material, [int(x) for x in graded["steps"]],
                                       [float(t) for t in graded["step_thicknesses"]], side=side)
         return
+    def number(key):
+        # JSON carries NaN as null; anything that is not a finite number is refused here.
+        # (A NaN thickness evaluates as an empty coating, R = 0, and would pass "<=" targets.)
+        try:
+            value = float(layer[key])
+        except (TypeError, ValueError):
+            value = math.nan
+        if not math.isfinite(value):
+            raise EngineError(f"layer {i} has an invalid {key} ({layer[key]!r}); it must be a finite number")
+        return value
+
+    if index is not None:
+        index = number("index")
     if "qwot" in layer:
         mat = _material(material)
         n = index if index is not None else mat.get_index(f.get_center_wavelength())
-        thickness = float(layer["qwot"]) * f.get_center_wavelength() / (4.0 * n)
+        thickness = number("qwot") * f.get_center_wavelength() / (4.0 * n)
     elif "thickness" in layer:
-        thickness = float(layer["thickness"])
+        thickness = number("thickness")
     else:
         raise EngineError(f"layer {i} needs thickness (nm) or qwot")
-    # A NaN thickness evaluates as an empty coating (R = 0) and would pass "<=" targets.
-    if not math.isfinite(thickness) or thickness < 0:
-        raise EngineError(f"layer {i} has an invalid thickness ({thickness}); it must be a finite number >= 0")
-    if index is not None and not math.isfinite(float(index)):
-        raise EngineError(f"layer {i} has an invalid index ({index})")
+    if thickness < 0:
+        raise EngineError(f"layer {i} has a negative thickness")
     f.add_layer(material, thickness, side=side, index=index)
     for flag, setter in _LAYER_FLAGS:
         if flag in layer:

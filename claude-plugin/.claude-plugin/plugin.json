@@ -1,7 +1,7 @@
 {
   "name": "openfilters",
   "displayName": "OpenFilters",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Design, simulate and optimize optical thin-film coatings with the OpenFilters engine.",
   "author": {
     "name": "Bruno Esteves"
@@ -21,7 +21,7 @@
     "openfilters": {
       "command": "uvx",
       "args": [
-        "openfilters-mcp@0.1.2"
+        "openfilters-mcp@0.1.3"
       ]
     }
   }

@@ -2,7 +2,7 @@
   "manifest_version": "0.4",
   "name": "openfilters-mcp",
   "display_name": "OpenFilters",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Design, simulate and optimize optical thin-film coatings with the OpenFilters engine.",
   "long_description": "Thin-film optical coating design with the calculation engine of OpenFilters (S. Larouche and L. Martinu, Polytechnique Montréal): spectra, color, electric field, monitoring curves, refinement/needle/step optimization, campaigns and Monte Carlo yield, with .ofp projects that open in the OpenFilters GUI. Unofficial: not affiliated with or endorsed by the OpenFilters authors.",
   "author": {
@@ -56,6 +56,10 @@
     {
       "name": "add_material",
       "description": "Add a material"
+    },
+    {
+      "name": "remove_material",
+      "description": "Remove a material"
     },
     {
       "name": "search_refractiveindex",

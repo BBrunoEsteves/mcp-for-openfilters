@@ -328,3 +328,15 @@ def test_user_material_overrides_built_in_one_of_the_same_name():
     assert row["source"] == "user" and row["n,k"]["550"][0] == pytest.approx(2.0)
     d = {"substrate": "FusedSilica", "center_wavelength": 550, "layers": [{"material": "TiO2", "qwot": 1}]}
     assert engine.describe(d)["layers"][0]["n@cw"] == pytest.approx(2.0)
+
+
+def test_remove_material_restores_the_built_in_one():
+    built_in = engine.material_N("TiO2", [550.0])[0]
+    engine.add_material("TiO2", "constant", n=2.0)
+    out = engine.remove_material("TiO2")
+    assert "built-in" in out["note"]
+    assert engine.material_N("TiO2", [550.0])[0] == pytest.approx(built_in)
+    with pytest.raises(engine.EngineError, match="built-in"):
+        engine.remove_material("TiO2")  # only the user's copy can be removed
+    with pytest.raises(engine.EngineError):
+        engine.remove_material("../evil")

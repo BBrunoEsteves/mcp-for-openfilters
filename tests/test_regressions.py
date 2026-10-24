@@ -33,6 +33,8 @@ def test_nan_thickness_is_refused():
     # A NaN layer evaluated as an empty coating (R = 0), so it passed "R <=" targets.
     with pytest.raises(engine.EngineError, match="invalid thickness"):
         engine.evaluate(ar_design([float("nan"), 100.0]), AR_TARGETS)
+    with pytest.raises(engine.EngineError, match="invalid thickness"):
+        engine.evaluate(ar_design([None, 100.0]), AR_TARGETS)  # NaN arrives as null over JSON
 
 
 def test_inequality_is_met_only_when_it_holds():

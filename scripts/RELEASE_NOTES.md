@@ -3,13 +3,24 @@ calculation engine built in. Nothing else to install besides Python.
 
 ## Changes in this version
 
-- `.ofp` projects now carry everything the OpenFilters GUI can use: targets (Claude is asked to always
-  pass them, and warned when a project is saved without them, which left Design/Optimize disabled in the
-  GUI), a wavelength range covering the targets, design descriptions, needle materials, step spacing and
-  per-layer flags. These are also read back when a project is loaded.
-- Optimization and campaign results describe how each design was made (method, merit before and after,
-  targets met, minimum thickness; campaigns add rank, start and yield).
-- Fix: optimization ignored per-layer flags, so layers marked as fixed were still refined.
+**Fixes (please update):**
+
+- Optimizations could return broken designs (every thickness "NaN") that were reported as meeting all targets
+  with 100 % yield and ranked first in campaigns. They are now detected and never returned.
+- Targets like "R <= 0.2 %" counted as met up to 1.2 % (the default tolerance was used as a pass margin); they
+  are now met only when they hold.
+- Your own material with the same name as a built-in one (e.g. `TiO2`) was ignored in favour of the built-in
+  data.
+- Installs from source (computers without a ready-made package) silently used the slow calculation core.
+
+**New:**
+
+- Materials from the refractiveindex.info database: search it and import any entry, on demand.
+- `remove_material` deletes one of your own materials.
+- The needle method keeps improving where OpenFilters' own needle search stops early.
+- Ready-made workflows (antireflection, mirror, edge filter, band-pass, manufacturing review) in the "+"
+  menu of Claude Desktop and as `/` commands in Claude Code; OpenFilters example projects to attach.
+- Progress updates during long optimizations and yield analyses.
 
 ## Install
 

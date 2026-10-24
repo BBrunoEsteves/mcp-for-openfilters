@@ -242,6 +242,14 @@ async def add_material(name: str, model: str, description: str = "",
                          overwrite=overwrite)
 
 
+@mcp.tool(title="Remove a material", annotations=DESTRUCTIVE)
+async def remove_material(name: str) -> dict:
+    """Delete one of the user's own materials (from add_material or import_refractiveindex_material).
+    Built-in OpenFilters materials cannot be removed; if a user material had the same name as a
+    built-in one, the built-in one is used again. Designs and projects that use it will no longer load."""
+    return await compute("remove_material", name=name)
+
+
 @mcp.tool(title="Search refractiveindex.info", annotations=WEB_READ)
 async def search_refractiveindex(query: str, shelf: str | None = None, limit: int = 25,
                                  refresh: bool = False) -> dict:

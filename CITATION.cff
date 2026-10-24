@@ -9,8 +9,8 @@ authors:
     given-names: Bruno
 repository-code: "https://github.com/BBrunoEsteves/openfilters-mcp"
 license: GPL-2.0-or-later
-version: 0.1.2
-date-released: "2026-10-23"
+version: 0.1.3
+date-released: "2026-10-24"
 keywords:
   - thin film
   - optical coating

@@ -1,7 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.1.3 — 2026-10-24
 
+- `remove_material` tool.
+- Acceptance test (`dev/acceptance.py`, 42 checks against known answers) and a chat test plan
+  (`docs/TEST_PLAN.md`).
+- Fix: a null thickness (how JSON carries NaN) crashed the tool instead of giving a clear message.
 - Fix: inequality targets ("R <= 0.2 %") counted as met whenever the value was within the tolerance
   (default 1 % absolute); they are now met only where they hold. The tolerance still weights the merit.
 - Fix: OpenFilters' optimizer can turn every thickness into NaN (a layer pinned at 0 nm); such designs scored
