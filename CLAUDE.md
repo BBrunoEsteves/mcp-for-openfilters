@@ -98,6 +98,11 @@ Chat test run 2026-10-24 (two Claude chats, TEST_PLAN A-J) found: workflow defau
 OpenFilters ships TiO2, SiO2, SiN, metals, ...), load_project did not resolve names, colour targets wrote the
 keyword "L*a*b*" (OpenFilters expects Lab/XYZ/xyY/Luv/LChab/LChuv); all fixed with tests. Claude Desktop's own
 safety check blocks a chat from deleting materials it did not create (A2/I2 are done by the user).
+E1 rerun found: duplicate designs in campaign rankings (jobs.distinct_top, duplicate_of) and a start that failed
+because OpenFilters' remove_thin_layers_ left no layer (original C++ "length must be positive" check at
+derivatives_wrapper.cpp:90; original Python IndexError too) -> _run keeps the best design (stop openfilters_error).
+MCP prompt arguments have no defaults: Claude Desktop shows empty boxes; _workflow adds "Default: ..." descriptions
+and maps empty values to defaults.
 Version 0.1.3 set locally 2026-10-24 (not tagged: Actions minutes exhausted until 2026-11-01).
 Output schemas deliberately not added (Claude reads the text; plots can't be described; drift would break tools).
 Private-repo CI minutes cost 10x on macOS and 2x on Windows; they reset monthly (next

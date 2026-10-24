@@ -888,7 +888,15 @@ def _run(method, design, targets, options, deadline, progress, floor=None, info=
         o.set_automatic_mode(bool(options.get("automatic", True)))
     monitor = _Monitor(o, deadline, options.get("max_layers"), options.get("max_total_thickness"), progress)
     o.set_parent(monitor)
-    o.go()
+    try:
+        o.go()
+    except Exception as error:
+        # OpenFilters fails when its thin-layer removal leaves no layer at all (C++ "length must
+        # be positive", Python IndexError): keep the best design seen before the failure.
+        if monitor.best_layers is None:
+            raise EngineError(f"OpenFilters' {method} optimization failed: {error}") from error
+        best = dict(design, layers=monitor.best_layers)
+        return best, float(_evaluator(build_filter(best), targets).get_chi_2()), "openfilters_error", o.get_iteration()
     o.copy_to_filter()
     final_design = design_from_filter(f)
     finite = _finite(final_design)

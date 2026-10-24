@@ -68,3 +68,33 @@ def test_needle_continues_where_openfilters_finds_only_edge_needles():
     assert result["edge_needles_added"] >= 1
     assert 4 < result["nb_layers"] <= 10
     assert result["merit_chi2"] < 0.5 * result["initial_chi2"]
+
+
+def test_needle_survives_openfilters_removing_every_layer():
+    # Campaign start 24 (2026-10-24): both layers shrank to 0 nm, OpenFilters' thin-layer removal left no
+    # layer and crashed ("length must be positive" in C++, IndexError in Python), failing the start.
+    start = {"substrate": "BK7", "layers": [{"material": "SiO2", "thickness": 32.73},
+                                           {"material": "TiO2", "thickness": 33.76}]}
+    engine.remove_material("TiO2")  # this case used the built-in TiO2
+    targets = [{"kind": "R", "from": 420, "to": 680, "step": 5, "value": 0.005, "inequality": "<="}]
+    result = engine.optimize(start, targets, "needle", {"max_layers": 8, "time_limit": 30})
+    assert math.isfinite(result["merit_chi2"])
+    assert all(math.isfinite(layer["thickness"]) for layer in result["design"]["layers"])
+
+
+def test_campaign_top_designs_are_distinct():
+    from openfilters_mcp import jobs
+
+    def design(*thicknesses):
+        return {"layers": [{"material": m, "thickness": t} for m, t in zip(["TiO2", "SiO2"] * 3, thicknesses)]}
+
+    designs = {0: design(15.71, 32.30), 1: design(15.72, 32.31), 2: design(12.3, 32.8, 107.9), 3: design(15.70, 32.29)}
+
+    class Manager:
+        def result(self, job_id, index):
+            return {"result": {"design": designs[index]}}
+
+    rows = [{"task": i} for i in (0, 1, 2, 3)]
+    top = jobs.distinct_top(Manager(), {"id": "x"}, rows, 3)
+    assert [r["task"] for r in top] == [0, 2]
+    assert rows[1]["duplicate_of"] == 0 and rows[3]["duplicate_of"] == 0

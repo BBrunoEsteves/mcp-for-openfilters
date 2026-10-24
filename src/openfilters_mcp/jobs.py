@@ -381,11 +381,36 @@ def _wilson(k, n, z=1.96):
     return [round(max(0.0, centre - half), 4), round(min(1.0, centre + half), 4)]
 
 
+def same_design(a, b):
+    """Same layer materials and thicknesses within 0.5 nm or 0.5 % (starts often converge to one design)."""
+    la, lb = a["layers"], b["layers"]
+    return len(la) == len(lb) and all(
+        x["material"] == y["material"] and "thickness" in x and "thickness" in y
+        and abs(x["thickness"] - y["thickness"]) <= max(0.5, 0.005 * max(x["thickness"], y["thickness"]))
+        for x, y in zip(la, lb))
+
+
+def distinct_top(manager, job, rows, n):
+    """The first n rows (already ranked) with distinct designs; a repeat of a kept design gets duplicate_of."""
+    top, kept = [], []
+    for row in rows:
+        if "error" in row:
+            continue
+        design = manager.result(job["id"], row["task"])["result"]["design"]
+        original = next((r for r, d in kept if same_design(design, d)), None)
+        if original is not None:
+            row["duplicate_of"] = original["task"]
+        elif len(top) < n:
+            top.append(row)
+            kept.append((row, design))
+    return top
+
+
 def finalize_campaign(manager, job):
     meta = job["meta"]
     if len(job["stages"]) == 1:
         rows = sorted(manager.rows(job["id"], stage=0), key=rank_key)
-        best = [r for r in rows if "error" not in r][:meta["top_n"]]
+        best = distinct_top(manager, job, rows, meta["top_n"])
         if meta.get("tolerance") and best:
             stage_tasks = []
             for rank, row in enumerate(best):
@@ -405,7 +430,7 @@ def finalize_campaign(manager, job):
                 row["yield"] = r["result"]["yield"]
                 row["yield_chi2_median"] = r["result"]["chi2_median"]
         rows.sort(key=rank_key)
-    top = [r for r in rows if "error" not in r][:meta["top_n"]]
+    top = distinct_top(manager, job, rows, meta["top_n"])
     designs = [manager.result(job["id"], r["task"])["result"]["design"] for r in top]
     for rank, (row, design) in enumerate(zip(top, designs)):
         label = f"Campaign {job['id']}, rank {rank + 1} (start {row['task']})"
@@ -423,7 +448,8 @@ def finalize_campaign(manager, job):
     for rank, row in enumerate(top):
         row["rank"] = rank + 1
     summary = {"starts": len(rows), "met_all_targets": sum(1 for r in rows if r.get("all_targets_met")),
-               "failed": sum(1 for r in rows if "error" in r)}
+               "failed": sum(1 for r in rows if "error" in r),
+               "duplicates": sum(1 for r in rows if "duplicate_of" in r)}
     _finish_table(manager, job, top + [r for r in rows if r not in top], outputs, summary)
 
 

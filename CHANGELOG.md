@@ -3,6 +3,10 @@
 ## 0.1.3 — 2026-10-24
 
 - `remove_material` tool.
+- Campaigns rank distinct designs: starts that converge to the same design are marked `duplicate_of` instead of
+  filling the top list (and the yield stage) with copies.
+- Fix: a start failed when OpenFilters' needle method removed every layer (a crash inside OpenFilters, in both
+  its C++ and Python code); the best design found before the failure is now kept.
 - Workflow boxes in Claude Desktop show their default values, and an empty box uses the default (it used
   to produce a broken request).
 - Results give each target's worst value and where it occurs (`worst_value`, `worst_at_nm`).
