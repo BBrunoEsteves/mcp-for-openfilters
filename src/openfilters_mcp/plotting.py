@@ -65,17 +65,19 @@ def spectra(result, title="Spectrum"):
     images = []
     for ylabel, series in groups.items():
         fig, ax = _figure(title, "Wavelength (nm)", ylabel)
-        for i, s in enumerate(series[:MAX_SERIES]):
+        # Colour by quantity and angle, line style by polarization: s and p at 7 angles fit in 7 colours,
+        # and coincident curves (s and p at 0°) stay visible.
+        colours = list(dict.fromkeys((s["quantity"], s["angle"]) for s in series))[:MAX_SERIES]
+        drawn = [s for s in series if (s["quantity"], s["angle"]) in colours]
+        for s in drawn:
             label = f"{s['quantity']} {s['angle']:g}° {s['polarization']}"
-            # Line style by polarization keeps coincident curves (e.g. s and p at 0°) visible.
             style = {"unpolarized": "-", "s": "--", "p": "-."}.get(s["polarization"], ":")
-            ax.plot(result["wavelengths"], s["values"], color=SERIES[i], linewidth=1.8, linestyle=style, label=label)
+            ax.plot(result["wavelengths"], s["values"], color=SERIES[colours.index((s["quantity"], s["angle"]))],
+                    linewidth=1.8, linestyle=style, label=label)
         if ylabel == "R/T/A":
-            _photometric_axis(ax, np.concatenate([np.asarray(x["values"]) for x in series[:MAX_SERIES]]))
-        if len(series) > MAX_SERIES:
-            ax.text(0.99, 0.01, f"{len(series) - MAX_SERIES} more series not drawn", transform=ax.transAxes,
-                    ha="right", va="bottom", fontsize=7, color=INK_2)
-        images.append(_png(fig, ax, min(len(series), MAX_SERIES)))
+            _photometric_axis(ax, np.concatenate([np.asarray(x["values"]) for x in drawn]))
+        note = f"{len(series) - len(drawn)} more series not drawn" if len(drawn) < len(series) else None
+        images.append(_png(fig, ax, len(drawn), legend_title=note))
     return images
 
 

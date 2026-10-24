@@ -1267,6 +1267,23 @@ def optimization_description(method, initial_chi2, chi2, all_pass, min_thickness
     return text + f", stop: {stop}."
 
 
+def _no_steps_warning(design, center_wavelength):
+    """The step method added nothing: say so, and which layers ended at a bound of their mixture's range."""
+    at_bounds = []
+    for i, layer in enumerate(design["layers"]):
+        material = _material(layer["material"])
+        if material.is_mixture() and layer.get("index") is not None:
+            lo, hi = material.get_index_range(center_wavelength)
+            for bound, word in ((lo, "lowest"), (hi, "highest")):
+                if abs(layer["index"] - bound) <= 1e-4 * bound:
+                    at_bounds.append(f"layer {i + 1} is at the {word} index of {layer['material']} ({bound:.4f})")
+    text = "The step method added no steps: this is a local optimum of the starting design"
+    if at_bounds:
+        text += " (" + "; ".join(at_bounds) + ")"
+    return (text + ", not necessarily a limit of the materials. Steps need room: start from a thicker mixture "
+            "layer (several hundred nm) or a few layers, or use the needle method.")
+
+
 def optimize(design, target_specs, method="needle", options=None, progress=None):
     """Optimize a design and return the best design found.
 
@@ -1325,6 +1342,8 @@ def optimize(design, target_specs, method="needle", options=None, progress=None)
         between = between_points_warning(current, target_specs)
         if between:
             warnings.append(between)
+    if method == "step" and not all_pass and len(current["layers"]) <= len(design["layers"]):
+        warnings.append(_no_steps_warning(current, cw))
     if time.time() >= deadline and stop not in ("max_layers", "max_total_thickness", "min_thickness_not_reached"):
         stop = "time_limit"
     thicknesses = [l["thickness"] for l in current["layers"] if not l.get("graded")]
@@ -1428,12 +1447,32 @@ def _scale_indices(f, factors):
     f.reset_n()
 
 
+def worst_margin(optimizer, specs):
+    """Smallest distance to a limit over all target points, in units of each point's tolerance:
+    value - limit for ">=", limit - value for "<=", tolerance - |deviation| for "equal". Positive = met.
+    Unlike the merit, it still changes when a design meets its inequality targets with room to spare."""
+    calc = np.array(optimizer.all_calculated_values, dtype=float)
+    goal = np.array(optimizer.all_target_values, dtype=float)
+    tol = np.array(optimizer.all_tolerances, dtype=float)
+    ineq = np.array(optimizer.all_inequalities)
+    margin = np.where(ineq > 0, calc - goal, np.where(ineq < 0, goal - calc, tol - np.abs(calc - goal))) / tol
+    starts = list(optimizer.target_starting_position) + [len(calc)]
+    counted = np.zeros(len(calc), dtype=bool)
+    for i, spec in enumerate(specs):
+        pads = 1 if padded(spec) else 0
+        counted[starts[i] + pads:starts[i + 1] - pads] = True
+    values = margin[counted]
+    return float(np.min(values)) if values.size and np.all(np.isfinite(values)) else float("nan")
+
+
 def sensitivity(design, target_specs, relative_step=0.01):
-    """Merit change when each layer thickness is increased by relative_step."""
+    """Merit and worst-margin change when each layer thickness is changed by +/- relative_step
+    (the worse of the two directions)."""
     nominal = design_from_filter(build_filter(design))
     targets = build_targets(target_specs, pad=True)
     material_warnings(design, target_wavelengths(target_specs))  # refuses unphysical indices
-    base = _evaluator(build_filter(nominal), targets).get_chi_2()
+    evaluated = _evaluator(build_filter(nominal), targets)
+    base, base_margin = evaluated.get_chi_2(), worst_margin(evaluated, target_specs)
     rows = []
     for key, side in (("layers", "front"), ("back_layers", "back")):
         if key == "back_layers" and not nominal.get("consider_backside"):
@@ -1441,12 +1480,25 @@ def sensitivity(design, target_specs, relative_step=0.01):
         for i, layer in enumerate(nominal.get(key) or []):
             if layer.get("graded"):
                 continue
-            layers = [dict(l) for l in nominal[key]]
-            layers[i]["thickness"] = layer["thickness"] * (1 + relative_step)
-            chi2 = _evaluator(build_filter(dict(nominal, **{key: layers})), targets).get_chi_2()
+            chi2s, margins = [], []
+            for sign in (1, -1):
+                layers = [dict(l) for l in nominal[key]]
+                layers[i]["thickness"] = layer["thickness"] * (1 + sign * relative_step)
+                o = _evaluator(build_filter(dict(nominal, **{key: layers})), targets)
+                chi2s.append(o.get_chi_2())
+                margins.append(worst_margin(o, target_specs))
             rows.append({"side": side, "#": i + 1, "material": layer["material"], "thickness_nm": layer["thickness"],
-                         "delta_chi2": round(float(chi2 - base), 6)})
-    return {"base_chi2": float(base), "relative_step": relative_step, "layers": rows}
+                         "delta_chi2": sig(max(chi2s) - base), "delta_worst_margin": sig(min(margins) - base_margin)})
+    out = {"base_chi2": float(base), "base_worst_margin": sig(base_margin), "relative_step": relative_step,
+           "layers": rows}
+    # Rank by the merit, or by the margin when no layer changes the merit (targets met with room to spare).
+    by_chi2 = any(r["delta_chi2"] > 0 for r in rows)
+    ranked = sorted(rows, key=lambda r: -r["delta_chi2"] if by_chi2 else r["delta_worst_margin"])
+    out["most_sensitive"] = [f"{r['side']} #{r['#']}" for r in ranked[:5]]
+    if not by_chi2:
+        out["note"] = ("No thickness change of this size changes the merit (the design meets its inequality "
+                       "targets with room to spare), so layers are ranked by how much they reduce the worst margin.")
+    return out
 
 
 # ---------------------------------------------------------------------------

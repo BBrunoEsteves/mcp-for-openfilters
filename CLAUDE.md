@@ -46,7 +46,7 @@ DESTRUCTIVE in server.py; required by Claude's directory, checked by tests/test_
 ## Status (2026-10-22)
 
 Done: Python 3 port validated (analytic + independent TMM, < 1e-9; needle derivatives vs finite differences),
-all optimizers working, 25 MCP tools + 5 prompts + 9 resources working end to end, 91 tests + 44 acceptance checks. Private GitHub repo
+all optimizers working, 25 MCP tools + 5 prompts + 9 resources working end to end, 119 tests + 44 acceptance checks. Private GitHub repo
 BBrunoEsteves/openfilters-mcp; CI compiles the C++ core and tests on Windows/macOS/Linux and builds wheels
 (cp310-cp314, runtime DLLs bundled). Compiled core is 15-30x faster than pure Python.
 Registered locally (user scope) in Claude Code and Claude Desktop, pointing at .venv/Scripts/openfilters-mcp.exe;
@@ -130,7 +130,14 @@ sRGB gamma (OpenFilters' RGB() is linear); GD/GDD band targets padded one unweig
 (build_targets(pad=True); save_project unpadded; target_report skips pads); thickness cap via _guarded overriding
 prepare/remove_thin_layers_/add_parameters (o._max_thickness set before __init__, _deadline after);
 _invisible_layers warning; options margin (with_margin) and between_points_warning (4x finer grid).
-NEXT (2026-10-24): the user runs docs/SCENARIO_TESTS.md Batch 3, then Batch 4, each in a fresh Claude Desktop chat,
+Scenario Batch 3: 5/9 pass. Fixed: layer_sensitivity also gives worst margin (tolerance units, +/- step;
+ranks layers when the merit stays 0 on a design that meets its inequalities), monitoring ends in significant
+figures, campaign duplicates with equal merit (1e-6) tolerate 3 nm / 3 %, load_project("examples/<name>")
+(resources unreachable through some proxies; save_project refuses examples/), step method warns when it added
+no steps (S3.9 was a too-thin start, NOT a mixture limit: a 300-500 nm start reaches R <= 0.5 %), spectrum
+plots colour by angle and style by polarization (14 series fit), campaign notes for all-zero yields and starts
+with n_layers near max_layers. Tests: tests/test_scenarios_batch3.py.
+NEXT (2026-10-24): the user runs docs/SCENARIO_TESTS.md Batch 4, each in a fresh Claude Desktop chat,
 and pastes the reports here for evaluation. For each finding: verify it (reproduce; for OpenFilters behaviour check
 third_party/openfilters_original and the pure-Python core before blaming OpenFilters), fix with a regression test,
 run pytest (compiled and OPENFILTERS_PURE_PYTHON=1), dev/acceptance.py and dev/e2e_client.py, then commit; push only

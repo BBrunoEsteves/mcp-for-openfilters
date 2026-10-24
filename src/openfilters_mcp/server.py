@@ -543,7 +543,7 @@ async def compute_monitoring_curves(design: Design, wavelengths: list[float], an
         ends[w] = []
         for b in r["layer_boundaries_nm"]:
             j = min(range(len(r["deposited_thickness_nm"])), key=lambda k: abs(r["deposited_thickness_nm"][k] - b))
-            ends[w].append(round(values[j], 5))
+            ends[w].append(sig(values[j]))  # high reflectors end near T = 1e-6
     out = {"mode": mode, "signal_at_layer_ends": ends, "layer_boundaries_nm": r["layer_boundaries_nm"],
            "includes_backside": r["includes_backside"]}
     if plot:
@@ -568,8 +568,12 @@ async def evaluate_design(design: Design, targets: Targets, plot: bool = True):
 
 @mcp.tool(title="Layer sensitivity", annotations=READ)
 async def layer_sensitivity(design: Design, targets: Targets, relative_step: float = 0.01) -> dict:
-    """Change in merit when each layer thickness is increased by relative_step (default 1 %), to find
-    the layers that need the tightest deposition control."""
+    """Change in merit (delta_chi2) and in worst margin when each layer thickness changes by +/- relative_step
+    (default 1 %; the worse direction), to find the layers that need the tightest deposition control.
+    worst_margin is the smallest distance to a limit over all target points in units of each point's
+    tolerance (positive = met; e.g. 0.5 with tolerance 0.001 means 0.0005 inside the limit). It ranks layers
+    of a design that meets its inequality targets with room to spare, where the merit stays 0.
+    most_sensitive lists the top layers."""
     return await compute("sensitivity", design=design, target_specs=targets, relative_step=relative_step)
 
 
@@ -753,9 +757,17 @@ async def run_optimization_campaign(targets: Targets,
                   "args": {"design": d, "target_specs": targets, "method": m, "options": options}}
                  for i, d in enumerate(designs) for m in methods]
     meta = {"targets": targets, "top_n": int(top_n), "tolerance": tolerance}
+    max_layers = (options or {}).get("max_layers")
+    if max_layers and "needle" in methods and max(len(d.get("layers") or []) for d in designs) >= int(max_layers) - 2:
+        meta["warnings"] = [f"some starts have {max(len(d.get('layers') or []) for d in designs)} layers and "
+                            f"max_layers is {max_layers}: the needle method has little or no room to add layers. "
+                            "Use fewer starting layers or a larger max_layers."]
     job_id = manager().submit("campaign", task_list, meta=meta, label=label or "optimization campaign")
-    return {"job_id": job_id, "optimizations": len(task_list), "workers": manager().workers,
-            "note": "poll job_status, then get_results"}
+    out = {"job_id": job_id, "optimizations": len(task_list), "workers": manager().workers,
+           "note": "poll job_status, then get_results"}
+    if meta.get("warnings"):
+        out["warnings"] = meta["warnings"]
+    return out
 
 
 @mcp.tool(title="Tolerance (yield) analysis", annotations=JOB)
@@ -836,8 +848,24 @@ async def cancel_job(job_id: str) -> dict:
 # OpenFilters project files
 # ---------------------------------------------------------------------------
 
+EXAMPLES_DIR = os.path.join(os.path.dirname(os.path.dirname(engine.__file__)), "openfilters_core", "examples")
+EXAMPLE_PREFIXES = ("openfilters://examples/", "examples/", "example:")
+
+
+def _example_names():
+    return sorted(f[:-4] for f in os.listdir(EXAMPLES_DIR) if f.endswith(".ofp"))
+
+
 def _project_path(path):
-    """A relative path or bare name means the data folder's projects directory; .ofp is added if missing."""
+    """A relative path or bare name means the data folder's projects directory; .ofp is added if missing.
+    "examples/<name>" (or the resource URI) is one of OpenFilters' example projects."""
+    for prefix in EXAMPLE_PREFIXES:
+        if path.lower().startswith(prefix):
+            name = path[len(prefix):].strip().removesuffix(".ofp")
+            match = next((n for n in _example_names() if n.lower() == name.lower()), None)
+            if match is None:
+                raise ToolError(f"no example {name!r}; examples: {', '.join(_example_names())}")
+            return os.path.join(EXAMPLES_DIR, match + ".ofp")
     if not os.path.isabs(path):
         path = os.path.join(settings.projects_dir(), path)
     if not path.lower().endswith(".ofp"):
@@ -849,10 +877,13 @@ def _project_path(path):
 async def load_project(path: str) -> dict:
     """Read an OpenFilters .ofp project: returns its designs (as design JSON) and targets.
     A relative path or bare name (e.g. "my_ar") is looked up in the data folder's projects directory,
-    where save_project writes; give the full path for projects elsewhere."""
+    where save_project writes; give the full path for projects elsewhere.
+    OpenFilters' example projects load as "examples/<name>": examples/AR, examples/Beamsplitter,
+    examples/Color, examples/Edge, examples/Fourier, examples/Ramp, examples/Rugate."""
     path = _project_path(path)
     if not os.path.isfile(path):
-        raise ToolError(f"no project at {path}")
+        raise ToolError(f"no project at {path} (OpenFilters' examples load as examples/<name>: "
+                        f"{', '.join(_example_names())})")
     return await compute("load_project", path=path)
 
 
@@ -867,6 +898,8 @@ async def save_project(path: str, designs: list[dict[str, Any]], targets: list[d
     Keep the fields optimize_design returns in each design (description, needle_materials, layer flags)
     and put anything else worth keeping (method, settings, yield) in comment or a design's description.
     A relative path is placed in the data folder's projects directory."""
+    if path.lower().startswith(EXAMPLE_PREFIXES):
+        raise ToolError("OpenFilters' example projects are read-only: save under another name")
     path = _project_path(path)
     result = {"path": await compute("save_project", path=path, designs=designs, target_specs=targets, comment=comment)}
     if not targets:
@@ -878,13 +911,6 @@ async def save_project(path: str, designs: list[dict[str, Any]], targets: list[d
 # ---------------------------------------------------------------------------
 # Resources: reference material a user can attach to a conversation
 # ---------------------------------------------------------------------------
-
-EXAMPLES_DIR = os.path.join(os.path.dirname(os.path.dirname(engine.__file__)), "openfilters_core", "examples")
-
-
-def _example_names():
-    return sorted(f[:-4] for f in os.listdir(EXAMPLES_DIR) if f.endswith(".ofp"))
-
 
 @mcp.resource("openfilters://guide", title="Design and target format", mime_type="text/plain")
 def guide_resource() -> str:

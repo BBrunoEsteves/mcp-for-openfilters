@@ -154,7 +154,8 @@ dispersion of the effect over wavelength is noted.
 
 **S3.1 Sensitive layers.** *For S1.5's mirror and the target R ≥ 99.9 % from 1000 to 1130 nm, which layers
 are most sensitive (layer_sensitivity)?*
-Check: one row per layer (31); the most sensitive layers are named and the result is interpreted.
+Check: one row per layer (31); the merit stays 0 (the band has room to spare), so the layers are ranked by
+worst margin (most_sensitive, with a note); the most sensitive layers are named and the result is interpreted.
 
 **S3.2 Production yield.** *Yield of that mirror for R ≥ 99.9 % from 1000 to 1130 nm with 1 % random thickness
 errors, 1000 trials; then add a 0.5 % index error.*
@@ -178,7 +179,7 @@ layers, minimum thickness 10 nm, with a yield stage.*
 Check: distinct designs in the top list (duplicates marked); ranking by yield; no layer below 10 nm.
 
 **S3.7 OpenFilters example project.** *Load the OpenFilters "Edge" example (resource
-openfilters://examples/Edge or load_project), describe it, re-optimize it with the needle method, save it
+openfilters://examples/Edge or load_project("examples/Edge")), describe it, re-optimize it with the needle method, save it
 as SC_edge_reopt with its targets and load it back.*
 Check: the re-optimized design keeps the example's targets; save/load round-trips.
 
@@ -189,7 +190,9 @@ consider_backside.
 
 **S3.9 Graded index (step method).** *Start from one 100 nm layer of the mixture SiO2TiO2 (index 1.9) on BK7
 and optimize R ≤ 0.5 % from 450 to 650 nm with the step method.*
-Check: the step method runs, the merit decreases, and the result describes the graded layer.
+Check: the step method runs and the merit decreases. From this thin start it adds no steps (one layer at the
+mixture's lowest index); the result warns that this is a local optimum. Restarting from a thicker layer
+(e.g. 300-500 nm) adds steps and reaches R ≤ 0.5 % (reference: worst R 0.500 %).
 
 ---
 

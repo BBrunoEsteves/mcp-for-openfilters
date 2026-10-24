@@ -383,12 +383,18 @@ def _wilson(k, n, z=1.96):
     return [round(max(0.0, centre - half), 4), round(min(1.0, centre + half), 4)]
 
 
-def same_design(a, b):
-    """Same layer materials and thicknesses within 0.5 nm or 0.5 % (starts often converge to one design)."""
+def same_design(a, b, chi2_a=None, chi2_b=None):
+    """Same layer materials and thicknesses within 0.5 nm or 0.5 % (starts often converge to one design).
+    With merits equal to 1e-6 (relative), thicknesses within 3 nm or 3 % also count: a merit that is flat
+    along one direction leaves converged copies a nanometre or two apart (campaign 2026-10-24: chi2
+    285.92732 vs 285.92733, one layer 102.04 vs 100.80 nm)."""
     la, lb = a["layers"], b["layers"]
+    close = (chi2_a is not None and chi2_b is not None
+             and abs(chi2_a - chi2_b) <= 1e-6 * max(abs(chi2_a), abs(chi2_b), 1e-12))
+    nm, rel = (3.0, 0.03) if close else (0.5, 0.005)
     return len(la) == len(lb) and all(
         x["material"] == y["material"] and "thickness" in x and "thickness" in y
-        and abs(x["thickness"] - y["thickness"]) <= max(0.5, 0.005 * max(x["thickness"], y["thickness"]))
+        and abs(x["thickness"] - y["thickness"]) <= max(nm, rel * max(x["thickness"], y["thickness"]))
         for x, y in zip(la, lb))
 
 
@@ -399,7 +405,8 @@ def distinct_top(manager, job, rows, n):
         if "error" in row:
             continue
         design = manager.result(job["id"], row["task"])["result"]["design"]
-        original = next((r for r, d in kept if same_design(design, d)), None)
+        original = next((r for r, d in kept
+                         if same_design(design, d, row.get("merit_chi2"), r.get("merit_chi2"))), None)
         if original is not None:
             row["duplicate_of"] = original["task"]
         elif len(top) < n:
@@ -454,6 +461,10 @@ def finalize_campaign(manager, job):
                "duplicates": sum(1 for r in rows if "duplicate_of" in r),
                "stop_reasons": {reason: engine.STOP_REASONS.get(reason, "")
                                 for reason in sorted({r["stop_reason"] for r in rows if r.get("stop_reason")})}}
+    if top and all(r.get("yield") is not None for r in top) and not any(r["yield"] for r in top):
+        summary["note"] = "No design passed the yield stage (all yields 0): the ranking is by merit."
+    if meta.get("warnings"):
+        summary["warnings"] = meta["warnings"]
     _finish_table(manager, job, top + [r for r in rows if r not in top], outputs, summary)
 
 
