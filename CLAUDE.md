@@ -91,8 +91,20 @@ build_filter refuses NaN); OpenFilters' needle search only takes interior minima
 needle method (_edge_needle + _continue_needles insert a 1 nm layer at the best edge). Both OpenFilters behaviours
 were checked against the original Python 2 sources: ported Python files identical apart from imports; C++ maths
 files identical, wrappers only mechanical Python 3 C-API changes.
-NaN check verified 2026-10-24: pure-Python and C++ solvers both produce an all-NaN trial step at the same call
-(#1525 of campaign task 6), so it is OpenFilters' own; the Python one then loops forever, the C++ one returns NaN.
+NaN check 2026-10-24: both modes produce an all-NaN trial step at the same call (#1525 of campaign task 6), so it
+is OpenFilters' own. CORRECTION: both modes then ran OpenFilters' Python Levenberg-Marquardt (see the port bug below).
+PORT BUG (fixed 2026-10-24): targets.py's "from .moremath.Levenberg_Marquardt import ..." loaded the .py file and
+replaced the compiled solver everywhere (the C++ module registers as "moremath.Levenberg_Marquardt", which matched in
+Python 2 but not under openfilters_core). The port script now registers C++ submodules in sys.modules; optimizations
+are ~3x faster and the test suite runs in 10 s. tests/test_regressions.py checks the compiled solver is used.
+OpenFilters' Python solver can loop forever inside one step (GDD targets): _guarded() raises _Overrun from
+calculate_values past deadline + DEADLINE_GRACE; _run returns the best design with stop time_limit.
+GD/GDD: OpenFilters computes s and s^2 (its GUI scales by 1e15/1e30); TIME_UNITS converts spectra, targets, reports
+and project read-back to fs/fs^2. Before this, GD/GDD were reported in s as "fs" and GD/GDD targets never worked.
+material_warnings: tabulated materials outside their data -> warnings; n <= 0 (e.g. Ge table at 10 um, BK7
+Sellmeier pole) -> EngineError; checked before computing (pure-Python divides by zero otherwise).
+Regenerating the core: tools/port_from_py2.py now leaves .pyd/.dll in place (a loaded .pyd cannot be deleted on
+Windows; an earlier run aborted halfway and deleted abeles' msvcp140 DLL, restored from moremath).
 JSON turns NaN into null: build_filter refuses non-numeric thickness/qwot/index with a clear message.
 Chat test run 2026-10-24 (two Claude chats, TEST_PLAN A-J) found: workflow defaults used Ta2O5 (not built in;
 OpenFilters ships TiO2, SiO2, SiN, metals, ...), load_project did not resolve names, colour targets wrote the

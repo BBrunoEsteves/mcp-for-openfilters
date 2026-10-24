@@ -45,6 +45,15 @@ try:
 	if getattr(_dll, "__file__", None) is None:
 		raise ImportError("_abeles is not compiled")
 	from ._abeles import *
+	# The extension registers its submodules under their Python 2 names
+	# ("moremath.Levenberg_Marquardt"); register them under this package too.
+	# Otherwise "from .moremath.Levenberg_Marquardt import ..." (targets.py)
+	# loads the pure-Python file, which then replaces the compiled solver for
+	# every module (in Python 2 that import found the compiled module).
+	import sys as _sys, types as _types
+	for _name, _value in list(vars(_dll).items()):
+		if isinstance(_value, _types.ModuleType):
+			_sys.modules[__name__ + "." + _name] = _value
 except ImportError as _import_error:
 	# Say why a compiled core that exists could not be used (stderr only:
 	# stdout may be a protocol channel).

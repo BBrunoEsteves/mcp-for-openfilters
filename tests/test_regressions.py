@@ -132,3 +132,39 @@ def test_every_stop_reason_is_explained():
     # openfilters_error is returned directly by _run, not assigned.
     produced = set(re.findall(r'stop(?:_reason)? = "(\w+)"', source)) | {"converged", "finished", "openfilters_error"}
     assert produced <= set(engine.STOP_REASONS), produced - set(engine.STOP_REASONS)
+
+
+def test_optimizer_uses_the_compiled_solver_when_installed():
+    # Port bug: targets.py imports "from .moremath.Levenberg_Marquardt import ...", which loaded the
+    # pure-Python file and replaced the compiled solver everywhere (in Python 2 it found the compiled one).
+    from openfilters_core import moremath, optimization_needles, optimization_refinement
+    if not moremath.get_moremath_dll_import_success():
+        pytest.skip("compiled core not installed")
+    for module in (optimization_refinement, optimization_needles):
+        assert getattr(module.Levenberg_Marquardt, "__file__", None) is None, module.__name__
+
+
+def test_materials_outside_their_valid_range():
+    # OpenFilters evaluates every model anywhere: Ge (data 124-1771 nm) gave n = -34 at 10 um and
+    # BK7's Sellmeier formula n = 0, silently.
+    with pytest.raises(engine.EngineError, match="unphysical index"):
+        engine.spectra({"substrate": "Si", "layers": [{"material": "Ge", "thickness": 500}]}, ["R"], [10000])
+    with pytest.raises(engine.EngineError, match="unphysical index"):
+        engine.evaluate({"substrate": "BK7", "layers": [{"material": "SiO2", "thickness": 100}]},
+                        [{"kind": "R", "wavelength": 10000, "value": 0.1, "inequality": "<="}])
+    out = engine.spectra({"substrate": "BK7", "layers": [{"material": "Ge", "thickness": 50}]}, ["R"], [1500, 2500])
+    assert out["warnings"] and "extrapolated" in out["warnings"][0]
+    assert not engine.spectra(ar_design([50.0, 90.0]), ["R"], [550])["warnings"]
+
+
+def test_malformed_formula_gives_a_clear_error():
+    with pytest.raises(engine.EngineError, match="Stack formulas use letters"):
+        engine.describe({"substrate": "BK7", "formula": {"formula": "(HL)^ H", "materials": {"H": "TiO2", "L": "SiO2"}}})
+
+
+def test_a_solver_step_past_the_deadline_stops_the_optimization(monkeypatch):
+    # OpenFilters' pure-Python solver looped forever inside one step with a GDD target; the time
+    # limit was only checked between steps.
+    monkeypatch.setattr(engine, "DEADLINE_GRACE", 0.0)
+    result = engine.optimize(ar_design([27.26, 29.49, 82.03, 100.53]), AR_TARGETS, "needle", {"time_limit": 1e-6})
+    assert result["stop_reason"] == "time_limit" and math.isfinite(result["merit_chi2"])

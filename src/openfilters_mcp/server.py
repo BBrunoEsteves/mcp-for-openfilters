@@ -226,9 +226,12 @@ async def get_material_index(name: str, wavelengths: Wavelengths = None, plot: b
     """Tabulate n and k of a regular material over wavelengths (default 300-2000 nm, 50 nm steps)."""
     wvls = engine._wavelength_list(wavelengths, default=(300.0, 2000.0, 50.0)) if wavelengths is not None \
         else engine._wavelength_list(None, default=(300.0, 2000.0, 50.0))
+    warnings = await compute("material_warnings", design={"substrate": name, "layers": []}, wavelengths=wvls)
     N = await compute("material_N", name=name, wavelengths=wvls)
     table = [[w, round(float(z.real), 5), round(float(-z.imag), 6) + 0.0] for w, z in zip(wvls, N)]  # no -0.0
     out = {"material": name, "columns": ["wavelength_nm", "n", "k"], "rows": table}
+    if warnings:
+        out["warnings"] = warnings
     if plot:
         png = plotting.curves(wvls, {"n": [r[1] for r in table], "k": [r[2] for r in table]},
                               f"{name} optical constants", "Wavelength (nm)", "n, k")
@@ -375,6 +378,8 @@ async def compute_spectrum(design: Design,
                            angles=angles, polarizations=polarizations, reverse=reverse)
     wvls = result["wavelengths"]
     out = {"wavelength_range_nm": [float(wvls[0]), float(wvls[-1])], "n_wavelengths": len(wvls), "series": []}
+    if result.get("warnings"):
+        out["warnings"] = result["warnings"]
     for s in result["series"]:
         out["series"].append({"quantity": s["quantity"], "angle": s["angle"], "polarization": s["polarization"],
                               **_summarize_series(wvls, s["values"], sample_points)})
@@ -407,6 +412,8 @@ async def compute_angle_scan(design: Design, wavelength: float, quantities: list
         curves.setdefault(f"{s['quantity']} {s['polarization']}", []).append(float(s["values"][0]))
     out = {"wavelength_nm": wavelength, "angles": angle_list,
            "curves": {k: [round(v, 6) for v in vals] for k, vals in curves.items()}}
+    if result.get("warnings"):
+        out["warnings"] = result["warnings"]
     if plot:
         png = plotting.curves(angle_list, curves, f"Angle scan at {wavelength:g} nm", "Angle of incidence (deg)", "Value")
         return with_plots(out, png, "angle_scan")

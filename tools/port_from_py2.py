@@ -107,6 +107,15 @@ EXT_DETECT = """try:
 \tif getattr(_dll, "__file__", None) is None:
 \t\traise ImportError("{mod} is not compiled")
 \tfrom {mod} import *
+\t# The extension registers its submodules under their Python 2 names
+\t# ("moremath.Levenberg_Marquardt"); register them under this package too.
+\t# Otherwise "from .moremath.Levenberg_Marquardt import ..." (targets.py)
+\t# loads the pure-Python file, which then replaces the compiled solver for
+\t# every module (in Python 2 that import found the compiled module).
+\timport sys as _sys, types as _types
+\tfor _name, _value in list(vars(_dll).items()):
+\t\tif isinstance(_value, _types.ModuleType):
+\t\t\t_sys.modules[__name__ + "." + _name] = _value
 except ImportError as _import_error:
 \t# Say why a compiled core that exists could not be used (stderr only:
 \t# stdout may be a protocol channel).
@@ -234,11 +243,14 @@ def main(original, fork, output):
     # Empty the output folder rather than deleting it (Windows refuses to
     # delete a folder that is some process's working directory).
     output.mkdir(parents=True, exist_ok=True)
-    # Compiled extensions (and DLLs they need) are kept: they are built
-    # separately and are not produced by this script.
-    compiled = {p: p.read_bytes() for p in output.rglob("*") if p.suffix in (".pyd", ".so", ".dll")}
-    for child in output.iterdir():
-        shutil.rmtree(child) if child.is_dir() else child.unlink()
+    # Compiled extensions (and DLLs they need) are left in place: they are built
+    # separately, and Windows refuses to delete one that a running server has
+    # loaded (deleting them aborted a regeneration halfway).
+    for path in sorted(output.rglob("*"), key=lambda p: len(p.parts), reverse=True):
+        if path.is_file() and path.suffix not in (".pyd", ".so", ".dll"):
+            path.unlink()
+        elif path.is_dir() and not any(path.iterdir()):
+            path.rmdir()
     shutil.copytree(original, output, dirs_exist_ok=True,
                     ignore=lambda d, names: [n for n in names if n in EXCLUDE])
 
@@ -276,10 +288,6 @@ def main(original, fork, output):
     shutil.rmtree(output / "abeles" / "_abeles")
     shutil.copytree(fork / "abeles" / "_abeles", output / "abeles" / "_abeles")
     port_moremath_cpp(output / "moremath" / "_moremath")
-
-    for path, data in compiled.items():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
 
 
 if __name__ == "__main__":

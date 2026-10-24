@@ -3,6 +3,15 @@
 ## 0.1.3 — 2026-10-24
 
 - `remove_material` tool.
+- Fix (porting bug): optimizations ran OpenFilters' slow pure-Python solver even with the compiled core installed;
+  they now use the compiled one (about 3x faster).
+- Fix: group delay and GDD were reported in s and s^2 (labelled fs, fs^2), and GD/GDD targets were compared in
+  those units, so dispersive designs could not be optimized. Everything is now in fs and fs^2, as in the
+  OpenFilters GUI, including targets saved in and read from projects.
+- Materials used outside their data range give a warning; where a material's model gives an impossible index
+  (e.g. built-in Ge or BK7 at 10 um), the tool refuses and suggests importing data for that range.
+- An optimization can no longer hang inside one solver step: it stops at the time limit with the best design.
+- A malformed stack formula gives a clear error instead of crashing.
 - Colour targets report the calculated coordinates, the deviation per coordinate and the colour distance
   (ΔE\*ab for L\*a\*b\*).
 - The design and target formats are described in each tool's parameters, for apps that do not pass the
