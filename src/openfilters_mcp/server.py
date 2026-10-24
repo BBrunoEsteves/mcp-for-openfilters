@@ -449,7 +449,8 @@ async def compute_monitoring_curves(design: Design, wavelengths: list[float], an
 @mcp.tool(title="Evaluate a design", annotations=READ)
 async def evaluate_design(design: Design, targets: Targets, plot: bool = True):
     """Merit (chi^2, OpenFilters' definition) of a design against targets, with per-target pass
-    fraction and maximum deviation. all_targets_met is true when every point is within tolerance."""
+    fraction and maximum deviation. all_targets_met is true when every point meets its target (inequalities must hold;
+    "equal" targets must be within tolerance)."""
     out = await compute("evaluate", design=design, target_specs=targets)
     if plot:
         pngs = await targets_plot([("design", design, False)], targets, "Design vs targets", "evaluation")
