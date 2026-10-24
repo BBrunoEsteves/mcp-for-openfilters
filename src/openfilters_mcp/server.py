@@ -60,7 +60,8 @@ A target is a JSON object (used by evaluate/optimize/tolerance):
    or a band:          "from": 400, "to": 700, "step": 5, "value": 0.9 (or "points": [[wl, value, tol], ...]),
    "inequality": "equal" | ">=" | "<=",  "direction": "normal"|"reverse"}
 Use ">=" / "<=" for specifications like "R > 99 %": such a target is met only where it holds (its tolerance,
-default 0.01, only weights the merit); an "equal" target is met within its tolerance. Phase/GD/GDD targets need
+default 0.01, only weights the merit; a convergence allowance of 1e-4 x tolerance applies, e.g. 1e-6 for R
+with the default tolerance); an "equal" target is met within its tolerance. Phase/GD/GDD targets need
 s or p polarization.
 Color targets: {"kind": "R_color", "color_space": "Lab", "values": [L, a, b], "tolerances": [1, 1, 1]}
 (color_space: Lab, XYZ, xyY, Luv, LChab or LChuv; illuminant and observer as in compute_color).
@@ -216,7 +217,7 @@ Targets = Annotated[list[dict[str, Any]], Field(description=(
     '"polarization": "unpolarized"|"s"|"p", then either "wavelength": 1064 or "from": 400, "to": 700, "step": 5, '
     'and "value": 0.99 (R/T/A as fractions), "inequality": ">="|"<="|"equal", optional "tolerance" (weight in the '
     'merit, default 0.01). Colour: {"kind": "R_color"|"T_color", "color_space": "Lab", "values": [L, a, b], '
-    '"tolerances": [1, 1, 1], "angle": 0}. An inequality is met only where it holds.'))]
+    '"tolerances": [1, 1, 1], "angle": 0}. An inequality is met only where it holds (within 1e-4 x tolerance).'))]
 # Everything runs locally (open_world_hint False) except the refractiveindex.info tools (WEB_*), which
 # download public data. Read-only tools only save plots, CSV tables and caches in the data folder; job tools
 # also write job files there; DESTRUCTIVE tools may replace a file or stop work.

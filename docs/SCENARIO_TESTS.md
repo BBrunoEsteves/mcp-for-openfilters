@@ -314,7 +314,7 @@ replaced by a design_note; describing (HL)^2 at 550 nm (4 layers) still returns 
 T ≤ 5 % from 500 to 560 nm in 5 nm steps. Then rerun S4.10 (needle, (HL)^20 H start, R ≥ 99.9 % over
 600–1000 nm, step 5, time_limit 2 s).*
 Reference: not met; worst T on the grid **0.335966 at 530 nm**; a **warning** that between the grid points
-the worst is **0.859767 at 532.5 nm**. For the S4.10 rerun: if the plot shows a dip between grid points, the
+the worst is **0.956897 at 532.0 nm** (the peak itself, refined beyond the 4x grid). For the S4.10 rerun: if the plot shows a dip between grid points, the
 result carries the same kind of warning (the exact values depend on how far 2 s gets).
 
 **S5.11 Cancel accounting** (was S4.11). *Campaign of 80 starts: R ≤ 0.2 % from 400 to 900 nm in 1 nm steps on

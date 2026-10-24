@@ -46,7 +46,7 @@ DESTRUCTIVE in server.py; required by Claude's directory, checked by tests/test_
 ## Status (2026-10-22)
 
 Done: Python 3 port validated (analytic + independent TMM, < 1e-9; needle derivatives vs finite differences),
-all optimizers working, 25 MCP tools + 5 prompts + 9 resources working end to end, 134 tests + 44 acceptance checks. Private GitHub repo
+all optimizers working, 25 MCP tools + 5 prompts + 9 resources working end to end, 136 tests + 44 acceptance checks. Private GitHub repo
 BBrunoEsteves/openfilters-mcp; CI compiles the C++ core and tests on Windows/macOS/Linux and builds wheels
 (cp310-cp314, runtime DLLs bundled). Compiled core is 15-30x faster than pure Python.
 Registered locally (user scope) in Claude Code and Claude Desktop, pointing at .venv/Scripts/openfilters-mcp.exe;
@@ -153,6 +153,9 @@ copies the neighbour's derivative there); duplicate_of beyond top_n; every disti
 in campaign rows; warnings for all-0-nm results, sub-nm layers without min_thickness, and misses within 1 % of the
 tolerance (suggest margin); target plots on a 2000-point grid; earlier_stages in job_status. Tests:
 tests/test_scenarios_batch5.py.
+Batch 5 subset rerun (S5.6/10/12/14): 3/4 pass. Fixed: between-grid worst refined within one fine step at
+step/25 for R/T/A (narrow notch: 57.9 % reported, 45 % true); met allowance documented in the tool texts;
+warning when layers go to 0 nm and are removed.
 NEXT: release prep (see Pending) and outside testers; tag v0.1.3 after 2026-11-01. For each finding: verify it (reproduce; for OpenFilters behaviour check
 third_party/openfilters_original and the pure-Python core before blaming OpenFilters), fix with a regression test,
 run pytest (compiled and OPENFILTERS_PURE_PYTHON=1), dev/acceptance.py and dev/e2e_client.py, then commit, and

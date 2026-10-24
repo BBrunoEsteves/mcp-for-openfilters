@@ -50,7 +50,8 @@ def test_worse_between_grid_points_is_reported_for_a_failing_design():
     r = engine.evaluate(BANDPASS, targets)
     assert not r["all_targets_met"] and r["targets"][0]["worst_value"] < 0.5
     (warning,) = r["warnings"]
-    assert "worse between the targets' grid points" in warning and "532.5 nm" in warning
+    # The peak itself (S5.10: narrow features are refined beyond the 4x grid point at 532.5 nm).
+    assert "worse between the targets' grid points" in warning and "0.956897 at 532.0 nm" in warning
 
 
 def test_no_between_warning_when_the_fine_grid_is_not_worse():

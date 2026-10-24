@@ -876,6 +876,23 @@ def with_margin(target_specs, margin):
     return out
 
 
+def _refine_worst(design, spec, row, step):
+    """Narrow notches can be thinner than the fine grid (scenario S5.10: 57.9 % on a 1.25 nm grid, 45.05 %
+    in fact), so look for the true worst R/T/A within one fine step of the worst point, at step/25."""
+    if spec.get("kind") not in ("R", "T", "A") or spec.get("points") or "worst_at_nm" not in row:
+        return
+    w = row["worst_at_nm"]
+    r = spectra(design, [spec["kind"]], {"from": w - step, "to": w + step, "step": step / 25},
+                angles=[float(spec.get("angle", 0.0))], polarizations=[spec.get("polarization", "unpolarized")],
+                reverse=str(spec.get("direction", "normal")).lower() in ("reverse", "back"))
+    values, wvls = np.asarray(r["series"][0]["values"]), r["wavelengths"]
+    ineq, goal = INEQUALITIES.get(str(spec.get("inequality", "equal")).lower()), float(spec["value"])
+    j = int(np.argmax(values) if ineq == "smaller" else np.argmin(values) if ineq == "larger"
+            else np.argmax(np.abs(values - goal)))
+    row["worst_value"], row["worst_at_nm"] = sig(values[j]), round(float(wvls[j]), 3)
+    row["max_abs_deviation"] = max(row["max_abs_deviation"], sig(abs(values[j] - goal)))
+
+
 def between_points_warning(design, target_specs, grid_rows=None, refine=4):
     """Optima sit on the limits, so a design that meets its targets on their wavelength grid can fail
     between grid points. Re-check spectral targets on a grid `refine` times finer. For a design that
@@ -894,6 +911,9 @@ def between_points_warning(design, target_specs, grid_rows=None, refine=4):
     rows, ok = target_report(_evaluator(build_filter(design), build_targets(fine, pad=True)), fine)
     if ok:
         return None
+    for spec, row in zip(fine, rows):
+        if row["pass_fraction"] < 1 and "from" in spec:
+            _refine_worst(design, spec, row, float(spec["step"]))
     if grid_rows is not None and any(r["pass_fraction"] < 1 for r in grid_rows):
         worse = []
         for spec, grid, row in zip(target_specs, grid_rows, rows):
@@ -1364,7 +1384,11 @@ def optimize(design, target_specs, method="needle", options=None, progress=None)
             stop = "min_thickness_not_reached"
 
     # 0 nm layers (left at OpenFilters' lower bound) are optically invisible: drop them.
-    current = dict(current, layers=_drop_empty_layers(current["layers"]) or current["layers"])
+    kept = _drop_empty_layers(current["layers"])
+    if kept and len(kept) < len(current["layers"]):
+        warnings.append(f"{len(current['layers']) - len(kept)} layer(s) went to 0 nm and were removed "
+                        f"({len(design['layers'])} layers at the start, {len(kept)} now)")
+    current = dict(current, layers=kept or current["layers"])
     f = build_filter(current)
     final = _evaluator(f, spec_targets)
     rows, all_pass = target_report(final, target_specs)

@@ -87,3 +87,26 @@ def test_sub_nanometre_layers_are_flagged_without_min_thickness():
         assert any("below what can be deposited" in w for w in r["warnings"])
     r = engine.optimize(start, targets, "refine", {"min_thickness": 5})
     assert not any("below what can be deposited" in w for w in r.get("warnings", []))
+
+
+def test_between_grid_worst_finds_the_bottom_of_a_narrow_notch():
+    # S5.10 rerun: the warning gave 57.9 % at 687.5 nm (the 4x grid point); the notch bottom was 45.05 %.
+    design = {"substrate": "BK7", "center_wavelength": 532,
+              "formula": {"formula": "(HL)^4 HH (LH)^4", "materials": {"H": "TiO2", "L": "SiO2"}}}
+    targets = [{"kind": "T", "from": 500, "to": 560, "step": 5, "value": 0.05, "inequality": "<="}]
+    (warning,) = engine.evaluate(design, targets)["warnings"]
+    fine = engine.spectra(design, ["T"], {"from": 528, "to": 536, "step": 0.01})["series"][0]["values"]
+    assert f"worst {engine.sig(max(fine))} at 532.0 nm" in warning
+
+
+def test_layers_dropped_at_zero_thickness_are_reported(monkeypatch):
+    # S5.12 rerun: 2-4 layer starts ended as one layer with no note.
+    targets = [{"kind": "R", "wavelength": 1064, "value": 0.0005, "inequality": "<="}]
+    design = {"substrate": "FusedSilica", "center_wavelength": 1064,
+              "layers": [{"material": "TiO2", "thickness": 20.0}, {"material": "SiO2", "thickness": 245.0},
+                         {"material": "TiO2", "thickness": 35.0}]}
+    ended = dict(design, layers=[dict(design["layers"][0], thickness=0.0)] + design["layers"][1:])
+    monkeypatch.setattr(engine, "_run", lambda *args, **kwargs: (ended, 1.0, "converged", 3))
+    r = engine.optimize(design, targets, "refine")
+    assert r["nb_layers"] == 2
+    assert any("1 layer(s) went to 0 nm and were removed (3 layers at the start, 2 now)" in w for w in r["warnings"])
