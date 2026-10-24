@@ -451,7 +451,9 @@ def finalize_campaign(manager, job):
         row["rank"] = rank + 1
     summary = {"starts": len(rows), "met_all_targets": sum(1 for r in rows if r.get("all_targets_met")),
                "failed": sum(1 for r in rows if "error" in r),
-               "duplicates": sum(1 for r in rows if "duplicate_of" in r)}
+               "duplicates": sum(1 for r in rows if "duplicate_of" in r),
+               "stop_reasons": {reason: engine.STOP_REASONS.get(reason, "")
+                                for reason in sorted({r["stop_reason"] for r in rows if r.get("stop_reason")})}}
     _finish_table(manager, job, top + [r for r in rows if r not in top], outputs, summary)
 
 

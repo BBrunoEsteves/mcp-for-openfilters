@@ -3,6 +3,8 @@
 ## 0.1.3 — 2026-10-24
 
 - `remove_material` tool.
+- Optimization results explain their stop reason in plain words (`stop_explanation`); campaign summaries
+  list the stop reasons that occurred.
 - Campaigns with a yield stage rank by yield first (a nominal pass with 0 % yield no longer beats a near-miss
   with a good yield).
 - The antireflection and edge-filter workflows ask for a minimum layer thickness (default 5 nm), so they no

@@ -922,6 +922,20 @@ def _run(method, design, targets, options, deadline, progress, floor=None, info=
     return best_design, float(best_chi2), stop, o.get_iteration()
 
 
+STOP_REASONS = {
+    "converged": "the optimizer could not improve the merit any further (a local optimum)",
+    "finished": "the method ran to its end",
+    "time_limit": "the time limit was reached; the best design so far is returned",
+    "cycling": "the needle/step method kept returning to the same designs, so it was stopped; the best design "
+               "seen is returned (normal near an optimum)",
+    "max_layers": "the needle method needed more layers than max_layers; the best design within the limit is returned",
+    "max_total_thickness": "the design grew past max_total_thickness; the best design within the limit is returned",
+    "min_thickness_not_reached": "not every layer could be brought to min_thickness in the time available",
+    "numerical_error": "OpenFilters' optimizer failed numerically (all thicknesses NaN); the best finite design "
+                       "is returned",
+    "openfilters_error": "OpenFilters' optimizer failed (e.g. it removed every layer); the best design seen is returned",
+}
+
 EDGE_NEEDLE_NM = 1.0
 MAX_CONTINUATIONS = 20
 
@@ -1047,7 +1061,8 @@ def optimize(design, target_specs, method="needle", options=None, progress=None)
             "thinnest_layer_nm": round(min(thicknesses), 3) if thicknesses else None,
             "thin_layers_removed": removed, "edge_needles_added": edge_needles,
             "rounds": rounds if min_thickness else 1,
-            "elapsed_s": round(time.time() - start, 2), "design": current}
+            "elapsed_s": round(time.time() - start, 2), "stop_explanation": STOP_REASONS.get(stop, ""),
+            "design": current}
 
 
 # ---------------------------------------------------------------------------

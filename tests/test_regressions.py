@@ -120,3 +120,15 @@ def test_tiny_violation_is_not_rounded_to_zero():
     r = ((1.52 - 1.38 ** 2) / (1.52 + 1.38 ** 2)) ** 2
     row = engine.evaluate(d, [{"kind": "R", "wavelength": 550, "value": r - 8e-8, "inequality": "<="}])["targets"][0]
     assert row["pass_fraction"] == 0 and row["max_abs_deviation"] == pytest.approx(8e-8, rel=1e-3)
+
+
+def test_every_stop_reason_is_explained():
+    # Campaign rows showed "cycling" with no explanation.
+    start = ar_design([27.26, 29.49, 82.03, 100.53])
+    result = engine.optimize(start, AR_TARGETS, "needle", {"time_limit": 20, "max_layers": 10})
+    assert result["stop_explanation"]
+    import re
+    source = open(engine.__file__, encoding="utf-8").read()
+    # openfilters_error is returned directly by _run, not assigned.
+    produced = set(re.findall(r'stop(?:_reason)? = "(\w+)"', source)) | {"converged", "finished", "openfilters_error"}
+    assert produced <= set(engine.STOP_REASONS), produced - set(engine.STOP_REASONS)

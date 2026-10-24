@@ -511,14 +511,15 @@ async def _wait(job_id, wait_seconds, ctx=None):
 async def optimize_design(design: Design, targets: Targets, method: str = "needle",
                           options: Annotated[dict[str, Any] | None, Field(description=(
                               "time_limit (s, default 300), max_iterations, min_thickness (nm; guaranteed in the "
-                              "result: thin layers are clamped or removed and the design re-refined with that bound), "
+                              "result: thin layers are clamped or removed and the design re-refined with that bound; a clamped design "
+                              "that already meets every target has merit 0 and stays as clamped), "
                               "max_layers, max_total_thickness (nm), needle_materials (list), nb_needles, nb_steps, "
                               "automatic (default true)"))] = None,
                           wait_seconds: float = 40.0, ctx: Context = None) -> dict:
     """Optimize a design with OpenFilters: method "refine" (thicknesses only), "needle" (refine and
     insert new layers until no improvement) or "step" (graded/step index, needs a mixture material).
     Waits up to wait_seconds (max 45); if not finished, returns a job_id to poll. Returns the best design found
-    (not merely the last), stop_reason (converged, time_limit, cycling, max_layers, ...), thinnest_layer_nm,
+    (not merely the last), stop_reason with a plain stop_explanation, thinnest_layer_nm,
     and an .ofp project (start + optimized) openable in OpenFilters. One run finds a local optimum; for
     hard specifications use run_optimization_campaign (many starts). Only FRONT layers are optimized;
     back_layers (if any) stay fixed and count in the merit when consider_backside is true."""
