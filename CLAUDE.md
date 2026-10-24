@@ -145,7 +145,8 @@ tasks_done/still_running/cancelled and leaves finished jobs alone; a job whose t
 optimize_design validates before creating a job; extrapolation warning names only the outside range;
 describe_design omits the JSON echo for formulas over 20 layers; partial campaign results get provisional
 ranks; max_layers explanation. Tests: tests/test_scenarios_batch4.py.
-NEXT (2026-10-24): all four scenario batches done; rerun any batch after larger changes, pasting reports here. For each finding: verify it (reproduce; for OpenFilters behaviour check
+NEXT (2026-10-24): the user runs docs/SCENARIO_TESTS.md Batch 5 (recheck of the Batch 3-4 fixes) in a fresh chat
+and pastes the report here; evaluate it as for the other batches. For each finding: verify it (reproduce; for OpenFilters behaviour check
 third_party/openfilters_original and the pure-Python core before blaming OpenFilters), fix with a regression test,
 run pytest (compiled and OPENFILTERS_PURE_PYTHON=1), dev/acceptance.py and dev/e2e_client.py, then commit, and
 always end the turn by asking the user whether to push (they expect to be asked; never push without a yes). After the batches: tag v0.1.3 once GitHub Actions minutes reset (2026-11-01) or the repo is public.

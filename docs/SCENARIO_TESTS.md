@@ -4,7 +4,7 @@ Realistic coating tasks for a Claude chat to run on its own and report on. Where
 (closed forms, or values computed with the connector's engine from built-in materials), it is given as a
 **reference**; elsewhere the check is a physical or behavioural one.
 
-Four batches, one chat each (a batch takes 20–40 minutes):
+Five batches, one chat each (a batch takes 20–40 minutes):
 
 | Batch | Theme | Scenarios |
 |---|---|---|
@@ -12,6 +12,7 @@ Four batches, one chat each (a batch takes 20–40 minutes):
 | 2 | Applications (design tasks) | S2.1–S2.11 |
 | 3 | Analysis and manufacturing | S3.1–S3.9 |
 | 4 | Robustness: bad inputs, limits, edge cases | S4.1–S4.14 |
+| 5 | Recheck of the Batch 3 and 4 fixes, plus spot checks | S5.1–S5.15 |
 
 ## How to run a batch
 
@@ -251,3 +252,92 @@ Expected: zero results, gracefully; a clear "cannot download" error.
 
 **S4.14 Concurrent jobs.** *Start two small campaigns back to back, then list_jobs.*
 Expected: both run and both appear in list_jobs.
+
+---
+
+## Batch 5 — Recheck of the Batch 3 and 4 fixes
+
+Run after the fixes of 2026-10-24 (commits aed1a33 and ec00130). S5.1–S5.12 recheck what failed or
+changed; S5.13–S5.15 are passing scenarios that go through code the fixes touched. Throughout, note any
+call that is clearly slower than in earlier batches (evaluate_design and optimize_design now always
+re-check targets on a 4x finer grid).
+
+**S5.1 Sensitivity of a design that meets its targets** (was S3.1). *S1.5's mirror, target R ≥ 99.9 % from
+1000 to 1130 nm (step 5, tolerance 0.001): layer_sensitivity.*
+Reference: base_chi2 0; base_worst_margin **0.981**; most_sensitive **front #17, #15, #16, #19, #18**, with a
+note that layers are ranked by worst margin. Check: 31 rows, every delta_worst_margin negative.
+
+**S5.2 Monitoring precision** (was S3.3). *Transmission monitoring at 1064 nm for S1.5's mirror.*
+Reference: first values 0.685145, 0.918413, 0.396379, 0.660786; the last value **4.45431e-06**, equal to the
+mirror's T at 1064 nm from compute_spectrum. Check: no end-of-layer value prints as 0.
+
+**S5.3 Angle plot** (was S3.4). *S1.6's band-pass from 0° to 30° in 5° steps, s and p, one compute_spectrum
+call with a plot.*
+Check: the plot draws all 14 curves (one colour per angle, dashed s, dash-dot p) with no "more series not
+drawn" note; peak wavelengths as in Batch 3 (532.00 nm at 0°, about 515.4 nm s / 515.05 nm p at 30°).
+
+**S5.4 Campaign duplicates and notes** (was S3.6). *Hot mirror campaign: T ≥ 90 % from 420 to 650 nm and
+R ≥ 95 % from 750 to 1100 nm on BK7; 30 random starts (TiO2/SiO2, 10–20 layers, 20–200 nm, center wavelength
+900, seed 1); needle, max_layers 20, min_thickness 10; tolerance stage 200 trials at 1 % thickness error.*
+Check: the call returns a **warning** that starts with up to 20 layers leave the needle method little room
+(max_layers 20); no two top rows have merits equal to 6 figures (copies are marked duplicate_of); if every
+yield is 0 the summary has a note saying the ranking is by merit; no layer below 10 nm. Then rerun with
+10–14 starting layers and max_layers 30: no warning.
+
+**S5.5 Example projects without resources** (was S3.7). *load_project("examples/Edge"); describe it;
+re-optimize it with the needle method; save it as SC_edge_reopt with its targets and load it back. Then try
+load_project("Edge") and save_project("examples/Edge", ...).*
+Reference: Edge has 1 design of **17 layers** and 2 targets (R from 500 to 600 nm, T from 650 to 1000 nm).
+Check: the round trip keeps both targets; load_project("Edge") fails with a message that names
+examples/<name> and lists the examples; saving to examples/Edge is refused as read-only.
+(SC_edge_reopt.ofp stays in the projects folder; it is a file, not a material.)
+
+**S5.6 Step method diagnosis** (was S3.9). *One 100 nm layer of SiO2TiO2 (index 1.9) on BK7, R ≤ 0.5 % from 450
+to 650 nm (step 5), step method; then the same from a 500 nm layer.*
+Reference: the thin start ends as one layer at n = 1.4847 with a **warning** that the step method added no
+steps (layer 1 at the lowest index of SiO2TiO2) and that this is a local optimum, not a limit of the
+materials. The 500 nm start ends with several layers and worst R **0.500 %**, with no such warning.
+
+**S5.7 Extrapolation warning** (was S4.7). *50 nm Ge on BK7 at 1500 and 2500 nm.*
+Reference: R = 61.22 % / 24.64 %; the warning names only **1771-2500 nm** as extrapolated.
+
+**S5.8 Refused optimization** (was S4.8). *list_jobs; optimize bare BK7 (no layers) for R ≤ 5 % at 550 nm;
+optimize S1.6's band-pass with method "annealing"; list_jobs again.*
+Check: both calls are refused with clear messages (needs a front layer; method must be refine, needle or
+step) and **no new job** appears in list_jobs.
+
+**S5.9 Long stack description** (was S4.9). *describe_design of (HL)^60 H at 800 nm.*
+Reference: 121 layers, total 13 575.572 nm. Check: the layer table is there but the normalized design JSON is
+replaced by a design_note; describing (HL)^2 at 550 nm (4 layers) still returns the design JSON.
+
+**S5.10 Misses between grid points** (was S4.10). *Evaluate (HL)^4 HH (LH)^4 at 532 nm (TiO2/SiO2, BK7) against
+T ≤ 5 % from 500 to 560 nm in 5 nm steps. Then rerun S4.10 (needle, (HL)^20 H start, R ≥ 99.9 % over
+600–1000 nm, step 5, time_limit 2 s).*
+Reference: not met; worst T on the grid **0.335966 at 530 nm**; a **warning** that between the grid points
+the worst is **0.859767 at 532.5 nm**. For the S4.10 rerun: if the plot shows a dip between grid points, the
+result carries the same kind of warning (the exact values depend on how far 2 s gets).
+
+**S5.11 Cancel accounting** (was S4.11). *Campaign of 80 starts: R ≤ 0.2 % from 400 to 900 nm in 1 nm steps on
+BK7, TiO2/SiO2 random starts, needle, max_layers 40, time_limit 60. Cancel right after the first job_status;
+get_results at once, after about 75 s and after about 3 minutes; then cancel again.*
+Check: cancel_job reports tasks_done + tasks_still_running + tasks_cancelled = **80**; the rows returned later
+never exceed tasks_done + tasks_still_running (queued tasks no longer run); partial rows carry provisional
+ranks 1, 2, 3, ...; the second cancel says the job is already cancelled and cancels nothing. Also cancel a
+job that has already finished (e.g. S5.4's): it stays done.
+
+**S5.12 Ranking of zero merits** (was S4.14). *Campaign: two-layer V-coat R ≤ 0.05 % at 1064 nm on FusedSilica,
+TiO2/SiO2, 12 random starts of 2–4 layers, needle, max_layers 6.*
+Check: among designs that meet the target with merit below 1e-9, fewer layers rank first, then the thinner
+total; a design stopped by max_layers below the limit is explained (a needle adds 2 layers).
+
+**S5.13 Spot check: laser mirror** (S1.5). *R and OD at 1064 nm and the R > 99.9 % band of S1.5's mirror.*
+Reference: R = 99.99955 %, OD = 5.35, band 957–1197 nm.
+
+**S5.14 Spot check: dispersive mirror** (S2.9). *As S2.9: compute the start's GDD at 760 and 840 nm (5 nm steps
+or finer), then optimize towards GDD −20 ± 5 fs² with R ≥ 99.5 %, s-polarized.*
+Check: start about +4 fs² at 760 nm and −4 fs² at 840 nm; the optimizer moves the GDD towards −20 fs²; if the
+result fails its targets, any between-grid warning is consistent with its plot.
+
+**S5.15 Spot check: AR campaign with yield** (S2.1). *As S2.1: R ≤ 0.5 % from 430 to 670 nm on BK7, TiO2/SiO2,
+at most 6 layers, min_thickness 10, campaign with a yield stage.*
+Check: ranking by yield; designs respect 6 layers and 10 nm; "met" agrees with the worst R; duplicates marked.
