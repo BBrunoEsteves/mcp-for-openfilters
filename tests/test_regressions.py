@@ -118,7 +118,8 @@ def test_tiny_violation_is_not_rounded_to_zero():
     engine.add_material("AT_S", "constant", n=1.52)
     d = {"substrate": "AT_S", "center_wavelength": 550, "layers": [{"material": "AT_A", "qwot": 1}]}
     r = ((1.52 - 1.38 ** 2) / (1.52 + 1.38 ** 2)) ** 2
-    row = engine.evaluate(d, [{"kind": "R", "wavelength": 550, "value": r - 8e-8, "inequality": "<="}])["targets"][0]
+    row = engine.evaluate(d, [{"kind": "R", "wavelength": 550, "value": r - 8e-8, "inequality": "<=",
+                               "tolerance": 1e-4}])["targets"][0]  # slack 1e-4 x tolerance = 1e-8
     assert row["pass_fraction"] == 0 and row["max_abs_deviation"] == pytest.approx(8e-8, rel=1e-3)
 
 

@@ -156,7 +156,8 @@ async def targets_plot(designs, targets, title, name):
     lo = min(t.get("from", t.get("wavelength", 1e9)) for t in photometric)
     hi = max(t.get("to", t.get("wavelength", 0)) for t in photometric)
     margin = max(0.15 * (hi - lo), 20.0)
-    wavelengths = {"from": max(lo - margin, 200.0), "to": hi + margin, "step": max((hi - lo + 2 * margin) / 600, 0.25)}
+    # Fine enough to show narrow dips between target grid points (the between-points check uses a 4x grid).
+    wavelengths = {"from": max(lo - margin, 200.0), "to": hi + margin, "step": max((hi - lo + 2 * margin) / 2000, 0.05)}
     combos = []
     for t in photometric:
         key = (float(t.get("angle", 0.0)), str(t.get("polarization", "unpolarized")))
@@ -550,7 +551,7 @@ async def compute_monitoring_curves(design: Design, wavelengths: list[float], an
         for b in r["layer_boundaries_nm"]:
             j = min(range(len(r["deposited_thickness_nm"])), key=lambda k: abs(r["deposited_thickness_nm"][k] - b))
             ends[w].append(sig(values[j]))  # high reflectors end near T = 1e-6
-    out = {"mode": mode, "signal_at_layer_ends": ends, "layer_boundaries_nm": r["layer_boundaries_nm"],
+    out = {"mode": mode, "signal_at_layer_ends": ends, "layer_boundaries_nm": [round(b, 3) for b in r["layer_boundaries_nm"]],
            "includes_backside": r["includes_backside"]}
     if plot:
         png = plotting.curves(r["deposited_thickness_nm"], r["signal"], f"{mode.title()} monitoring",

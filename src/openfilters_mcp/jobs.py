@@ -49,7 +49,7 @@ def result_row(index, op, result):
         row.update(r["metrics"])
     elif op in ("optimize", "evaluate"):
         for key in ("merit_chi2", "all_targets_met", "nb_layers", "total_thickness_nm", "iterations",
-                    "stop_reason", "elapsed_s", "initial_chi2"):
+                    "stop_reason", "elapsed_s", "initial_chi2", "error_detail"):
             if key in r:
                 row[key] = r[key]
     elif op == "tolerance":
@@ -258,6 +258,8 @@ class JobManager:
         if job["status"] == "running" and finished:
             rate = finished / max(time.time() - job.get("stage_started", job["created"]), 1e-6)
             info["eta_s"] = round((end - start - finished) / rate, 1)
+        if len(job["stages"]) > 1:  # e.g. a campaign's yield stage: the counts above are for this stage
+            info["earlier_stages"] = [f"{e - b} {o} tasks" for b, e, o in job["stages"][:-1]]
         if job.get("error"):
             info["error"] = job["error"]
         if job["status"] == "done":
@@ -425,7 +427,9 @@ def same_design(a, b, chi2_a=None, chi2_b=None):
 
 
 def distinct_top(manager, job, rows, n):
-    """The first n rows (already ranked) with distinct designs; a repeat of a kept design gets duplicate_of."""
+    """The first n rows (already ranked) with distinct designs. Every repeat of an earlier distinct design
+    gets duplicate_of, also beyond the first n (scenario S5.12: two identical rows outside the top were
+    left unmarked)."""
     top, kept = [], []
     for row in rows:
         if "error" in row:
@@ -435,8 +439,9 @@ def distinct_top(manager, job, rows, n):
                          if same_design(design, d, row.get("merit_chi2"), r.get("merit_chi2"))), None)
         if original is not None:
             row["duplicate_of"] = original["task"]
-        elif len(top) < n:
-            top.append(row)
+        else:
+            if len(top) < n:
+                top.append(row)
             kept.append((row, design))
     return top
 
@@ -480,7 +485,9 @@ def finalize_campaign(manager, job):
         outputs["project"] = path
         _write_json(os.path.join(job["folder"], "top_designs.json"), designs)
         outputs["designs_json"] = os.path.join(job["folder"], "top_designs.json")
-    for rank, row in enumerate(top):
+    # Every distinct design gets a rank; top_n only limits the designs saved and plotted.
+    distinct = top + [r for r in rows if r not in top and "error" not in r and "duplicate_of" not in r]
+    for rank, row in enumerate(distinct):
         row["rank"] = rank + 1
     summary = {"starts": len(rows), "met_all_targets": sum(1 for r in rows if r.get("all_targets_met")),
                "failed": sum(1 for r in rows if "error" in r),

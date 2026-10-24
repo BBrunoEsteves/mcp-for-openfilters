@@ -46,7 +46,7 @@ DESTRUCTIVE in server.py; required by Claude's directory, checked by tests/test_
 ## Status (2026-10-22)
 
 Done: Python 3 port validated (analytic + independent TMM, < 1e-9; needle derivatives vs finite differences),
-all optimizers working, 25 MCP tools + 5 prompts + 9 resources working end to end, 128 tests + 44 acceptance checks. Private GitHub repo
+all optimizers working, 25 MCP tools + 5 prompts + 9 resources working end to end, 134 tests + 44 acceptance checks. Private GitHub repo
 BBrunoEsteves/openfilters-mcp; CI compiles the C++ core and tests on Windows/macOS/Linux and builds wheels
 (cp310-cp314, runtime DLLs bundled). Compiled core is 15-30x faster than pure Python.
 Registered locally (user scope) in Claude Code and Claude Desktop, pointing at .venv/Scripts/openfilters-mcp.exe;
@@ -145,8 +145,15 @@ tasks_done/still_running/cancelled and leaves finished jobs alone; a job whose t
 optimize_design validates before creating a job; extrapolation warning names only the outside range;
 describe_design omits the JSON echo for formulas over 20 layers; partial campaign results get provisional
 ranks; max_layers explanation. Tests: tests/test_scenarios_batch4.py.
-NEXT (2026-10-24): the user runs docs/SCENARIO_TESTS.md Batch 5 (recheck of the Batch 3-4 fixes) in a fresh chat
-and pastes the report here; evaluate it as for the other batches. For each finding: verify it (reproduce; for OpenFilters behaviour check
+Scenario Batch 5: first run used a stale server (Claude Desktop not fully quit: check the openfilters-mcp.exe
+process start time against the last commit before evaluating). Rerun: 14/15 pass, S5.5 read-only save blocked by
+Claude's own classifier (covered by a unit test). Fixed: "met" slack = 1e-4 x tolerance (was 1e-9 x max(|goal|,1):
+too tight for R, and in s^2 it let ANY GDD inequality pass); GD/GDD spectra padded one step each end (OpenFilters
+copies the neighbour's derivative there); duplicate_of beyond top_n; every distinct campaign row ranked; error_detail
+in campaign rows; warnings for all-0-nm results, sub-nm layers without min_thickness, and misses within 1 % of the
+tolerance (suggest margin); target plots on a 2000-point grid; earlier_stages in job_status. Tests:
+tests/test_scenarios_batch5.py.
+NEXT: release prep (see Pending) and outside testers; tag v0.1.3 after 2026-11-01. For each finding: verify it (reproduce; for OpenFilters behaviour check
 third_party/openfilters_original and the pure-Python core before blaming OpenFilters), fix with a regression test,
 run pytest (compiled and OPENFILTERS_PURE_PYTHON=1), dev/acceptance.py and dev/e2e_client.py, then commit, and
 always end the turn by asking the user whether to push (they expect to be asked; never push without a yes). After the batches: tag v0.1.3 once GitHub Actions minutes reset (2026-11-01) or the repo is public.

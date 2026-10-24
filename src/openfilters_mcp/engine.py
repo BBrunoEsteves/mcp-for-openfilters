@@ -539,7 +539,14 @@ def spectra(design, quantities=("R", "T"), wavelengths=None, angles=(0.0,), pola
             reverse=False):
     """Return {"wavelengths": [...], "series": [{"quantity","angle","polarization","values"}]}."""
     wvls = _wavelength_list(wavelengths)
-    f = build_filter(design, wvls)
+    # OpenFilters takes GD/GDD at the first and last wavelength from the neighbouring point (no one-sided
+    # derivative), so a uniform grid gets one extra step at each end, computed and then dropped.
+    grid, pad = wvls, 0
+    if any(q in TIME_UNITS for q in quantities) and len(wvls) >= 3:
+        steps = np.diff(wvls)
+        if steps[0] > 0 and np.allclose(steps, steps[0], rtol=1e-6) and wvls[0] - steps[0] > 0:
+            grid, pad = [wvls[0] - float(steps[0])] + list(wvls) + [wvls[-1] + float(steps[0])], 1
+    f = build_filter(design, grid)
     warnings = material_warnings(design, wvls)
     if any(q in TIME_UNITS for q in quantities):
         # OpenFilters takes GD and GDD as numerical derivatives over the requested wavelengths:
@@ -560,7 +567,7 @@ def spectra(design, quantities=("R", "T"), wavelengths=None, angles=(0.0,), pola
                 raise EngineError("angles must be in [0, 90)")
             for pol in polarizations:
                 values = method(float(angle), polarization_value(pol))
-                values = np.array([values[i] for i in range(len(wvls))], dtype=float)
+                values = np.array([values[i] for i in range(pad, pad + len(wvls))], dtype=float)
                 if q == "OD":
                     values = -np.log10(np.maximum(values, 1e-300))
                 elif q in ("R", "T", "A") and values.min() > -1e-9:
@@ -800,7 +807,10 @@ def target_report(optimizer, specs):
     ineq = np.array(optimizer.all_inequalities)
     deviation = goal - calc
     # Satisfied inequalities do not contribute (as in OpenFilters).
-    slack = 1e-9 * np.maximum(np.abs(goal), 1.0)
+    # Convergence slack of 1e-4 of the tolerance, in the target's own units (1e-6 for R with the default
+    # tolerance 0.01): optima sit on the limit, and R = 0.5 % + 2e-8 is not a miss (scenarios S5.6, S5.12).
+    # (It was 1e-9 * max(|goal|, 1), which for GDD targets, in s^2 internally, let any value pass.)
+    slack = 1e-4 * np.abs(tol)
     ok_ineq = ((ineq < 0) & (calc <= goal + slack)) | ((ineq > 0) & (calc >= goal - slack))
     deviation[ok_ineq] = 0.0
     # An inequality ("R <= 0.2 %") is met only when it holds: its tolerance only weights the
@@ -1213,8 +1223,9 @@ STOP_REASONS = {
     "time_limit": "the time limit was reached; the best design so far is returned",
     "cycling": "the needle/step method kept returning to the same designs, so it was stopped; the best design "
                "seen is returned (normal near an optimum)",
-    "max_layers": "the needle method needed more layers than max_layers; the best design within the limit is returned "
-                  "(a needle splits a layer, adding 2 layers, so the result can stop 1 or 2 layers below the limit)",
+    "max_layers": "the needle method's next step would have exceeded max_layers; the best design within the limit is "
+                  "returned (each needle adds 2 layers and one step can insert several needles, so the result can "
+                  "stop several layers below the limit)",
     "max_total_thickness": "the design grew past max_total_thickness; the best design within the limit is returned",
     "min_thickness_not_reached": "not every layer could be brought to min_thickness in the time available",
     "numerical_error": "OpenFilters' optimizer failed numerically (all thicknesses NaN); the best finite design "
@@ -1360,11 +1371,23 @@ def optimize(design, target_specs, method="needle", options=None, progress=None)
     between = between_points_warning(current, target_specs, rows)
     if between:
         warnings.append(between)
+    thicknesses = [l["thickness"] for l in current["layers"] if not l.get("graded")]
+    if thicknesses and max(thicknesses) == 0:
+        warnings.append("every layer went to 0 nm: from this start the bare substrate was better than any "
+                        "coating the optimizer found; try another start")
+    elif not min_thickness and thicknesses and min(thicknesses) < 1.0:
+        warnings.append(f"the thinnest layer is {min(thicknesses):.3g} nm, below what can be deposited; pass "
+                        "options min_thickness (e.g. 5 nm) to keep layers manufacturable")
+    misses = [r["max_abs_deviation"] for r in rows if r["pass_fraction"] < 1]
+    tols = [float(t.get("tolerance", 0.01)) for t in target_specs]  # same units as max_abs_deviation
+    if misses and max(misses) <= 0.01 * min(tols):
+        warnings.append(f"the targets are missed only by up to {max(misses):.3g}: the optimum sits on the limits. "
+                        "Optimize with options margin (e.g. a tenth of the tolerance) to land inside them, which "
+                        "also raises the yield")
     if method == "step" and not all_pass and len(current["layers"]) <= len(design["layers"]):
         warnings.append(_no_steps_warning(current, cw))
     if time.time() >= deadline and stop not in ("max_layers", "max_total_thickness", "min_thickness_not_reached"):
         stop = "time_limit"
-    thicknesses = [l["thickness"] for l in current["layers"] if not l.get("graded")]
     current = dict(current, description=optimization_description(
         method, initial, final.get_chi_2(), all_pass, min_thickness, stop))
     return {"method": method, "initial_chi2": float(initial), "merit_chi2": float(final.get_chi_2()),
