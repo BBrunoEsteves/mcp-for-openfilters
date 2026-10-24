@@ -60,7 +60,8 @@ A target is a JSON object (used by evaluate/optimize/tolerance):
 Use ">=" / "<=" for specifications like "R > 99 %": such a target is met only where it holds (its tolerance,
 default 0.01, only weights the merit); an "equal" target is met within its tolerance. Phase/GD/GDD targets need
 s or p polarization.
-Color targets: {"kind": "R_color", "color_space": "L*a*b*", "values": [L, a, b], "tolerances": [1, 1, 1]}.
+Color targets: {"kind": "R_color", "color_space": "Lab", "values": [L, a, b], "tolerances": [1, 1, 1]}
+(color_space: Lab, XYZ, xyY, Luv, LChab or LChuv; illuminant and observer as in compute_color).
 
 Materials missing from list_materials: search_refractiveindex then import_refractiveindex_material (downloads
 public data from refractiveindex.info; prefer thin-film entries for coatings and give the user the references).
@@ -212,7 +213,7 @@ async def get_material_index(name: str, wavelengths: Wavelengths = None, plot: b
     wvls = engine._wavelength_list(wavelengths, default=(300.0, 2000.0, 50.0)) if wavelengths is not None \
         else engine._wavelength_list(None, default=(300.0, 2000.0, 50.0))
     N = await compute("material_N", name=name, wavelengths=wvls)
-    table = [[w, round(z.real, 5), round(-z.imag, 6)] for w, z in zip(wvls, N)]
+    table = [[w, round(float(z.real), 5), round(float(-z.imag), 6) + 0.0] for w, z in zip(wvls, N)]  # no -0.0
     out = {"material": name, "columns": ["wavelength_nm", "n", "k"], "rows": table}
     if plot:
         png = plotting.curves(wvls, {"n": [r[1] for r in table], "k": [r[2] for r in table]},
@@ -616,7 +617,7 @@ def _random_starts(spec, count, seed):
 async def run_optimization_campaign(targets: Targets,
                                     starts: Annotated[list[dict[str, Any]] | None, Field(description="Explicit starting designs.")] = None,
                                     random_starts: Annotated[dict[str, Any] | None, Field(description=(
-                                        'Generate starts: {"count": 50, "materials": ["Ta2O5", "SiO2"], "n_layers": [5, 25], '
+                                        'Generate starts: {"count": 50, "materials": ["TiO2", "SiO2"], "n_layers": [5, 25], '
                                         '"thickness": [20, 200], "substrate": "BK7", "seed": 1, ...other design keys}. '
                                         'n_layers only sizes the starting designs: the needle method adds layers, so '
                                         'limit the result with options max_layers.'))] = None,
@@ -730,9 +731,23 @@ async def cancel_job(job_id: str) -> dict:
 # OpenFilters project files
 # ---------------------------------------------------------------------------
 
+def _project_path(path):
+    """A relative path or bare name means the data folder's projects directory; .ofp is added if missing."""
+    if not os.path.isabs(path):
+        path = os.path.join(settings.projects_dir(), path)
+    if not path.lower().endswith(".ofp"):
+        path += ".ofp"
+    return path
+
+
 @mcp.tool(title="Load an OpenFilters project", annotations=READ)
 async def load_project(path: str) -> dict:
-    """Read an OpenFilters .ofp project: returns its designs (as design JSON) and targets."""
+    """Read an OpenFilters .ofp project: returns its designs (as design JSON) and targets.
+    A relative path or bare name (e.g. "my_ar") is looked up in the data folder's projects directory,
+    where save_project writes; give the full path for projects elsewhere."""
+    path = _project_path(path)
+    if not os.path.isfile(path):
+        raise ToolError(f"no project at {path}")
     return await compute("load_project", path=path)
 
 
@@ -747,10 +762,7 @@ async def save_project(path: str, designs: list[dict[str, Any]], targets: list[d
     Keep the fields optimize_design returns in each design (description, needle_materials, layer flags)
     and put anything else worth keeping (method, settings, yield) in comment or a design's description.
     A relative path is placed in the data folder's projects directory."""
-    if not os.path.isabs(path):
-        path = os.path.join(settings.projects_dir(), path)
-    if not path.lower().endswith(".ofp"):
-        path += ".ofp"
+    path = _project_path(path)
     result = {"path": await compute("save_project", path=path, designs=designs, target_specs=targets, comment=comment)}
     if not targets:
         result["warning"] = ("Saved without targets: in the OpenFilters GUI the Design/Optimize menu is disabled "
@@ -806,6 +818,8 @@ for _name in _example_names():
 # Prompts: ready-made design workflows (slash commands in Claude Code)
 # ---------------------------------------------------------------------------
 
+_MATERIALS = ("Check the materials with list_materials first; import any that is missing with search_refractiveindex "
+              "and import_refractiveindex_material (thin-film data preferred), and use the imported name.")
 _CLOSING = ("Report whether the targets are met, the layer list, the yield and the plot file paths; save the best "
             "designs with their targets using save_project so they open in the OpenFilters GUI.")
 
@@ -813,12 +827,12 @@ _CLOSING = ("Report whether the targets are met, the layer list, the yield and t
 @mcp.prompt(title="Design an antireflection coating")
 def design_antireflection(substrate: str = "BK7", from_nm: str = "420", to_nm: str = "680",
                           max_reflectance_percent: str = "0.5", max_angle_deg: str = "0",
-                          materials: str = "Ta2O5, SiO2", max_layers: str = "10") -> str:
+                          materials: str = "TiO2, SiO2", max_layers: str = "10") -> str:
     """Antireflection coating over a band, optimized from many starts and checked for yield."""
     return f"""Design an antireflection coating on {substrate} with the OpenFilters tools.
 Specification: R <= {max_reflectance_percent} % (unpolarized) from {from_nm} to {to_nm} nm, at angles 0 to {max_angle_deg} deg,
-at most {max_layers} layers; materials {materials} (check them with list_materials; if one is missing, find it with
-search_refractiveindex).
+at most {max_layers} layers; materials {materials}.
+{_MATERIALS}
 1. Write the targets: one R target with inequality "<=" over the band (step about 5 nm) for each angle needed
    (values as fractions; an inequality counts as met only when it holds at every point).
 2. Run run_optimization_campaign with about 40 random starts (random_starts n_layers [2, {max_layers}], the listed
@@ -830,11 +844,12 @@ search_refractiveindex).
 
 @mcp.prompt(title="Design a high reflector (mirror)")
 def design_mirror(wavelength_nm: str = "1064", min_reflectance_percent: str = "99.9", bandwidth_nm: str = "40",
-                  angle_deg: str = "0", substrate: str = "FusedSilica", materials: str = "Ta2O5, SiO2") -> str:
+                  angle_deg: str = "0", substrate: str = "FusedSilica", materials: str = "TiO2, SiO2") -> str:
     """Dielectric mirror: quarter-wave stack sized from theory, then refined; field and yield checked."""
     return f"""Design a dielectric mirror on {substrate} with the OpenFilters tools.
 Specification: R >= {min_reflectance_percent} % over {bandwidth_nm} nm centred on {wavelength_nm} nm at {angle_deg} deg;
 materials {materials} (H = high index, L = low index).
+{_MATERIALS}
 1. Start from the quarter-wave stack formula "(HL)^p H" at {wavelength_nm} nm and increase p until compute_spectrum
    reaches the reflectance (use the "OD" quantity when the blocking is very high).
 2. Write the R target (value as a fraction, inequality ">=") and refine with optimize_design (method "refine");
@@ -853,6 +868,7 @@ def design_edge_filter(pass_from_nm: str = "600", pass_to_nm: str = "800", min_t
 (at oblique incidence, write s and p targets separately).
 Specification: T >= {min_transmittance_percent} % from {pass_from_nm} to {pass_to_nm} nm and
 T <= {max_transmittance_percent} % from {block_from_nm} to {block_to_nm} nm; materials {materials}.
+{_MATERIALS}
 1. Write a T ">=" target for the pass band and a T "<=" target for the blocking band (or an OD ">=" target for
    deep blocking).
 2. Start from a quarter-wave stack centred in the blocking band with half-thickness end layers, for example
@@ -865,11 +881,12 @@ T <= {max_transmittance_percent} % from {block_from_nm} to {block_to_nm} nm; mat
 @mcp.prompt(title="Design a narrow band-pass filter")
 def design_bandpass(center_nm: str = "532", fwhm_nm: str = "10", min_peak_transmittance_percent: str = "90",
                     block_from_nm: str = "400", block_to_nm: str = "700", substrate: str = "FusedSilica",
-                    materials: str = "Ta2O5, SiO2") -> str:
+                    materials: str = "TiO2, SiO2") -> str:
     """Fabry-Perot band-pass: cavities and mirror pairs sized from theory, then optimized."""
     return f"""Design a narrow band-pass filter on {substrate} with the OpenFilters tools.
 Specification: peak T >= {min_peak_transmittance_percent} % at {center_nm} nm, FWHM about {fwhm_nm} nm, and T <= 1 %
 from {block_from_nm} to {block_to_nm} nm outside the pass band; materials {materials}.
+{_MATERIALS}
 1. Start from a single cavity "(HL)^p HH (LH)^p" at {center_nm} nm and choose p from the FWHM with compute_spectrum
    (more pairs give a narrower band); join two or three cavities with an L layer for steeper edges.
 2. Write targets (T ">=" at the pass-band centre, T "<=" in the stop bands on either side) and refine with

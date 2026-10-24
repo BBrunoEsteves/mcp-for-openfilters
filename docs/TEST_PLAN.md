@@ -17,13 +17,13 @@ Run both before each release and after any change to the server.
 
 It uses a temporary data folder (your materials, jobs and projects are not touched) and the same
 `openfilters-mcp.exe` that Claude Desktop runs. `--offline` skips the two refractiveindex.info checks.
-Expected: `42 passed, 0 failed`, in about 20 s. The unit tests (`.venv/Scripts/python -m pytest tests -q`)
+Expected: `44 passed, 0 failed`, in about 20 s. The unit tests (`.venv/Scripts/python -m pytest tests -q`)
 cover the engine in more depth.
 
 ## 2. Chat tests in Claude Desktop
 
-**Before starting:** fully quit Claude Desktop (system tray → Quit) and reopen it, then open a new chat.
-Paste each request as written. Tick the box when every point under *Pass if* holds; otherwise note what
+**Before starting:** fully quit Claude Desktop (system tray → Quit) and reopen it, then open a new chat
+and do A2 yourself (Claude's safety check may block a deletion it did not start). Paste each request as written. Tick the box when every point under *Pass if* holds; otherwise note what
 Claude replied. Exact numbers come from closed-form results with test materials of fixed index, so they
 do not depend on your material library.
 
@@ -64,6 +64,12 @@ do not depend on your material library.
 
 ### D. Optimization
 
+- [ ] **C2.** *"Does the B2 mirror meet R ≥ 99.9 % from 540 to 560 nm? Give the worst value and where."*
+  Pass if: **not met**; the result shows `worst_value` (about 99.6 %) and `worst_at_nm` (540 or 560).
+- [ ] **C3. Colour target.** *"How far is the B2 mirror's reflected colour at 0° from L\*a\*b\* = (90, −10,
+  40)? Use a colour target."*
+  Pass if: evaluate_design accepts the colour target and reports its merit contribution (no "unknown keyword").
+
 - [ ] **D1. Refinement.** *"On BK7, take TiO2 30 nm / SiO2 100 nm and refine it for R ≤ 0.5 % from 450 to
   650 nm at normal incidence."*
   Pass if: χ² decreases; the answer says whether the target is met and shows the worst R; plot paths given.
@@ -80,7 +86,7 @@ do not depend on your material library.
 ### E. Campaigns, yield and sweeps
 
 - [ ] **E1. Campaign.** Use the **+** menu → *Design an antireflection coating* with substrate BK7,
-  420–680 nm, R ≤ 0.5 %, materials Ta2O5 and SiO2, max layers 8.
+  420–680 nm, R ≤ 0.5 %, materials TiO2 and SiO2 (the defaults), max layers 8.
   Pass if: the campaign runs in the background (Claude polls it); results are ranked; **no design has NaN
   thicknesses**; none has more than 8 layers; yields are below 100 % unless the margin is large; a project
   is saved with its targets.
@@ -95,7 +101,8 @@ do not depend on your material library.
 - [ ] **F1.** *"Find thin-film HfO2 data on refractiveindex.info and import the best entry covering 300–1500
   nm."*
   Pass if: a list with authors, years and ranges; an imported material named like `HfO2_Franta`; references
-  given.
+  given. (If it says the material already exists from an earlier run, Claude should import again with
+  overwrite.)
 - [ ] **F2.** *"Import Malitson's fused silica and give n at 587.6 nm."*
   Pass if: n = **1.4585**.
 
@@ -104,7 +111,7 @@ do not depend on your material library.
 - [ ] **G1.** *"Save the D2 design and its targets as a project called test_plan_ar."*
   Pass if: an `.ofp` path in the data folder's `projects`. If OpenFilters is installed, open the file:
   the design and targets appear, and the Design/Optimize menu is enabled.
-- [ ] **G2.** *"Load test_plan_ar.ofp and describe it."*
+- [ ] **G2.** *"Load the project test_plan_ar and describe it."*
   Pass if: same layers and targets as saved.
 
 ### H. Prompts and resources (Claude Desktop menus)
@@ -121,18 +128,36 @@ do not depend on your material library.
 ### I. Errors
 
 - [ ] **I1.** *"Compute the spectrum of 100 nm of Unobtainium on BK7."*
-  Pass if: a clear "unknown material" message and a suggestion (e.g. list_materials or refractiveindex.info).
-- [ ] **I2.** *"Remove the material BK7."*
-  Pass if: refused: built-in materials cannot be removed.
+  Pass if: a clear "Material does not exist" message from the tool that itself suggests list_materials and
+  refractiveindex.info.
+- [ ] **I2. (Do this one yourself.)** *"Remove the material BK7."* A chat running the plan on its own may be
+  stopped by Claude's safety check before the request reaches the connector; approve it if asked.
+  Pass if: the connector refuses: built-in materials cannot be removed.
 
 ### J. Clean-up
 
-- [ ] **J1.** *"Remove my materials TST_S, TST_A, TST_H and TST_L."* Pass if: all four removed.
+- [ ] **J1.** *"Remove my materials TST_S, TST_A, TST_H, TST_L, HfO2_Franta and SiO2_Malitson."*
+  Pass if: all six removed (the last two were imported in F1 and F2; keep them if you want them).
 
 ### K. Claude Code (optional)
 
 - [ ] **K1.** In Claude Code, type `/` and look for `mcp__openfilters__design_mirror` and the other four
   workflows; run one. Pass if: it runs like H3.
+
+## Running the plan with a Claude chat
+
+A Claude Desktop chat can run sections A–G, I and J itself; do H, K, I2 and the GUI half of G1 yourself.
+Do A2 first, use two chats (A–D, then E–J) so a long run does not fill one conversation, attach this file
+and paste:
+
+> You are testing the OpenFilters connector. Work through sections A to D of this test plan in order (skip
+> H and K). For each test: run the request exactly as written, using the openfilters tools, then report the
+> test ID, PASS or FAIL against its "Pass if" line, and the evidence: the actual values, the tool(s) you
+> called, and for any FAIL the full tool result. Do not fix or retry failures beyond what the request asks;
+> just report them. End with a summary table.
+
+(For the second chat, write "E to J".) Review its reports critically: a model checking its own work can be
+generous, which is why the evidence matters more than the verdict.
 
 ## Recording results
 

@@ -29,7 +29,7 @@ Montréal.*
 Example requests to Claude:
 
 * *"Design a dichroic on BK7 with R > 99 % at 532 and 1064 nm and T > 90 % at 633 nm for 0–20°,
-  at most 40 layers of Ta2O5/SiO2. Run 100 needle optimizations from random starts and rank the
+  at most 40 layers of TiO2/SiO2. Run 100 needle optimizations from random starts and rank the
   best 10 by yield at ±1 % thickness error."*
 * *"Add my ALD Al2O3 from this ellipsometry file and sweep the AR coating thickness ±10 %."*
 * *"Find thin-film HfO2 data on refractiveindex.info, import it and redo the mirror with it."*

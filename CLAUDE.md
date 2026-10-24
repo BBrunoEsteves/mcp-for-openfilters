@@ -30,7 +30,7 @@ runs in parallel worker processes, results go to disk, tools return compact summ
 - Tests: `.venv/Scripts/python -m pytest tests -q`
 - End-to-end: `.venv/Scripts/python dev/e2e_client.py`
 - Acceptance (every tool/prompt/resource vs known answers, via the installed exe, temp data folder):
-  `.venv/Scripts/python dev/acceptance.py` (42 checks); manual chat tests: `docs/TEST_PLAN.md`. Run both before a release.
+  `.venv/Scripts/python dev/acceptance.py` (44 checks); manual chat tests: `docs/TEST_PLAN.md`. Run both before a release.
 - After a version bump or a tool change: `.venv/Scripts/python dev/sync_packaging.py`
 - Fast C++ core without a local compiler: `.venv/Scripts/python dev/fetch_compiled.py` (downloads what GitHub Actions
   compiled; rerun after changing C++ code or after regenerating the core). With a compiler: `python setup.py build_ext --inplace`.
@@ -45,7 +45,7 @@ DESTRUCTIVE in server.py; required by Claude's directory, checked by tests/test_
 ## Status (2026-10-22)
 
 Done: Python 3 port validated (analytic + independent TMM, < 1e-9; needle derivatives vs finite differences),
-all optimizers working, 25 MCP tools + 5 prompts + 9 resources working end to end, 83 tests + 42 acceptance checks. Private GitHub repo
+all optimizers working, 25 MCP tools + 5 prompts + 9 resources working end to end, 91 tests + 44 acceptance checks. Private GitHub repo
 BBrunoEsteves/openfilters-mcp; CI compiles the C++ core and tests on Windows/macOS/Linux and builds wheels
 (cp310-cp314, runtime DLLs bundled). Compiled core is 15-30x faster than pure Python.
 Registered locally (user scope) in Claude Code and Claude Desktop, pointing at .venv/Scripts/openfilters-mcp.exe;
@@ -94,6 +94,10 @@ files identical, wrappers only mechanical Python 3 C-API changes.
 NaN check verified 2026-10-24: pure-Python and C++ solvers both produce an all-NaN trial step at the same call
 (#1525 of campaign task 6), so it is OpenFilters' own; the Python one then loops forever, the C++ one returns NaN.
 JSON turns NaN into null: build_filter refuses non-numeric thickness/qwot/index with a clear message.
+Chat test run 2026-10-24 (two Claude chats, TEST_PLAN A-J) found: workflow defaults used Ta2O5 (not built in;
+OpenFilters ships TiO2, SiO2, SiN, metals, ...), load_project did not resolve names, colour targets wrote the
+keyword "L*a*b*" (OpenFilters expects Lab/XYZ/xyY/Luv/LChab/LChuv); all fixed with tests. Claude Desktop's own
+safety check blocks a chat from deleting materials it did not create (A2/I2 are done by the user).
 Version 0.1.3 set locally 2026-10-24 (not tagged: Actions minutes exhausted until 2026-11-01).
 Output schemas deliberately not added (Claude reads the text; plots can't be described; drift would break tools).
 Private-repo CI minutes cost 10x on macOS and 2x on Windows; they reset monthly (next

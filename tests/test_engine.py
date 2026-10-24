@@ -340,3 +340,32 @@ def test_remove_material_restores_the_built_in_one():
         engine.remove_material("TiO2")  # only the user's copy can be removed
     with pytest.raises(engine.EngineError):
         engine.remove_material("../evil")
+
+
+def test_worst_value_and_wavelength_per_target():
+    d = {"substrate": "BK7", "center_wavelength": 550,
+         "layers": [{"material": "TiO2", "thickness": 20}, {"material": "SiO2", "thickness": 100}]}
+    targets = [{"kind": "R", "from": 450, "to": 650, "step": 5, "value": 0.005, "inequality": "<="},
+               {"kind": "T", "wavelength": 550, "value": 0.99, "inequality": ">="}]
+    rows = engine.evaluate(d, targets)["targets"]
+    r = engine.spectra(d, ["R"], list(range(450, 651, 5)))["series"][0]["values"]
+    assert rows[0]["worst_value"] == pytest.approx(max(r), rel=1e-5)
+    assert rows[0]["worst_at_nm"] == 450 + 5 * int(np.argmax(r))
+    assert rows[1]["worst_at_nm"] == 550
+
+
+@pytest.mark.parametrize("space", ["Lab", "L*a*b*", "XYZ", "LCh"])
+def test_color_targets_evaluate_and_round_trip(space, tmp_path):
+    d = {"substrate": "BK7", "layers": [{"material": "TiO2", "thickness": 120}]}
+    target = {"kind": "R_color", "color_space": space, "values": [30, 10, -20], "tolerances": [1, 1, 1]}
+    result = engine.evaluate(d, [target])
+    assert result["targets"][0]["points"] == 3 and "worst_value" not in result["targets"][0]
+    path = str(tmp_path / "color.ofp")
+    engine.save_project(path, [d], [target])
+    loaded = engine.load_project(path)["targets"][0]
+    assert loaded["kind"] == "R_color" and loaded["values"] == pytest.approx([30, 10, -20])
+
+
+def test_unknown_material_error_suggests_refractiveindex():
+    with pytest.raises(engine.EngineError, match="search_refractiveindex"):
+        engine.spectra({"substrate": "BK7", "layers": [{"material": "Unobtainium", "thickness": 10}]}, ["R"], [550])

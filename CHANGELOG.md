@@ -3,6 +3,13 @@
 ## 0.1.3 — 2026-10-24
 
 - `remove_material` tool.
+- Results give each target's worst value and where it occurs (`worst_value`, `worst_at_nm`).
+- Fix: colour targets were rejected ("unknown keyword L*a*b*"); colour spaces now accept Lab/L*a*b*, XYZ, xyY,
+  Luv, LCh(ab)/LChuv.
+- Fix: the workflows defaulted to Ta2O5, which OpenFilters does not ship; they now default to TiO2/SiO2 and tell
+  Claude to import missing materials from refractiveindex.info.
+- Fix: `load_project` now finds projects by the name they were saved under (like `save_project`).
+- Unknown-material errors suggest list_materials and refractiveindex.info; k is no longer shown as -0.0.
 - Acceptance test (`dev/acceptance.py`, 42 checks against known answers) and a chat test plan
   (`docs/TEST_PLAN.md`).
 - Fix: a null thickness (how JSON carries NaN) crashed the tool instead of giving a clear message.

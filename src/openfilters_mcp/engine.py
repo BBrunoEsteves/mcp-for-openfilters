@@ -74,7 +74,8 @@ def _material(name):
     try:
         return catalog().get_material(name)
     except of_materials.material_error as error:
-        raise EngineError(f"Unknown material '{name}'. Use list_materials to see what is available.") from error
+        raise EngineError(f"Unknown material '{name}'. Use list_materials to see what is available, or "
+                          "search_refractiveindex and import_refractiveindex_material to add it.") from error
 
 
 def material_N(name, wavelengths):
@@ -101,7 +102,8 @@ def list_materials(name_filter=None, wavelengths=(400.0, 550.0, 800.0, 1550.0)):
                "description": material.get_description()}
         if not material.is_mixture():
             N = material_N(name, wavelengths)
-            row["n,k"] = {f"{w:g}": [round(z.real, 4), round(-z.imag, 5)] for w, z in zip(wavelengths, N)}
+            row["n,k"] = {f"{w:g}": [round(float(z.real), 4), round(float(-z.imag), 5) + 0.0]
+                          for w, z in zip(wavelengths, N)}
         else:
             row["index_range_at_550"] = [round(x, 4) for x in material.get_index_range(550.0)]
         rows.append(row)
@@ -264,6 +266,9 @@ def build_filter(design, wavelengths=None):
                 f.apply_stack_formula(side)
             for i, layer in enumerate(design.get(key) or []):
                 _add_layer(f, layer, side, i)
+    except of_materials.material_does_not_exist_error as error:
+        raise EngineError(f"{str(error).rstrip('.')}. Use list_materials to see what is available, or search_refractiveindex and "
+                          "import_refractiveindex_material to add it from the refractiveindex.info database.") from error
     except (optical_filter.filter_error, of_materials.material_error) as error:
         raise EngineError(str(error)) from error
     return f
@@ -565,7 +570,7 @@ def target_lines(spec):
             raise EngineError("color targets need values [3 numbers] in color_space (default Lab)")
         lines += [f"Kind: {discrete}", f"Angle: {angle}", f"Polarization: {pol}",
                   f"Illuminant: {spec.get('illuminant', 'CIE-D65')}", f"Observer: {spec.get('observer', 'CIE-1931')}",
-                  f"{spec.get('color_space', 'L*a*b*')}: {values[0]} {values[1]} {values[2]}",
+                  f"{_color_space(spec.get('color_space', 'Lab'))}: {values[0]} {values[1]} {values[2]}",
                   f"Tolerances: {tolerances[0]} {tolerances[1]} {tolerances[2]}"]
     elif "wavelength" in spec:
         lines += [f"Kind: {discrete}", f"Angle: {angle}", f"Polarization: {pol}",
@@ -595,6 +600,19 @@ def target_lines(spec):
     if inequality:
         lines.append(f"Inequality: {inequality}")
     return lines
+
+
+# OpenFilters' keywords for colour spaces, with the usual spellings accepted.
+_COLOR_SPACE_ALIASES = {"lab": "Lab", "l*a*b*": "Lab", "cielab": "Lab", "xyz": "XYZ", "xyy": "xyY",
+                        "luv": "Luv", "l*u*v*": "Luv", "cieluv": "Luv", "lch": "LChab", "lchab": "LChab",
+                        "lch(ab)": "LChab", "lchuv": "LChuv", "lch(uv)": "LChuv"}
+
+
+def _color_space(name):
+    key = _COLOR_SPACE_ALIASES.get(str(name).strip().lower())
+    if key is None:
+        raise EngineError(f"color_space must be one of {', '.join(of_targets.COLOR_SPACE_NAMES.values())} (got {name!r})")
+    return key
 
 
 def build_targets(specs):
@@ -645,11 +663,26 @@ def target_report(optimizer, specs):
     for i, spec in enumerate(specs):
         sl = slice(starts[i], starts[i + 1])
         d = deviation[sl]
-        rows.append({"target": i, "kind": spec.get("kind"), "points": int(d.size),
-                     "pass_fraction": round(float(np.mean(passed[sl])), 4),
-                     "max_abs_deviation": round(float(np.max(np.abs(d))), 6),
-                     "chi2_contribution": round(float(np.sum((d / tol[sl]) ** 2)), 6)})
+        row = {"target": i, "kind": spec.get("kind"), "points": int(d.size),
+               "pass_fraction": round(float(np.mean(passed[sl])), 4),
+               "max_abs_deviation": round(float(np.max(np.abs(d))), 6),
+               "chi2_contribution": round(float(np.sum((d / tol[sl]) ** 2)), 6)}
+        # The value furthest on the wrong side: the highest for "<=", the lowest for ">=",
+        # the furthest from the goal for "equal" (e.g. "worst R = 1.08 % at 420 nm").
+        # Colour targets (3 coordinates, no wavelength per point) have no single worst value.
+        values, kind = calc[sl], ineq[starts[i]]
+        wvls = optimizer.wvls[i] if i < len(optimizer.wvls) else None
+        if values.size and np.all(np.isfinite(values)) and wvls is not None and len(wvls) == values.size:
+            j = int(np.argmax(values) if kind < 0 else np.argmin(values) if kind > 0 else np.argmax(np.abs(goal[sl] - values)))
+            row["worst_value"] = sig(values[j])
+            row["worst_at_nm"] = round(float(wvls[j]), 3)
+        rows.append(row)
     return rows, bool(np.all(passed))
+
+
+def sig(value, digits=6):
+    """Round to significant figures, so tiny values (deep blocking) are not reported as 0."""
+    return float(f"{float(value):.{digits}g}")
 
 
 def evaluate(design, target_specs):

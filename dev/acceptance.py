@@ -159,6 +159,12 @@ async def run(c, k, offline):
     ev, _ = await c.ok("evaluate_design", {"design": AR, "targets": near, "plot": False})
     k.check("evaluate_design: R 1.26 % does not meet R <= 1.25 % (inequalities are strict)",
             ev["all_targets_met"] is False and ev["merit_chi2"] > 0)
+    row = ev["targets"][0]
+    k.check("evaluate_design: reports the worst value and where", abs(row.get("worst_value", 0) - R_AR) < 1e-6
+            and row.get("worst_at_nm") == W0, f"{row.get('worst_value')} at {row.get('worst_at_nm')} nm")
+    ev, _ = await c.ok("evaluate_design", {"design": MIRROR, "plot": False, "targets": [
+        {"kind": "R_color", "color_space": "L*a*b*", "values": [90, -10, 40], "tolerances": [1, 1, 1]}]})
+    k.check("evaluate_design: colour target (L*a*b*) evaluates", ev["targets"][0]["points"] == 3)
     ev, images = await c.ok("evaluate_design", {"design": AR, "targets": [dict(near[0], value=0.013)]})
     k.check("evaluate_design: R 1.26 % meets R <= 1.3 %, with a plot", ev["all_targets_met"] is True and images >= 0)
     # NaN cannot travel in JSON: it arrives as null, which must be refused, not crash the tool.
@@ -167,7 +173,8 @@ async def run(c, k, offline):
     k.check("evaluate_design: NaN/null thickness refused with a clear message",
             error is not None and "invalid thickness" in error, error or "")
     _, _, error = await c.call("describe_design", {"design": design([("Unobtainium", 1)])})
-    k.check("describe_design: unknown material gives a clear error", error is not None and "Unknown material" in error)
+    k.check("describe_design: unknown material error suggests refractiveindex.info",
+            error is not None and "search_refractiveindex" in error, error or "")
     sens, _ = await c.ok("layer_sensitivity", {"design": MIRROR, "targets": [
         {"kind": "R", "from": 520, "to": 580, "step": 5, "value": 0.999, "inequality": ">="}]})
     k.check("layer_sensitivity: one row per layer", len(json.dumps(sens)) > 0 and str(13) in json.dumps(sens))
@@ -247,8 +254,8 @@ async def run(c, k, offline):
 
     # --- projects --------------------------------------------------------------------
     saved, _ = await c.ok("save_project", {"path": "acceptance_test", "designs": [AR, MIRROR], "targets": AR_TARGETS})
-    loaded, _ = await c.ok("load_project", {"path": saved["path"]})
-    k.check("save_project + load_project: designs and targets round-trip",
+    loaded, _ = await c.ok("load_project", {"path": "acceptance_test"})  # by name, as saved
+    k.check("save_project + load_project (by name): designs and targets round-trip",
             len(loaded["designs"]) == 2 and len(loaded["targets"]) == len(AR_TARGETS))
     saved, _ = await c.ok("save_project", {"path": "acceptance_no_targets", "designs": [AR]})
     k.check("save_project: warns when saved without targets", "warning" in saved)
