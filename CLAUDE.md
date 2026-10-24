@@ -140,8 +140,8 @@ with n_layers near max_layers. Tests: tests/test_scenarios_batch3.py.
 NEXT (2026-10-24): the user runs docs/SCENARIO_TESTS.md Batch 4, each in a fresh Claude Desktop chat,
 and pastes the reports here for evaluation. For each finding: verify it (reproduce; for OpenFilters behaviour check
 third_party/openfilters_original and the pure-Python core before blaming OpenFilters), fix with a regression test,
-run pytest (compiled and OPENFILTERS_PURE_PYTHON=1), dev/acceptance.py and dev/e2e_client.py, then commit; push only
-when the user says so. After the batches: tag v0.1.3 once GitHub Actions minutes reset (2026-11-01) or the repo is public.
+run pytest (compiled and OPENFILTERS_PURE_PYTHON=1), dev/acceptance.py and dev/e2e_client.py, then commit, and
+always end the turn by asking the user whether to push (they expect to be asked; never push without a yes). After the batches: tag v0.1.3 once GitHub Actions minutes reset (2026-11-01) or the repo is public.
 Version 0.1.3 set locally 2026-10-24 (not tagged: Actions minutes exhausted until 2026-11-01).
 Output schemas deliberately not added (Claude reads the text; plots can't be described; drift would break tools).
 Private-repo CI minutes cost 10x on macOS and 2x on Windows; they reset monthly (next
