@@ -362,9 +362,15 @@ def _read_table_file(path):
 @mcp.tool(title="Describe a design", annotations=READ)
 async def describe_design(design: Design, plot_index_profile: bool = False):
     """Validate a design and list its layers (thickness, index and QWOT at the center wavelength),
-    total thickness and the normalized design JSON (e.g. a formula expanded into layers). Two-sided
+    total thickness and the normalized design JSON (e.g. a formula expanded into layers; omitted for
+    formulas of more than 20 layers, which can be passed as they are). Two-sided
     designs also list back_layers (with a warning if consider_backside is false)."""
     out = await compute("describe", design=design)
+    if (design.get("formula") or design.get("back_formula")) and out["nb_layers"] + out.get("nb_back_layers", 0) > 20:
+        # Hundreds of near-identical entries repeating the layer table (scenario S4.9).
+        del out["design"]
+        out["design_note"] = ("normalized design JSON omitted for this long stack: pass the formula itself to "
+                              "every tool; the layers above give each layer's thickness")
     if plot_index_profile:
         return with_plots(out, plotting.index_profile(out["layers"]), "index_profile")
     return out
@@ -629,12 +635,17 @@ async def optimize_design(design: Design, targets: Targets, method: str = "needl
     hard specifications use run_optimization_campaign (many starts). Only FRONT layers are optimized;
     back_layers (if any) stay fixed and count in the merit when consider_backside is true."""
     checked(engine.build_targets, targets)
+    if method not in engine.METHODS:
+        raise ToolError(f"method must be one of {', '.join(engine.METHODS)}")
+    if not (await compute("describe", design=design))["nb_layers"]:
+        raise ToolError("optimization needs at least one front layer to start from (e.g. a thin layer of one "
+                        "of the coating materials); back layers are never optimized")
     job_id = manager().submit("optimize", [{"op": "optimize", "params": {"method": method},
                                             "args": {"design": design, "target_specs": targets,
                                                      "method": method, "options": options}}],
                               meta={"design": design, "targets": targets}, label=f"optimize ({method})")
     out = await _wait(job_id, wait_seconds, ctx)
-    if out.get("status") == "done":
+    if out.get("status") in ("done", "failed"):
         r = manager().result(job_id, 0)
         if not r.get("ok"):
             raise ToolError(r.get("error"))
@@ -840,7 +851,8 @@ async def get_results(job_id: str, top_n: int = 10, sort_by: str | None = None, 
 
 @mcp.tool(title="Cancel a job", annotations=DESTRUCTIVE)
 async def cancel_job(job_id: str) -> dict:
-    """Cancel the pending tasks of a background job."""
+    """Cancel the pending tasks of a running background job. Reports tasks_done, tasks_still_running
+    (they finish on their own) and tasks_cancelled (never started); a finished job is left as it is."""
     return checked(manager().cancel, job_id)
 
 

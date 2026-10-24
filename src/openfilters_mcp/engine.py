@@ -487,7 +487,8 @@ def material_warnings(design, wavelengths):
             continue
         data = getattr(material, "wvls", None)
         if data is not None and len(data) and (lo < data[0] * (1 - 1e-6) or hi > data[-1] * (1 + 1e-6)):
-            warnings.append(f"{name}: its data cover {data[0]:g}-{data[-1]:g} nm; values at {lo:g}-{hi:g} nm "
+            outside = ([f"{lo:g}-{data[0]:g} nm"] if lo < data[0] * (1 - 1e-6) else []) +                       ([f"{data[-1]:g}-{hi:g} nm"] if hi > data[-1] * (1 + 1e-6) else [])
+            warnings.append(f"{name}: its data cover {data[0]:g}-{data[-1]:g} nm; values at {' and '.join(outside)} "
                             "are extrapolated and may be wrong")
         N = material_N(name, grid)
         bad = [(w, z) for w, z in zip(grid, N) if not (np.isfinite(z.real) and np.isfinite(z.imag)) or z.real <= 0]
@@ -865,9 +866,11 @@ def with_margin(target_specs, margin):
     return out
 
 
-def between_points_warning(design, target_specs, refine=4):
+def between_points_warning(design, target_specs, grid_rows=None, refine=4):
     """Optima sit on the limits, so a design that meets its targets on their wavelength grid can fail
-    between grid points. Re-check spectral targets on a grid `refine` times finer."""
+    between grid points. Re-check spectral targets on a grid `refine` times finer. For a design that
+    already fails (grid_rows: its target_report rows), warn when it is worse between the points than on
+    them by more than a target's tolerance (scenario S4.10: worst R 98.5 % on a 5 nm grid, 58 % between)."""
     fine, changed = [], False
     for spec in target_specs:
         if "from" in spec and "to" in spec and "wavelength" not in spec:
@@ -881,6 +884,22 @@ def between_points_warning(design, target_specs, refine=4):
     rows, ok = target_report(_evaluator(build_filter(design), build_targets(fine, pad=True)), fine)
     if ok:
         return None
+    if grid_rows is not None and any(r["pass_fraction"] < 1 for r in grid_rows):
+        worse = []
+        for spec, grid, row in zip(target_specs, grid_rows, rows):
+            if "worst_value" not in grid or "worst_value" not in row:
+                continue
+            ineq = INEQUALITIES.get(str(spec.get("inequality", "equal")).lower())
+            excess = (row["worst_value"] - grid["worst_value"] if ineq == "smaller" else
+                      grid["worst_value"] - row["worst_value"] if ineq == "larger" else
+                      row["max_abs_deviation"] - grid["max_abs_deviation"])
+            if excess > float(spec.get("tolerance", 0.01)):
+                worse.append(f"target {row['target']} ({row['kind']}) worst {row['worst_value']} at "
+                             f"{row['worst_at_nm']} nm (on the grid: {grid['worst_value']} at {grid['worst_at_nm']} nm)")
+        if not worse:
+            return None
+        return (f"worse between the targets' grid points than on them ({refine}x finer grid): {'; '.join(worse)}. "
+                "The reported worst values understate the miss; use a finer step.")
     worst = "; ".join(f"target {r['target']} ({r['kind']}) worst {r.get('worst_value')} at {r.get('worst_at_nm')} nm"
                       for r in rows if r["pass_fraction"] < 1)
     return (f"met on the targets' wavelength grid but not between its points ({refine}x finer grid): {worst}. "
@@ -895,10 +914,9 @@ def evaluate(design, target_specs):
     rows, all_pass = target_report(optimizer, target_specs)
     out = {"merit_chi2": float(optimizer.get_chi_2()), "all_targets_met": all_pass, "targets": rows,
            "nb_layers": f.get_nb_layers(), "total_thickness_nm": round(float(f.get_total_thickness()), 3)}
-    if all_pass:
-        between = between_points_warning(design, target_specs)
-        if between:
-            warnings.append(between)
+    between = between_points_warning(design, target_specs, rows)
+    if between:
+        warnings.append(between)
     if warnings:
         out["warnings"] = warnings
     return out
@@ -1195,7 +1213,8 @@ STOP_REASONS = {
     "time_limit": "the time limit was reached; the best design so far is returned",
     "cycling": "the needle/step method kept returning to the same designs, so it was stopped; the best design "
                "seen is returned (normal near an optimum)",
-    "max_layers": "the needle method needed more layers than max_layers; the best design within the limit is returned",
+    "max_layers": "the needle method needed more layers than max_layers; the best design within the limit is returned "
+                  "(a needle splits a layer, adding 2 layers, so the result can stop 1 or 2 layers below the limit)",
     "max_total_thickness": "the design grew past max_total_thickness; the best design within the limit is returned",
     "min_thickness_not_reached": "not every layer could be brought to min_thickness in the time available",
     "numerical_error": "OpenFilters' optimizer failed numerically (all thicknesses NaN); the best finite design "
@@ -1338,10 +1357,9 @@ def optimize(design, target_specs, method="needle", options=None, progress=None)
     f = build_filter(current)
     final = _evaluator(f, spec_targets)
     rows, all_pass = target_report(final, target_specs)
-    if all_pass:
-        between = between_points_warning(current, target_specs)
-        if between:
-            warnings.append(between)
+    between = between_points_warning(current, target_specs, rows)
+    if between:
+        warnings.append(between)
     if method == "step" and not all_pass and len(current["layers"]) <= len(design["layers"]):
         warnings.append(_no_steps_warning(current, cw))
     if time.time() >= deadline and stop not in ("max_layers", "max_total_thickness", "min_thickness_not_reached"):

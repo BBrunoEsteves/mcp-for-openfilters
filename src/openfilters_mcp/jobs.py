@@ -67,11 +67,16 @@ def result_row(index, op, result):
 def rank_key(row):
     """Best first. With a yield stage, yield comes first (the chance a real coating meets the
     specification: a nominal pass with 0 % yield is worth less than a 1e-7 miss with 26 %);
-    then meets all targets, low merit, few layers, thin."""
+    then meets all targets, low merit, few layers, thin. Merits below ZERO_MERIT are rounding noise
+    (3e-23 vs 5e-22), so layer count and thickness decide between them."""
     if "error" in row:
         return (3, 0, 0, 0, 0, 0)
+    merit = row.get("merit_chi2", float("inf"))
     return (0 if "yield" in row else 1, -row.get("yield", 0.0), 0 if row.get("all_targets_met") else 1,
-            row.get("merit_chi2", float("inf")), row.get("nb_layers", 0), row.get("total_thickness_nm", 0.0))
+            0.0 if merit < ZERO_MERIT else merit, row.get("nb_layers", 0), row.get("total_thickness_nm", 0.0))
+
+
+ZERO_MERIT = 1e-9  # chi2 this small = every point within ~3e-5 of its tolerance-weighted goal
 
 
 def write_table(path, rows):
@@ -208,7 +213,12 @@ class JobManager:
                 self._save(job)
                 self._add_stage(job, next_tasks)
                 return
-            job["status"] = "done"
+            start, end, _ = job["stages"][0]
+            results = [self.result(job_id, i) for i in range(start, end)]
+            if results and not any(r.get("ok") for r in results):
+                job["status"], job["error"] = "failed", f"every task failed; first error: {results[0].get('error')}"
+            else:
+                job["status"] = "done"
         except Exception as error:
             job = self._load(job_id)
             job.pop("finalizing", None)
@@ -227,6 +237,9 @@ class JobManager:
                 job.pop("finalizing", None)
                 job["resumed"] = time.time()
                 self._save(job)
+                for name in os.listdir(os.path.join(root, job_id, "tasks")):
+                    if name.endswith(tasks.STARTED_SUFFIX):  # from before the restart
+                        os.remove(os.path.join(root, job_id, "tasks", name))
                 start, end, _ = job["stages"][-1]
                 self._schedule(job_id, range(start, end))
 
@@ -263,14 +276,25 @@ class JobManager:
 
     def cancel(self, job_id):
         job = self._load(job_id)
+        if job["status"] != "running":
+            return {"job_id": job_id, "status": job["status"], "tasks_cancelled": 0,
+                    "note": f"the job is already {job['status']}; nothing to cancel"}
+        # The marker stops tasks the process pool has already queued (they cannot be cancelled as futures):
+        # a worker checks it before starting a task (tasks.run_job_task).
+        open(os.path.join(job["folder"], tasks.CANCEL_MARKER), "w").close()
         with self._lock:
             futures = list(self._futures.get(job_id, {}).values())
-        cancelled = sum(f.cancel() for f in futures)
-        if job["status"] == "running":
-            job["status"] = "cancelled"
-            job["finished"] = time.time()
-            self._save(job)
-        return {"job_id": job_id, "status": "cancelled", "pending_tasks_cancelled": cancelled,
+        for f in futures:
+            f.cancel()
+        job["status"] = "cancelled"
+        job["finished"] = time.time()
+        self._save(job)
+        start, end, _ = job["stages"][-1]
+        done = self._done_indices(job_id)
+        running = sum(1 for i in range(start, end) if i not in done
+                      and os.path.exists(os.path.join(job["folder"], "tasks", f"{i:06d}{tasks.STARTED_SUFFIX}")))
+        return {"job_id": job_id, "status": "cancelled", "tasks_done": len(done & set(range(start, end))),
+                "tasks_still_running": running, "tasks_cancelled": end - start - len(done & set(range(start, end))) - running,
                 "note": "tasks already running finish on their own (bounded by their time limits); "
                         "get_results still works on what finished"}
 
@@ -298,6 +322,8 @@ class JobManager:
             rows = self.rows(job_id, stage=0) if job["kind"] in ("campaign",) else self.rows(job_id)
             if job["kind"] == "campaign":
                 rows.sort(key=rank_key)
+                for rank, row in enumerate(r for r in rows if "error" not in r):
+                    row["rank"] = rank + 1  # provisional: duplicates are only marked when the campaign finishes
         if sort_by:
             rows = sorted([r for r in rows if sort_by in r], key=lambda r: r[sort_by], reverse=descending)
         out = {"job_id": job_id, "status": job["status"], "rows_total": len(rows), "rows": rows[:int(top_n)],

@@ -46,7 +46,7 @@ DESTRUCTIVE in server.py; required by Claude's directory, checked by tests/test_
 ## Status (2026-10-22)
 
 Done: Python 3 port validated (analytic + independent TMM, < 1e-9; needle derivatives vs finite differences),
-all optimizers working, 25 MCP tools + 5 prompts + 9 resources working end to end, 119 tests + 44 acceptance checks. Private GitHub repo
+all optimizers working, 25 MCP tools + 5 prompts + 9 resources working end to end, 128 tests + 44 acceptance checks. Private GitHub repo
 BBrunoEsteves/openfilters-mcp; CI compiles the C++ core and tests on Windows/macOS/Linux and builds wheels
 (cp310-cp314, runtime DLLs bundled). Compiled core is 15-30x faster than pure Python.
 Registered locally (user scope) in Claude Code and Claude Desktop, pointing at .venv/Scripts/openfilters-mcp.exe;
@@ -137,8 +137,15 @@ figures, campaign duplicates with equal merit (1e-6) tolerate 3 nm / 3 %, load_p
 no steps (S3.9 was a too-thin start, NOT a mixture limit: a 300-500 nm start reaches R <= 0.5 %), spectrum
 plots colour by angle and style by polarization (14 series fit), campaign notes for all-zero yields and starts
 with n_layers near max_layers. Tests: tests/test_scenarios_batch3.py.
-NEXT (2026-10-24): the user runs docs/SCENARIO_TESTS.md Batch 4, each in a fresh Claude Desktop chat,
-and pastes the reports here for evaluation. For each finding: verify it (reproduce; for OpenFilters behaviour check
+Scenario Batch 4: 14/14 pass. Fixed: rank_key treats merit < 1e-9 as 0 (layers/thickness decide);
+between_points_warning also for failing designs (fine-grid worst beyond a tolerance worse than the grid's);
+cancel_job: ProcessPoolExecutor pre-queues max_workers+1 tasks that Future.cancel() cannot stop (47 of 80 ran),
+so cancel writes a "cancelled" marker that run_job_task checks, workers write tasks/<i>.started, cancel reports
+tasks_done/still_running/cancelled and leaves finished jobs alone; a job whose tasks all fail is "failed";
+optimize_design validates before creating a job; extrapolation warning names only the outside range;
+describe_design omits the JSON echo for formulas over 20 layers; partial campaign results get provisional
+ranks; max_layers explanation. Tests: tests/test_scenarios_batch4.py.
+NEXT (2026-10-24): all four scenario batches done; rerun any batch after larger changes, pasting reports here. For each finding: verify it (reproduce; for OpenFilters behaviour check
 third_party/openfilters_original and the pure-Python core before blaming OpenFilters), fix with a regression test,
 run pytest (compiled and OPENFILTERS_PURE_PYTHON=1), dev/acceptance.py and dev/e2e_client.py, then commit, and
 always end the turn by asking the user whether to push (they expect to be asked; never push without a yes). After the batches: tag v0.1.3 once GitHub Actions minutes reset (2026-11-01) or the repo is public.

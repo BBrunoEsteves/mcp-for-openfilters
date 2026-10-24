@@ -236,8 +236,10 @@ Expected: stops after about 2 s with stop_reason time_limit and a plain explanat
 
 **S4.11 Long campaign.** *A campaign of 80 starts (any AR specification) — then cancel it after the first
 poll, and get the partial results.*
-Expected: a job_id comes back at once (no tool timeout), job_status shows progress, cancel_job stops it,
-get_results returns the finished part.
+Expected: a job_id comes back at once (no tool timeout), job_status shows progress, cancel_job stops it
+(tasks_done + tasks_still_running + tasks_cancelled = 80; later only the running ones finish), get_results
+returns the finished part with provisional ranks. Use a heavy specification (e.g. R <= 0.2 % from 400 to
+900 nm, 1 nm steps, max_layers 40, time_limit 60) or the campaign finishes before the first poll.
 
 **S4.12 Material housekeeping.** *Add SC_test (constant n = 1.7); add it again without overwrite; again with
 overwrite n = 1.8; remove it; remove it again.*

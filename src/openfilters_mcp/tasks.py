@@ -85,8 +85,15 @@ def run(op, args):
     return getattr(engine, op)(**args)
 
 
+CANCEL_MARKER = "cancelled"  # file in a job folder: queued tasks are skipped
+STARTED_SUFFIX = ".started"  # tasks/<index>.started: the task began running
+
+
 def run_job_task(job_dir, index):
-    """Run task `index` of a job and store its result file."""
+    """Run task `index` of a job and store its result file (skipped if the job was cancelled)."""
+    if os.path.exists(os.path.join(job_dir, CANCEL_MARKER)):
+        return None
+    open(os.path.join(job_dir, "tasks", f"{index:06d}{STARTED_SUFFIX}"), "w").close()
     with open(os.path.join(job_dir, "tasks", f"{index:06d}.json"), encoding="utf-8") as infile:
         task = json.load(infile)
     try:
