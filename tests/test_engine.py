@@ -414,3 +414,11 @@ def test_gdd_target_optimization_moves_and_round_trips(tmp_path):
     engine.save_project(path, [d], targets)
     loaded = engine.load_project(path)["targets"][0]
     assert loaded["points"][0][1] == pytest.approx(-20) and loaded["points"][0][2] == pytest.approx(5)
+
+
+def test_coarse_gdd_grid_is_warned():
+    d = _qw_mirror()
+    coarse = engine.spectra(d, ["R_GDD"], [760, 800, 840], [0.0], ["s"])
+    assert any("numerical derivatives" in w for w in coarse["warnings"])
+    fine = engine.spectra(d, ["R_GDD"], {"from": 760, "to": 840, "step": 1}, [0.0], ["s"])
+    assert not fine["warnings"]

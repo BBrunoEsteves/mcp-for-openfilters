@@ -491,6 +491,13 @@ def spectra(design, quantities=("R", "T"), wavelengths=None, angles=(0.0,), pola
     wvls = _wavelength_list(wavelengths)
     f = build_filter(design, wvls)
     warnings = material_warnings(design, wvls)
+    if any(q in TIME_UNITS for q in quantities):
+        # OpenFilters takes GD and GDD as numerical derivatives over the requested wavelengths:
+        # a few widely spaced points give wrong values (e.g. 0.95 fs^2 instead of +4/-4 fs^2 at 40 nm).
+        gaps = np.diff(sorted(wvls))
+        if len(wvls) < 5 or (len(gaps) and gaps.max() > 5.0):
+            warnings.append("GD/GDD are numerical derivatives over the requested wavelengths: use at least 5 "
+                            "points with steps of 5 nm or less, or the values can be wrong")
     series = []
     for q in quantities:
         if q not in QUANTITIES:

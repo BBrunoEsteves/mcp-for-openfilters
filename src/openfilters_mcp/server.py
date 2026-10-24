@@ -372,7 +372,8 @@ async def compute_spectrum(design: Design,
     angles and polarizations. Returns, per series, min/max/mean and `sample_points` evenly spaced
     samples (set sample_points=0 for statistics only); full data go to a CSV when save_csv=true.
     reverse=true illuminates from the substrate side (R, T, A, OD only). Quantity "OD" is optical density
-    (-log10 T), best for blocking specs; values are given to 6 significant figures. Two-sided designs
+    (-log10 T), best for blocking specs; values are given to 6 significant figures. GD (fs) and GDD (fs^2) are
+    numerical derivatives over the wavelengths requested: use steps of 5 nm or less. Two-sided designs
     (back_layers + consider_backside: true) are computed with both faces."""
     result = await compute("spectra", design=design, quantities=quantities, wavelengths=wavelengths,
                            angles=angles, polarizations=polarizations, reverse=reverse)

@@ -12,6 +12,8 @@
   (e.g. built-in Ge or BK7 at 10 um), the tool refuses and suggests importing data for that range.
 - An optimization can no longer hang inside one solver step: it stops at the time limit with the best design.
 - A malformed stack formula gives a clear error instead of crashing.
+- GD/GDD on a coarse wavelength grid (they are numerical derivatives) give a warning.
+- `docs/SCENARIO_TESTS.md`: 42 realistic scenarios in 4 batches for a Claude chat to run and report on.
 - Colour targets report the calculated coordinates, the deviation per coordinate and the colour distance
   (ΔE\*ab for L\*a\*b\*).
 - The design and target formats are described in each tool's parameters, for apps that do not pass the

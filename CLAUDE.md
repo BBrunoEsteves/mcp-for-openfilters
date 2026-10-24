@@ -31,6 +31,7 @@ runs in parallel worker processes, results go to disk, tools return compact summ
 - End-to-end: `.venv/Scripts/python dev/e2e_client.py`
 - Acceptance (every tool/prompt/resource vs known answers, via the installed exe, temp data folder):
   `.venv/Scripts/python dev/acceptance.py` (44 checks); manual chat tests: `docs/TEST_PLAN.md`. Run both before a release.
+- Scenario tests for a Claude chat (4 batches, reference values from the engine): `docs/SCENARIO_TESTS.md`.
 - After a version bump or a tool change: `.venv/Scripts/python dev/sync_packaging.py`
 - Fast C++ core without a local compiler: `.venv/Scripts/python dev/fetch_compiled.py` (downloads what GitHub Actions
   compiled; rerun after changing C++ code or after regenerating the core). With a compiler: `python setup.py build_ext --inplace`.
