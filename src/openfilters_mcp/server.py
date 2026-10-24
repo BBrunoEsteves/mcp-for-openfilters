@@ -632,9 +632,10 @@ async def run_optimization_campaign(targets: Targets,
                                         'Optional yield stage on the top_n designs: {"n_trials": 200, "thickness_error": '
                                         '{"type": "relative", "sigma": 0.01}, "index_error": {"sigma": 0.005}, "seed": 0}'))] = None,
                                     label: str = "") -> dict:
-    """Many optimizations from different starting designs, in parallel; ranks results (targets met,
-    then yield if a tolerance stage is requested, then merit, layer count, total thickness) and saves
-    the top_n designs as an .ofp project. Returns a job_id."""
+    """Many optimizations from different starting designs, in parallel; ranks distinct results (by yield
+    first when a tolerance stage is requested, then targets met, merit, layer count, total thickness) and
+    saves the top_n designs as an .ofp project. Starts that converge to the same design are marked
+    duplicate_of. Pass options min_thickness to avoid unmanufacturable sub-nanometre layers. Returns a job_id."""
     checked(engine.build_targets, targets)
     designs = list(starts or [])
     if random_starts:
@@ -847,18 +848,20 @@ _CLOSING = ("Report whether the targets are met, the layer list, the yield and t
 @_workflow
 def design_antireflection(substrate: str = "BK7", from_nm: str = "420", to_nm: str = "680",
                           max_reflectance_percent: str = "0.5", max_angle_deg: str = "0",
-                          materials: str = "TiO2, SiO2", max_layers: str = "10") -> str:
+                          materials: str = "TiO2, SiO2", max_layers: str = "10", min_thickness_nm: str = "5") -> str:
     """Antireflection coating over a band, optimized from many starts and checked for yield."""
     return f"""Design an antireflection coating on {substrate} with the OpenFilters tools.
 Specification: R <= {max_reflectance_percent} % (unpolarized) from {from_nm} to {to_nm} nm, at angles 0 to {max_angle_deg} deg,
-at most {max_layers} layers; materials {materials}.
+at most {max_layers} layers, no layer thinner than {min_thickness_nm} nm; materials {materials}.
 {_MATERIALS}
 1. Write the targets: one R target with inequality "<=" over the band (step about 5 nm) for each angle needed
    (values as fractions; an inequality counts as met only when it holds at every point).
 2. Run run_optimization_campaign with about 40 random starts (random_starts n_layers [2, {max_layers}], the listed
-   materials, the substrate), the needle method, options {{"max_layers": {max_layers}}} (n_layers only sizes the
-   starting designs), top_n 5 and a tolerance stage (1 % relative thickness error, 200 trials).
-3. Poll job_status, then get_results; pick the simplest design that meets the targets with a good yield.
+   materials, the substrate), the needle method, options {{"max_layers": {max_layers}, "min_thickness":
+   {min_thickness_nm}}} (n_layers only sizes the starting designs; a minimum thickness of 0 allows any layer), top_n 5
+   and a tolerance stage (1 % relative thickness error, 200 trials).
+3. Poll job_status, then get_results; the ranking puts the highest yield first. Pick the simplest design with a
+   good yield; if no yield is good, say so and suggest relaxing the specification.
 {_CLOSING}"""
 
 
@@ -884,7 +887,8 @@ materials {materials} (H = high index, L = low index).
 @_workflow
 def design_edge_filter(pass_from_nm: str = "600", pass_to_nm: str = "800", min_transmittance_percent: str = "95",
                        block_from_nm: str = "400", block_to_nm: str = "550", max_transmittance_percent: str = "1",
-                       angle_deg: str = "0", substrate: str = "BK7", materials: str = "TiO2, SiO2") -> str:
+                       angle_deg: str = "0", substrate: str = "BK7", materials: str = "TiO2, SiO2",
+                       min_thickness_nm: str = "5") -> str:
     """Long-pass, short-pass or dichroic filter with a pass band and a blocking band."""
     return f"""Design an edge filter or dichroic on {substrate} with the OpenFilters tools, at {angle_deg} deg incidence
 (at oblique incidence, write s and p targets separately).
@@ -895,7 +899,8 @@ T <= {max_transmittance_percent} % from {block_from_nm} to {block_to_nm} nm; mat
    deep blocking).
 2. Start from a quarter-wave stack centred in the blocking band with half-thickness end layers, for example
    "(0.5L H 0.5L)^p" for a long-pass edge; check it with compute_spectrum, then optimize_design with the needle
-   method to flatten the pass band.
+   method and options {{"min_thickness": {min_thickness_nm}}} to flatten the pass band without unmanufacturable
+   layers.
 3. For a hard specification, run run_optimization_campaign from about 30 random starts and compare.
 {_CLOSING}"""
 

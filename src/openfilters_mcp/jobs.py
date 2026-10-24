@@ -65,11 +65,13 @@ def result_row(index, op, result):
 
 
 def rank_key(row):
-    """Best first: meets all targets, high yield, low merit, few layers, thin."""
+    """Best first. With a yield stage, yield comes first (the chance a real coating meets the
+    specification: a nominal pass with 0 % yield is worth less than a 1e-7 miss with 26 %);
+    then meets all targets, low merit, few layers, thin."""
     if "error" in row:
-        return (2, 0, 0, 0, 0)
-    return (0 if row.get("all_targets_met") else 1, -row.get("yield", 0.0), row.get("merit_chi2", float("inf")),
-            row.get("nb_layers", 0), row.get("total_thickness_nm", 0.0))
+        return (3, 0, 0, 0, 0, 0)
+    return (0 if "yield" in row else 1, -row.get("yield", 0.0), 0 if row.get("all_targets_met") else 1,
+            row.get("merit_chi2", float("inf")), row.get("nb_layers", 0), row.get("total_thickness_nm", 0.0))
 
 
 def write_table(path, rows):

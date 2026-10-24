@@ -665,8 +665,9 @@ def target_report(optimizer, specs):
         d = deviation[sl]
         row = {"target": i, "kind": spec.get("kind"), "points": int(d.size),
                "pass_fraction": round(float(np.mean(passed[sl])), 4),
-               "max_abs_deviation": round(float(np.max(np.abs(d))), 6),
-               "chi2_contribution": round(float(np.sum((d / tol[sl]) ** 2)), 6)}
+               # Significant figures: a tiny miss (1e-7) must not read as 0 next to "not met".
+               "max_abs_deviation": sig(np.max(np.abs(d))),
+               "chi2_contribution": sig(np.sum((d / tol[sl]) ** 2))}
         # The value furthest on the wrong side: the highest for "<=", the lowest for ">=",
         # the furthest from the goal for "equal" (e.g. "worst R = 1.08 % at 420 nm").
         # Colour targets (3 coordinates, no wavelength per point) have no single worst value.

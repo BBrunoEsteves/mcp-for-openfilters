@@ -98,3 +98,25 @@ def test_campaign_top_designs_are_distinct():
     top = jobs.distinct_top(Manager(), {"id": "x"}, rows, 3)
     assert [r["task"] for r in top] == [0, 2]
     assert rows[1]["duplicate_of"] == 0 and rows[3]["duplicate_of"] == 0
+
+
+def test_campaign_ranks_by_yield_when_a_yield_stage_ran():
+    # Campaign 2026-10-24: a nominal pass with 0 % yield ranked above a 1e-7 miss with 26.5 %.
+    from openfilters_mcp import jobs
+    rows = [{"task": 0, "all_targets_met": True, "merit_chi2": 0.0, "yield": 0.0},
+            {"task": 1, "all_targets_met": False, "merit_chi2": 1e-9, "yield": 0.265},
+            {"task": 2, "all_targets_met": False, "merit_chi2": 5.0},  # outside the yield stage
+            {"task": 3, "error": "failed"}]
+    assert [r["task"] for r in sorted(rows, key=jobs.rank_key)] == [1, 0, 2, 3]
+    no_yield = [{"task": 0, "all_targets_met": False, "merit_chi2": 0.1}, {"task": 1, "all_targets_met": True}]
+    assert [r["task"] for r in sorted(no_yield, key=jobs.rank_key)] == [1, 0]
+
+
+def test_tiny_violation_is_not_rounded_to_zero():
+    # "not met" with max_abs_deviation 0.0 contradicted itself (a 8e-8 miss rounded to 6 decimals).
+    engine.add_material("AT_A", "constant", n=1.38)
+    engine.add_material("AT_S", "constant", n=1.52)
+    d = {"substrate": "AT_S", "center_wavelength": 550, "layers": [{"material": "AT_A", "qwot": 1}]}
+    r = ((1.52 - 1.38 ** 2) / (1.52 + 1.38 ** 2)) ** 2
+    row = engine.evaluate(d, [{"kind": "R", "wavelength": 550, "value": r - 8e-8, "inequality": "<="}])["targets"][0]
+    assert row["pass_fraction"] == 0 and row["max_abs_deviation"] == pytest.approx(8e-8, rel=1e-3)

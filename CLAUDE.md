@@ -103,6 +103,9 @@ because OpenFilters' remove_thin_layers_ left no layer (original C++ "length mus
 derivatives_wrapper.cpp:90; original Python IndexError too) -> _run keeps the best design (stop openfilters_error).
 MCP prompt arguments have no defaults: Claude Desktop shows empty boxes; _workflow adds "Default: ..." descriptions
 and maps empty values to defaults.
+Second E1 rerun: rank_key puts yield first when a yield stage ran; deviations in significant figures; workflows
+pass min_thickness (default 5 nm). Sub-nm layers are NOT removed silently without min_thickness (it can change
+"met"; OpenFilters leaves it to the user).
 Version 0.1.3 set locally 2026-10-24 (not tagged: Actions minutes exhausted until 2026-11-01).
 Output schemas deliberately not added (Claude reads the text; plots can't be described; drift would break tools).
 Private-repo CI minutes cost 10x on macOS and 2x on Windows; they reset monthly (next
