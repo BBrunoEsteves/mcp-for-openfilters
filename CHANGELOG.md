@@ -3,6 +3,8 @@
 ## 0.1.3 — 2026-10-24
 
 - `remove_material` tool.
+- Workflow boxes in Claude Desktop show their default values, and an empty box uses the default (it used
+  to produce a broken request).
 - Results give each target's worst value and where it occurs (`worst_value`, `worst_at_nm`).
 - Fix: colour targets were rejected ("unknown keyword L*a*b*"); colour spaces now accept Lab/L*a*b*, XYZ, xyY,
   Luv, LCh(ab)/LChuv.

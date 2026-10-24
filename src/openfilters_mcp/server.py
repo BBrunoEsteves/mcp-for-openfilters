@@ -9,6 +9,8 @@ import asyncio
 import concurrent.futures as cf
 import csv
 import datetime
+import functools
+import inspect
 import multiprocessing
 import os
 import random
@@ -818,6 +820,23 @@ for _name in _example_names():
 # Prompts: ready-made design workflows (slash commands in Claude Code)
 # ---------------------------------------------------------------------------
 
+def _workflow(fn):
+    """Prompt arguments carry no default values to the client, so Claude Desktop shows empty boxes and may send
+    empty text: describe each box with its default, and treat an empty box as that default."""
+    signature = inspect.signature(fn)
+    defaults = {name: p.default for name, p in signature.parameters.items() if p.default is not p.empty}
+
+    @functools.wraps(fn)
+    def wrapper(**kwargs):
+        return fn(**{k: v for k, v in kwargs.items() if str(v).strip() or k not in defaults})
+
+    wrapper.__signature__ = signature.replace(parameters=[
+        p.replace(annotation=Annotated[str, Field(description=(
+            f"Default: {p.default}" if p.default else "Optional") if p.default is not p.empty else "Required")])
+        for p in signature.parameters.values()])
+    return wrapper
+
+
 _MATERIALS = ("Check the materials with list_materials first; import any that is missing with search_refractiveindex "
               "and import_refractiveindex_material (thin-film data preferred), and use the imported name.")
 _CLOSING = ("Report whether the targets are met, the layer list, the yield and the plot file paths; save the best "
@@ -825,6 +844,7 @@ _CLOSING = ("Report whether the targets are met, the layer list, the yield and t
 
 
 @mcp.prompt(title="Design an antireflection coating")
+@_workflow
 def design_antireflection(substrate: str = "BK7", from_nm: str = "420", to_nm: str = "680",
                           max_reflectance_percent: str = "0.5", max_angle_deg: str = "0",
                           materials: str = "TiO2, SiO2", max_layers: str = "10") -> str:
@@ -843,6 +863,7 @@ at most {max_layers} layers; materials {materials}.
 
 
 @mcp.prompt(title="Design a high reflector (mirror)")
+@_workflow
 def design_mirror(wavelength_nm: str = "1064", min_reflectance_percent: str = "99.9", bandwidth_nm: str = "40",
                   angle_deg: str = "0", substrate: str = "FusedSilica", materials: str = "TiO2, SiO2") -> str:
     """Dielectric mirror: quarter-wave stack sized from theory, then refined; field and yield checked."""
@@ -860,6 +881,7 @@ materials {materials} (H = high index, L = low index).
 
 
 @mcp.prompt(title="Design an edge filter or dichroic")
+@_workflow
 def design_edge_filter(pass_from_nm: str = "600", pass_to_nm: str = "800", min_transmittance_percent: str = "95",
                        block_from_nm: str = "400", block_to_nm: str = "550", max_transmittance_percent: str = "1",
                        angle_deg: str = "0", substrate: str = "BK7", materials: str = "TiO2, SiO2") -> str:
@@ -879,6 +901,7 @@ T <= {max_transmittance_percent} % from {block_from_nm} to {block_to_nm} nm; mat
 
 
 @mcp.prompt(title="Design a narrow band-pass filter")
+@_workflow
 def design_bandpass(center_nm: str = "532", fwhm_nm: str = "10", min_peak_transmittance_percent: str = "90",
                     block_from_nm: str = "400", block_to_nm: str = "700", substrate: str = "FusedSilica",
                     materials: str = "TiO2, SiO2") -> str:
@@ -896,6 +919,7 @@ from {block_from_nm} to {block_to_nm} nm outside the pass band; materials {mater
 
 
 @mcp.prompt(title="Review a design for manufacturing")
+@_workflow
 def review_for_manufacturing(design_json: str, targets_json: str = "", thickness_error_percent: str = "1",
                              monitoring_wavelength_nm: str = "") -> str:
     """Yield, sensitive layers, electric field and monitoring signals of an existing design."""

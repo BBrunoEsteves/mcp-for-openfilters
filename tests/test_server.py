@@ -51,3 +51,13 @@ def test_load_project_finds_saved_name(tmp_path, monkeypatch):
     saved = asyncio.run(server.save_project("by_name", [d], targets))
     loaded = asyncio.run(server.load_project("by_name"))
     assert saved["path"].endswith("by_name.ofp") and len(loaded["designs"]) == 1
+
+
+def test_empty_prompt_boxes_use_the_defaults():
+    # Claude Desktop shows empty boxes (prompt arguments carry no defaults) and may send "".
+    blank = {a.name: "" for a in next(p for p in asyncio.run(server.mcp.list_prompts())
+                                      if p.name == "design_antireflection").arguments}
+    text = asyncio.run(server.mcp.get_prompt("design_antireflection", blank)).messages[0].content.text
+    assert "coating on BK7" in text and "materials TiO2, SiO2." in text
+    described = next(p for p in asyncio.run(server.mcp.list_prompts()) if p.name == "design_mirror").arguments
+    assert all(a.description and a.description.startswith("Default:") for a in described)
