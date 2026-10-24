@@ -447,11 +447,12 @@ async def compute_spectrum(design: Design,
                                'FWHM of the highest peak (e.g. a band-pass)'))] = None,
                            plot: bool = True,
                            save_csv: bool = False):
-    """Compute R, T, A, phase, GD or GDD spectra versus wavelength for one design at one or more
+    """Compute R, T, A, OD, phase, GD or GDD spectra (quantity names R, T, A, OD, R_phase, T_phase, R_GD,
+    T_GD, R_GDD, T_GDD) versus wavelength for one design at one or more
     angles and polarizations. Returns, per series, min/max/mean and `sample_points` evenly spaced
     samples (set sample_points=0 for statistics only); full data go to a CSV when save_csv=true.
     reverse=true illuminates from the substrate side (R, T, A, OD only). Quantity "OD" is optical density
-    (-log10 T), best for blocking specs; values are given to 6 significant figures. GD (fs) and GDD (fs^2) are
+    (-log10 T), best for blocking specs; summary values have 8 significant figures. GD (fs) and GDD (fs^2) are
     numerical derivatives over the wavelengths requested: use steps of 5 nm or less. Two-sided designs
     (back_layers + consider_backside: true) are computed with both faces."""
     result = await compute("spectra", design=design, quantities=quantities, wavelengths=wavelengths,

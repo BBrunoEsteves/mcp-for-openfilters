@@ -49,7 +49,7 @@ def result_row(index, op, result):
         row.update(r["metrics"])
     elif op in ("optimize", "evaluate"):
         for key in ("merit_chi2", "all_targets_met", "nb_layers", "total_thickness_nm", "iterations",
-                    "stop_reason", "elapsed_s", "initial_chi2", "error_detail"):
+                    "stop_reason", "elapsed_s", "initial_chi2", "error_detail", "warnings"):
             if key in r:
                 row[key] = r[key]
     elif op == "tolerance":
@@ -468,6 +468,8 @@ def finalize_campaign(manager, job):
             if r.get("ok"):
                 row = by_task[r["params"]["task"]]
                 row["yield"] = r["result"]["yield"]
+                # Yields from a few hundred trials differ by noise: 0.315 and 0.22 at n = 200 overlap.
+                row["yield_ci95"] = _wilson(r["result"]["passes"], r["result"]["n_trials"])
                 row["yield_chi2_median"] = r["result"]["chi2_median"]
         rows.sort(key=rank_key)
     top = distinct_top(manager, job, rows, meta["top_n"])
@@ -491,6 +493,8 @@ def finalize_campaign(manager, job):
         row["rank"] = rank + 1
     summary = {"starts": len(rows), "met_all_targets": sum(1 for r in rows if r.get("all_targets_met")),
                "failed": sum(1 for r in rows if "error" in r),
+               # Not failures (a design is returned) but worth seeing: OpenFilters' optimizer stopped on an error.
+               "openfilters_errors": sum(1 for r in rows if r.get("stop_reason") == "openfilters_error"),
                "duplicates": sum(1 for r in rows if "duplicate_of" in r),
                "stop_reasons": {reason: engine.STOP_REASONS.get(reason, "")
                                 for reason in sorted({r["stop_reason"] for r in rows if r.get("stop_reason")})}}

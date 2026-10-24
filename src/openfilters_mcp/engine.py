@@ -309,14 +309,14 @@ def _add_layer(f, layer, side, i):
         layer = {"material": layer[0], "thickness": layer[1]}
     material = layer.get("material")
     if material is None:
-        raise EngineError(f"layer {i} has no material")
-    _check_keys(layer, LAYER_KEYS, f"layer {i}")
+        raise EngineError(f"layer {i + 1} has no material")
+    _check_keys(layer, LAYER_KEYS, f"layer {i + 1}")
     index = layer.get("index")
     position = f.get_nb_layers(side)
     if layer.get("graded"):
         graded = layer["graded"]
         if not isinstance(graded, dict) or "steps" not in graded or "step_thicknesses" not in graded:
-            raise EngineError(f"graded layer {i} needs {{\"steps\": [...], \"step_thicknesses\": [...]}} (as returned by describe_design or load_project)")
+            raise EngineError(f"graded layer {i + 1} needs {{\"steps\": [...], \"step_thicknesses\": [...]}} (as returned by describe_design or load_project)")
         f.add_graded_layer_from_steps(material, [int(x) for x in graded["steps"]],
                                       [float(t) for t in graded["step_thicknesses"]], side=side)
         return
@@ -328,7 +328,7 @@ def _add_layer(f, layer, side, i):
         except (TypeError, ValueError):
             value = math.nan
         if not math.isfinite(value):
-            raise EngineError(f"layer {i} has an invalid {key} ({layer[key]!r}); it must be a finite number")
+            raise EngineError(f"layer {i + 1} has an invalid {key} ({layer[key]!r}); it must be a finite number")
         return value
 
     if index is not None:
@@ -340,9 +340,9 @@ def _add_layer(f, layer, side, i):
     elif "thickness" in layer:
         thickness = number("thickness")
     else:
-        raise EngineError(f"layer {i} needs thickness (nm) or qwot")
+        raise EngineError(f"layer {i + 1} needs thickness (nm) or qwot")
     if thickness < 0:
-        raise EngineError(f"layer {i} has a negative thickness")
+        raise EngineError(f"layer {i + 1} has a negative thickness")
     f.add_layer(material, thickness, side=side, index=index)
     for flag, setter in _LAYER_FLAGS:
         if flag in layer:

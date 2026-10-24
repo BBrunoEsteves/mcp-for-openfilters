@@ -66,8 +66,9 @@ Check: the trends are explained (gold and copper are poor in the blue).
 
 **S1.4 Single-layer antireflection.** *Quarter-wave SiO2 at 550 nm on BK7: R at 550 nm, and why it is a poor
 AR. Then import MgF2 from refractiveindex.info (a thin-film entry if available) and repeat.*
-Reference: SiO2 gives R = **3.39 %** (its index is close to BK7's). MgF2 should give roughly 1.2–1.4 %
-depending on the data chosen.
+Reference: SiO2 gives R = **3.39 %** (its index is close to BK7's). MgF2 gives about 1.3 % for n ≈ 1.38
+(bulk-like data, e.g. main/MgF2/nk/Franta) and about 2.0 % for denser-index film data with n ≈ 1.42
+(e.g. Rodriguez-de Marcos): check it against ((n_s − n²)/(n_s + n²))² for the n reported.
 
 **S1.5 Laser mirror.** *(HL)^15 H quarter-wave stack at 1064 nm, H = TiO2, L = SiO2, on FusedSilica: R and
 optical density at 1064 nm, the band with R > 99.9 %, and R at 45° for s and p.*
