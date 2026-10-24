@@ -164,7 +164,12 @@ async def run(c, k, offline):
             and row.get("worst_at_nm") == W0, f"{row.get('worst_value')} at {row.get('worst_at_nm')} nm")
     ev, _ = await c.ok("evaluate_design", {"design": MIRROR, "plot": False, "targets": [
         {"kind": "R_color", "color_space": "L*a*b*", "values": [90, -10, 40], "tolerances": [1, 1, 1]}]})
-    k.check("evaluate_design: colour target (L*a*b*) evaluates", ev["targets"][0]["points"] == 3)
+    color_now, _ = await c.ok("compute_color", {"design": MIRROR, "angles": [0]})
+    lab = color_now["colors"][0]["Lab"]
+    delta_e = math.dist(lab, [90, -10, 40])
+    k.check("evaluate_design: colour target reports coordinates and Delta E*ab",
+            ev["targets"][0]["points"] == 3 and abs(ev["targets"][0].get("distance", 0) - delta_e) < 1e-3,
+            f"Delta E {ev['targets'][0].get('distance')} vs {delta_e:.4f}")
     ev, images = await c.ok("evaluate_design", {"design": AR, "targets": [dict(near[0], value=0.013)]})
     k.check("evaluate_design: R 1.26 % meets R <= 1.3 %, with a plot", ev["all_targets_met"] is True and images >= 0)
     # NaN cannot travel in JSON: it arrives as null, which must be refused, not crash the tool.
@@ -305,6 +310,7 @@ async def run(c, k, offline):
 
 
 async def main():
+    sys.stdout.reconfigure(errors="replace")  # a non-ASCII character must not crash the report
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     exe = os.path.join(os.path.dirname(sys.executable), "openfilters-mcp" + (".exe" if os.name == "nt" else ""))
     parser.add_argument("--command", default=exe if os.path.isfile(exe) else None,

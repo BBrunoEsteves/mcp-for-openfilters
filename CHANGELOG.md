@@ -3,6 +3,10 @@
 ## 0.1.3 — 2026-10-24
 
 - `remove_material` tool.
+- Colour targets report the calculated coordinates, the deviation per coordinate and the colour distance
+  (ΔE\*ab for L\*a\*b\*).
+- The design and target formats are described in each tool's parameters, for apps that do not pass the
+  server instructions to the model.
 - Optimization results explain their stop reason in plain words (`stop_explanation`); campaign summaries
   list the stop reasons that occurred.
 - Campaigns with a yield stage rank by yield first (a nominal pass with 0 % yield no longer beats a near-miss

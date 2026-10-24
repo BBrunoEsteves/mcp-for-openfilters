@@ -670,6 +670,12 @@ def target_report(optimizer, specs):
                "chi2_contribution": sig(np.sum((d / tol[sl]) ** 2))}
         # The value furthest on the wrong side: the highest for "<=", the lowest for ">=",
         # the furthest from the goal for "equal" (e.g. "worst R = 1.08 % at 420 nm").
+        if spec.get("kind") in ("R_color", "T_color") and np.all(np.isfinite(calc[sl])):
+            # The coordinates in the target's colour space; their distance is ΔE*ab (1976) for Lab.
+            row.update(color_space=_color_space(spec.get("color_space", "Lab")),
+                       calculated=[sig(v) for v in calc[sl]], target_values=[sig(v) for v in goal[sl]],
+                       coordinate_deviation=[sig(v) for v in calc[sl] - goal[sl]],
+                       distance=sig(np.linalg.norm(calc[sl] - goal[sl])))
         # Colour targets (3 coordinates, no wavelength per point) have no single worst value.
         values, kind = calc[sl], ineq[starts[i]]
         wvls = optimizer.wvls[i] if i < len(optimizer.wvls) else None

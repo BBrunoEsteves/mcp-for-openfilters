@@ -176,8 +176,20 @@ async def targets_plot(designs, targets, title, name):
     return pngs
 
 
-Design = Annotated[dict[str, Any], Field(description="Design object (see server instructions): substrate, media, layers from the substrate outward or a formula.")]
-Targets = Annotated[list[dict[str, Any]], Field(description="List of target objects (see server instructions).")]
+# The formats are spelled out here too, not only in the server instructions: some apps do not
+# show those instructions to the model, but every app passes on parameter descriptions.
+Design = Annotated[dict[str, Any], Field(description=(
+    'Design: {"substrate": "BK7", "incident_medium": "void", "center_wavelength": 550, "layers": '
+    '[{"material": "TiO2", "thickness": 58.6}, {"material": "SiO2", "qwot": 1}]} with layers listed FROM THE '
+    'SUBSTRATE OUTWARD (thickness in nm, or qwot = quarter waves at center_wavelength), or instead of layers '
+    '"formula": {"formula": "(HL)^8 H", "materials": {"H": "TiO2", "L": "SiO2"}}. A part coated on both faces is '
+    'ONE design: add "back_layers" and "consider_backside": true.'))]
+Targets = Annotated[list[dict[str, Any]], Field(description=(
+    'Targets, each {"kind": "R"|"T"|"A"|"R_phase"|"T_phase"|"R_GD"|"T_GD"|"R_GDD"|"T_GDD", "angle": 0, '
+    '"polarization": "unpolarized"|"s"|"p", then either "wavelength": 1064 or "from": 400, "to": 700, "step": 5, '
+    'and "value": 0.99 (R/T/A as fractions), "inequality": ">="|"<="|"equal", optional "tolerance" (weight in the '
+    'merit, default 0.01). Colour: {"kind": "R_color"|"T_color", "color_space": "Lab", "values": [L, a, b], '
+    '"tolerances": [1, 1, 1], "angle": 0}. An inequality is met only where it holds.'))]
 # Everything runs locally (open_world_hint False) except the refractiveindex.info tools (WEB_*), which
 # download public data. Read-only tools only save plots, CSV tables and caches in the data folder; job tools
 # also write job files there; DESTRUCTIVE tools may replace a file or stop work.

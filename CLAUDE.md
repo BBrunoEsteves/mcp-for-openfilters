@@ -106,6 +106,9 @@ and maps empty values to defaults.
 Second E1 rerun: rank_key puts yield first when a yield stage ran; deviations in significant figures; workflows
 pass min_thickness (default 5 nm). Sub-nm layers are NOT removed silently without min_thickness (it can change
 "met"; OpenFilters leaves it to the user).
+Final chat checks 2026-10-24: all pass. Some apps do not show server instructions to the model, so the Design and
+Targets parameter descriptions (server.py) carry the formats too. Colour targets report calculated coordinates,
+per-coordinate deviation and distance (= Delta E*ab for Lab). Acceptance: 44 checks; keep its printed text ASCII.
 Version 0.1.3 set locally 2026-10-24 (not tagged: Actions minutes exhausted until 2026-11-01).
 Output schemas deliberately not added (Claude reads the text; plots can't be described; drift would break tools).
 Private-repo CI minutes cost 10x on macOS and 2x on Windows; they reset monthly (next

@@ -359,7 +359,12 @@ def test_color_targets_evaluate_and_round_trip(space, tmp_path):
     d = {"substrate": "BK7", "layers": [{"material": "TiO2", "thickness": 120}]}
     target = {"kind": "R_color", "color_space": space, "values": [30, 10, -20], "tolerances": [1, 1, 1]}
     result = engine.evaluate(d, [target])
-    assert result["targets"][0]["points"] == 3 and "worst_value" not in result["targets"][0]
+    row = result["targets"][0]
+    assert row["points"] == 3 and "worst_value" not in row
+    lab = engine.color(d, [0.0])["colors"][0]["Lab"]
+    if space in ("Lab", "L*a*b*"):  # the distance is ΔE*ab against compute_color's coordinates
+        assert row["calculated"] == pytest.approx(lab, rel=1e-5)
+        assert row["distance"] == pytest.approx(np.linalg.norm(np.array(lab) - [30, 10, -20]), rel=1e-5)
     path = str(tmp_path / "color.ofp")
     engine.save_project(path, [d], [target])
     loaded = engine.load_project(path)["targets"][0]
