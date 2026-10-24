@@ -3,6 +3,18 @@
 ## 0.1.3 — 2026-10-24
 
 - `remove_material` tool.
+- Fix: refractiveindex.info imports kept only the range where both n and k are given (ZnS: 0.4-1 um instead of
+  0.4-14 um); the whole n range is kept, with k = 0 where the entry gives none (stated in `notes`).
+- Fix: colour hex codes were built from linear RGB (too dark); sRGB is now gamma-encoded (`linear_RGB` also given).
+- Fix: GD/GDD at the first and last wavelength of a target band reused the neighbouring estimate, so band edges
+  escaped the optimizer; such targets are evaluated with one extra (unweighted) step at each end.
+- Fix: a layer with the same index as its neighbour (e.g. Ge on a Ge substrate) ran off to 4e16 nm; thicknesses
+  are capped (`max_layer_thickness`) and such layers are flagged as optically invisible. OpenFilters failures
+  report `error_detail`.
+- New `margin` option keeps inequality targets away from their limits; a warning flags results that meet their
+  targets on the grid but not between grid points.
+- Plots: one colour per design, solid unpolarized curves, and phase/GD/GDD targets plotted.
+- Material summaries give the data range of tabulated materials; absorptance no longer shows -8e-16.
 - Fix: refractiveindex.info entries whose id contains a space (495 of them, e.g. "Rodriguez-de Marcos") could
   not be imported.
 - Unknown design or layer keys are refused with a "did you mean" suggestion (a misspelt key was ignored).

@@ -184,3 +184,57 @@ def test_refractiveindex_page_ids_may_contain_spaces(monkeypatch):
     monkeypatch.setattr(refractiveindex, "_fetch", lambda path: fetched.append(path) or "DATA: []")
     refractiveindex.load_page("main/MgF2/nk/Rodriguez-de Marcos")
     assert fetched == ["data/main/MgF2/nk/Rodriguez-de Marcos.yml"]
+
+
+def test_invisible_layer_is_capped_and_flagged():
+    # Scenario S2.8: a Ge layer on a Ge substrate (same index) has no gradient; it ran off to 4e16 nm.
+    engine.add_material("X_Ge", "constant", n=4.0)
+    engine.add_material("X_ZnS", "constant", n=2.2)
+    start = {"substrate": "X_Ge", "center_wavelength": 10000, "layers": [
+        {"material": "X_Ge", "thickness": 600}, {"material": "X_ZnS", "thickness": 1100}]}
+    targets = [{"kind": "R", "from": 8000, "to": 12000, "step": 200, "value": 0.01, "inequality": "<="}]
+    result = engine.optimize(start, targets, "refine", {"time_limit": 20})
+    assert max(l["thickness"] for l in result["design"]["layers"]) <= 20000 + 1e-6
+    assert any("optically invisible" in w for w in result.get("warnings", []))
+
+
+def test_gdd_band_edges_are_evaluated_with_centred_derivatives():
+    # Scenario S2.9: OpenFilters reuses the neighbouring estimate at a band's first and last point, so a
+    # dispersive mirror "met" -20 +/- 5 fs^2 on its grid while the true edge GDD was -13.5 fs^2.
+    for name, n in (("C_S", 1.45), ("C_H", 2.3), ("C_L", 1.45)):
+        engine.add_material(name, "constant", n=n)
+    d = {"substrate": "C_S", "center_wavelength": 800,
+         "formula": {"formula": "(HL)^10 H", "materials": {"H": "C_H", "L": "C_L"}}}
+    target = {"kind": "R_GDD", "polarization": "s", "from": 760, "to": 840, "step": 2, "value": 4.0, "tolerance": 50}
+    row = engine.evaluate(d, [target])["targets"][0]
+    assert row["points"] == 41  # the padding points are not reported
+    fine = engine.spectra(d, ["R_GDD"], [759.5, 760.0, 760.5], [0.0], ["s"])["series"][0]["values"]
+    edge = engine.spectra(d, ["R_GDD"], list(range(750, 851, 2)), [0.0], ["s"])["series"][0]["values"][5]  # 760 nm
+    assert abs(edge - fine[1]) < 0.05  # centred estimate at 760 nm agrees with a fine grid
+
+
+def test_margin_and_between_points_check():
+    thick = {"substrate": "BK7", "layers": [{"material": "TiO2", "thickness": 2000}]}  # dense fringes
+    coarse = engine.spectra(thick, ["R"], list(range(500, 601, 20)))["series"][0]["values"]
+    target = [{"kind": "R", "from": 500, "to": 600, "step": 20, "value": float(max(coarse)) + 1e-6, "inequality": "<="}]
+    result = engine.evaluate(thick, target)
+    assert result["all_targets_met"] and any("between its points" in w for w in result["warnings"])
+    tightened = engine.with_margin([{"kind": "R", "value": 0.005, "inequality": "<="},
+                                    {"kind": "T", "value": 0.9, "inequality": ">="},
+                                    {"kind": "R", "value": 0.5}], 0.001)
+    assert [t["value"] for t in tightened] == [pytest.approx(0.004), pytest.approx(0.901), 0.5]
+
+
+def test_colour_hex_is_gamma_encoded_srgb():
+    # Scenario S2.10: the hex was built from OpenFilters' linear RGB (#0a327e instead of about #367bbb).
+    c = engine.color(ar_design([18.6, 97.0, 26.6]), [0.0])["colors"][0]
+    expected = [12.92 * v if v <= 0.0031308 else 1.055 * v ** (1 / 2.4) - 0.055 for v in c["linear_RGB"]]
+    assert c["sRGB"] == pytest.approx(expected)
+    assert c["hex"] == "#%02x%02x%02x" % tuple(round(v * 255) for v in expected)
+
+
+def test_material_summary_gives_the_data_range():
+    row = next(r for r in engine.list_materials("Ge") if r["name"] == "Ge")
+    assert row["data_range_nm"][1] < 2000 and "note" not in row  # 400-1550 nm are inside the data
+    row = next(r for r in engine.list_materials("Ge", wavelengths=(550.0, 2500.0)) if r["name"] == "Ge")
+    assert "2500" in row["note"] and "extrapolated" in row["note"]

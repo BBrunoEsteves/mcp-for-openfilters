@@ -125,6 +125,11 @@ per-coordinate deviation and distance (= Delta E*ab for Lab). Acceptance: 44 che
 Scenario Batch 1 (2026-10-24): all 8 reference results reproduced. Fixed from its report: refractiveindex page ids
 with spaces, unknown design/layer keys (DESIGN_KEYS/LAYER_KEYS), angle-scan summaries, threshold ranges / FWHM,
 8 significant figures in summaries, absorbing_ranges_nm.
+Scenario Batch 2: 10/11 pass. Fixed: import kept only n-and-k overlap (to_table keeps full n, k=0 elsewhere, notes);
+sRGB gamma (OpenFilters' RGB() is linear); GD/GDD band targets padded one unweighted step each side for evaluation
+(build_targets(pad=True); save_project unpadded; target_report skips pads); thickness cap via _guarded overriding
+prepare/remove_thin_layers_/add_parameters (o._max_thickness set before __init__, _deadline after);
+_invisible_layers warning; options margin (with_margin) and between_points_warning (4x finer grid).
 Version 0.1.3 set locally 2026-10-24 (not tagged: Actions minutes exhausted until 2026-11-01).
 Output schemas deliberately not added (Claude reads the text; plots can't be described; drift would break tools).
 Private-repo CI minutes cost 10x on macOS and 2x on Windows; they reset monthly (next

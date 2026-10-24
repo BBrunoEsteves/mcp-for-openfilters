@@ -150,8 +150,9 @@ async def targets_plot(designs, targets, title, name):
     targets: one figure per (angle, polarization) used by the targets.
     Returns (pngs, plot_files-ready) or ([], None) when nothing to draw."""
     photometric = [t for t in targets if t.get("kind") in ("R", "T", "A")]
+    pngs = await _dispersive_plots(designs, targets, title)
     if not photometric:
-        return []
+        return pngs
     lo = min(t.get("from", t.get("wavelength", 1e9)) for t in photometric)
     hi = max(t.get("to", t.get("wavelength", 0)) for t in photometric)
     margin = max(0.15 * (hi - lo), 20.0)
@@ -162,7 +163,7 @@ async def targets_plot(designs, targets, title, name):
         if key not in combos:
             combos.append(key)
     quantities = sorted({t["kind"] for t in photometric}, key="RTA".index)
-    pngs = []
+    photometric_pngs = []
     for angle, pol in combos[:3]:
         curves, wvls = [], None
         for label, design, reference in designs:
@@ -172,7 +173,31 @@ async def targets_plot(designs, targets, title, name):
             for s in r["series"]:
                 curves.append((f"{s['quantity']} {label}", s["quantity"], s["values"], reference))
         shown = [t for t in photometric if (float(t.get("angle", 0.0)), str(t.get("polarization", "unpolarized"))) == (angle, pol)]
-        pngs.append(plotting.design_vs_targets(wvls, curves, shown, f"{title} — {angle:g}°, {pol}"))
+        photometric_pngs.append(plotting.design_vs_targets(wvls, curves, shown, f"{title} — {angle:g}°, {pol}"))
+    return photometric_pngs + pngs
+
+
+async def _dispersive_plots(designs, targets, title):
+    """Phase / GD / GDD targets: one figure per quantity and polarization, on a fine grid (GD and GDD
+    are numerical derivatives)."""
+    kinds = [k for k in ("R_phase", "T_phase", "R_GD", "T_GD", "R_GDD", "T_GDD") if any(t.get("kind") == k for t in targets)]
+    pngs = []
+    for kind in kinds:
+        chosen = [t for t in targets if t.get("kind") == kind]
+        lo = min(t.get("from", t.get("wavelength", 1e9)) for t in chosen)
+        hi = max(t.get("to", t.get("wavelength", 0)) for t in chosen)
+        pad = max(0.05 * (hi - lo), 5.0)
+        wavelengths = {"from": lo - pad, "to": hi + pad, "step": min(1.0, (hi - lo + 2 * pad) / 200)}
+        for angle, pol in sorted({(float(t.get("angle", 0.0)), str(t.get("polarization", "s"))) for t in chosen})[:2]:
+            curves, wvls = [], None
+            for label, design, reference in designs:
+                r = await compute("spectra", design=design, quantities=[kind], wavelengths=wavelengths,
+                                  angles=[angle], polarizations=[pol])
+                wvls = r["wavelengths"]
+                curves += [(f"{kind} {label}", kind, s["values"], reference) for s in r["series"]]
+            shown = [t for t in chosen if (float(t.get("angle", 0.0)), str(t.get("polarization", "s"))) == (angle, pol)]
+            pngs.append(plotting.design_vs_targets(wvls, curves, shown, f"{title} — {kind}, {angle:g}°, {pol}",
+                                                   ylabel=plotting.UNITS.get(kind, kind), photometric=False))
     return pngs
 
 
@@ -584,14 +609,19 @@ async def optimize_design(design: Design, targets: Targets, method: str = "needl
                               "time_limit (s, default 300), max_iterations, min_thickness (nm; guaranteed in the "
                               "result: thin layers are clamped or removed and the design re-refined with that bound; a clamped design "
                               "that already meets every target has merit 0 and stays as clamped), "
-                              "max_layers, max_total_thickness (nm), needle_materials (list), nb_needles, nb_steps, "
+                              "max_layers, max_total_thickness (nm), max_layer_thickness (nm; default the larger of "
+                              "20000 and 10x the thickest starting layer), margin (optimize inequality targets that "
+                              "much inside their limit, in the targets' units, e.g. 0.0005 for R <= 0.005; results are "
+                              "still judged against the targets), needle_materials (list), nb_needles, nb_steps, "
                               "automatic (default true)"))] = None,
                           wait_seconds: float = 40.0, ctx: Context = None) -> dict:
     """Optimize a design with OpenFilters: method "refine" (thicknesses only), "needle" (refine and
     insert new layers until no improvement) or "step" (graded/step index, needs a mixture material).
     Waits up to wait_seconds (max 45); if not finished, returns a job_id to poll. Returns the best design found
     (not merely the last), stop_reason with a plain stop_explanation, thinnest_layer_nm,
-    and an .ofp project (start + optimized) openable in OpenFilters. One run finds a local optimum; for
+    and an .ofp project (start + optimized) openable in OpenFilters. thin_layers_removed counts layers removed
+    while enforcing min_thickness (a layer held at the minimum is dropped when that does not worsen the merit).
+    A warning flags a result that meets its targets on their grid but not between grid points. One run finds a local optimum; for
     hard specifications use run_optimization_campaign (many starts). Only FRONT layers are optimized;
     back_layers (if any) stay fixed and count in the merit when consider_backside is true."""
     checked(engine.build_targets, targets)
@@ -933,7 +963,8 @@ at most {max_layers} layers, no layer thinner than {min_thickness_nm} nm; materi
    {min_thickness_nm}}} (n_layers only sizes the starting designs; a minimum thickness of 0 allows any layer), top_n 5
    and a tolerance stage (1 % relative thickness error, 200 trials).
 3. Poll job_status, then get_results; the ranking puts the highest yield first. Pick the simplest design with a
-   good yield; if no yield is good, say so and suggest relaxing the specification.
+   good yield; if no yield is good (designs sit exactly on the limit), rerun with options "margin" (e.g. a tenth of
+   the reflectance limit, as a fraction) or suggest relaxing the specification.
 {_CLOSING}"""
 
 

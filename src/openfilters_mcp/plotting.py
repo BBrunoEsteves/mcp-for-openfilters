@@ -104,11 +104,11 @@ def index_profile(design_rows, title="Index profile"):
     return _png(fig, ax, 1)
 
 
-def design_vs_targets(wavelengths, curves, targets, title):
-    """Spectra of one or more designs with the photometric targets drawn on
-    top. curves: [(label, quantity, values, is_reference)]; targets: target
-    dicts (R/T/A kinds only are drawn)."""
-    fig, ax = _figure(title, "Wavelength (nm)", "R / T / A")
+def design_vs_targets(wavelengths, curves, targets, title, ylabel="R / T / A", photometric=True):
+    """Spectra of one or more designs with their targets drawn on top. curves: [(label, quantity, values,
+    is_reference)]; targets: target dicts of the plotted quantities. photometric=False for phase, GD
+    and GDD (axis scaled to the data instead of 0-1)."""
+    fig, ax = _figure(title, "Wavelength (nm)", ylabel)
     quantities, designs = [], []
     for label, quantity, values, reference in curves:
         if quantity not in quantities:
@@ -138,7 +138,8 @@ def design_vs_targets(wavelengths, curves, targets, title):
                     markersize=7, linestyle="none")
     target_values = [t.get("value", 0.0) for t in targets if t.get("kind") in quantities and "value" in t]
     target_values += [p[1] for t in targets if t.get("kind") in quantities for p in t.get("points", [])]
-    _photometric_axis(ax, np.concatenate([np.asarray(c[2]) for c in curves] + [np.asarray(target_values, dtype=float)]))
+    if photometric:
+        _photometric_axis(ax, np.concatenate([np.asarray(c[2]) for c in curves] + [np.asarray(target_values, dtype=float)]))
     note = "grey bars: targets (▲ ≥, ▼ ≤)"
     if any(c[3] for c in curves):
         note += "\ndashed: starting design"

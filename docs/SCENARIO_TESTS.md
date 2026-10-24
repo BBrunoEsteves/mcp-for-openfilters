@@ -98,12 +98,14 @@ and SiO2, at most 6 layers, no layer thinner than 10 nm. Use a campaign with a y
 Check: designs respect 6 layers and 10 nm; ranking is by yield; "met" agrees with the worst R.
 
 **S2.2 V-coat for a laser line.** *Two-layer AR on FusedSilica with R < 0.05 % at 1064 nm, TiO2 and SiO2.*
-Check: a two-layer solution exists (thicknesses tens of nm); R at 1064 nm < 0.05 %; the V-shaped curve
-around 1064 nm is described.
+Check: a two-layer solution exists (for example about 35 nm TiO2 and 245 nm SiO2; other thickness pairs also
+work); R at 1064 nm < 0.05 %; the V-shaped curve around 1064 nm is described.
 
 **S2.3 High-power laser mirror.** *Start from S1.5's mirror, add a half-wave SiO2 overcoat at 1064 nm, and
 compare the electric-field peak (value and position) with and without it.*
-Check: with the overcoat, the field at the outer surface is lower and R at 1064 nm is still ≥ 99.99 %.
+Check: with TiO2 outermost the surface is already a field node, so the overcoat's effect is to move the |E|²
+peak away from the outer TiO2/SiO2 interface into the SiO2 (where it reaches about 4/n_L², ≈ 1.9); R at 1064 nm
+stays ≥ 99.99 %.
 
 **S2.4 45° dichroic beam combiner.** *On FusedSilica at 45°: R ≥ 99 % at 532 nm for both s and p, and
 T ≥ 95 % at 1064 nm for both s and p, TiO2/SiO2, at most 30 layers.*

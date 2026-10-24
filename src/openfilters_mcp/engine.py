@@ -105,6 +105,12 @@ def list_materials(name_filter=None, wavelengths=(400.0, 550.0, 800.0, 1550.0)):
             N = material_N(name, wavelengths)
             row["n,k"] = {f"{w:g}": [round(float(z.real), 4), round(float(-z.imag), 5) + 0.0]
                           for w, z in zip(wavelengths, N)}
+            data = getattr(material, "wvls", None)
+            if data is not None and len(data):  # tabulated: values outside the data are extrapolated
+                row["data_range_nm"] = [round(float(data[0]), 3), round(float(data[-1]), 3)]
+                outside = [f"{w:g}" for w in wavelengths if not data[0] <= w <= data[-1]]
+                if outside:
+                    row["note"] = f"n,k at {', '.join(outside)} nm are extrapolated beyond the data"
         else:
             row["index_range_at_550"] = [round(x, 4) for x in material.get_index_range(550.0)]
         rows.append(row)
@@ -490,7 +496,29 @@ def material_warnings(design, wavelengths):
             raise EngineError(f"{name} gives an unphysical index (n = {z.real:.4g}) at {w:g} nm: its model is not valid "
                               "there. Use a material with data for this range (search_refractiveindex and "
                               "import_refractiveindex_material).")
-    return warnings
+    return warnings + _invisible_layers(design, (lo + hi) / 2)
+
+
+def _invisible_layers(design, wavelength):
+    """Warnings for front layers with the same index as what is next to them (e.g. Ge on a Ge substrate):
+    they are optically invisible, their thickness is meaningless and an optimizer cannot control it."""
+    layers = [l for l in design.get("layers") or [] if isinstance(l, dict) and not l.get("graded") and "index" not in l]
+    if not layers or design.get("formula"):
+        return []
+    names = [design.get("substrate", "FusedSilica")] + [l.get("material") for l in layers] + [design.get("incident_medium", "void")]
+    try:
+        N = [material_N(n, [wavelength])[0] for n in names]
+    except EngineError:
+        return []
+    out = []
+    for i in range(1, len(names) - 1):
+        for j, where in ((i - 1, "the substrate" if i == 1 else f"layer {i - 1}"),
+                         (i + 1, "the incident medium" if i == len(names) - 2 else f"layer {i + 1}")):
+            if abs(N[i] - N[j]) < 1e-9:
+                out.append(f"layer {i} ({names[i]}) has the same index as {where} at {wavelength:g} nm: it is optically "
+                           "invisible, so its thickness is meaningless; remove it or merge it with its neighbour")
+                break
+    return out
 
 
 def target_wavelengths(target_specs):
@@ -534,6 +562,8 @@ def spectra(design, quantities=("R", "T"), wavelengths=None, angles=(0.0,), pola
                 values = np.array([values[i] for i in range(len(wvls))], dtype=float)
                 if q == "OD":
                     values = -np.log10(np.maximum(values, 1e-300))
+                elif q in ("R", "T", "A") and values.min() > -1e-9:
+                    values = np.maximum(values, 0.0)  # round-off (A = 1 - R - T came out at -8e-16)
                 values = values * TIME_UNITS.get(q, 1.0)
                 series.append({"quantity": q, "angle": float(angle), "polarization": polarization_name(polarization_value(pol)),
                                "values": values})
@@ -640,8 +670,19 @@ INEQUALITIES = {"equal": None, "=": None, "==": None, "smaller": "smaller", "<":
                 "max": "smaller", "larger": "larger", ">": "larger", ">=": "larger", "min": "larger"}
 
 
-def target_lines(spec):
-    """Translate a target dict into OpenFilters' text format."""
+PAD_WEIGHT = 1e6  # tolerance factor of padding points (no weight in the merit)
+
+
+def padded(spec):
+    """GD/GDD band targets get one extra wavelength step at each end for evaluation and optimization:
+    OpenFilters takes GD/GDD as numerical derivatives, and at the first and last point of a band it
+    reuses the neighbouring point's estimate, so the band edges escaped the optimizer (a dispersive
+    mirror "met" GDD -20 +/- 5 fs^2 on its grid but was at -13.5 fs^2 at both edges)."""
+    return spec.get("kind") in TIME_UNITS and "from" in spec and "to" in spec and "wavelength" not in spec
+
+
+def target_lines(spec, pad=False):
+    """Translate a target dict into OpenFilters' text format (pad: see padded())."""
     kind = spec.get("kind")
     if kind not in TARGET_KINDS:
         raise EngineError(f"target kind must be one of {', '.join(TARGET_KINDS)}")
@@ -684,6 +725,13 @@ def target_lines(spec):
                 raise EngineError("spectrum targets need value (constant) or points [[wavelength, value, tolerance], ...]")
             value = check_value(float(spec["value"]))
             points = [[start, value, tol], [stop, value, tol]]
+        if pad and padded(spec):
+            first, last = points[0], points[-1]
+            first_tol = float(first[2]) if len(first) > 2 else tol
+            last_tol = float(last[2]) if len(last) > 2 else tol
+            start, stop = start - step, stop + step
+            points = ([[start, float(first[1]), first_tol * PAD_WEIGHT]] + [list(p) for p in points]
+                      + [[stop, float(last[1]), last_tol * PAD_WEIGHT]])
         lines += [f"Kind: {spectral}", f"Angle: {angle}", f"Polarization: {pol}",
                   f"From: {start}", f"To: {stop}", f"By: {step}", "Points:"]
         for point in points:
@@ -713,14 +761,15 @@ def _color_space(name):
     return key
 
 
-def build_targets(specs):
+def build_targets(specs, pad=False):
+    """OpenFilters targets; pad=True for evaluation and optimization (see padded()), False for projects."""
     if not specs:
         raise EngineError("at least one target is needed")
     file_version = of_version.version("1.1")
     out = []
     for i, spec in enumerate(specs):
         try:
-            out.append(of_targets.parse_target([l + "\n" for l in target_lines(spec)], file_version))
+            out.append(of_targets.parse_target([l + "\n" for l in target_lines(spec, pad)], file_version))
         except of_targets.target_error as error:
             raise EngineError(f"target {i}: {error}") from error
     return out
@@ -758,8 +807,11 @@ def target_report(optimizer, specs):
     passed = np.where(ineq != 0, ok_ineq, np.abs(deviation) <= tol * (1 + 1e-9)) & np.isfinite(calc)
     rows = []
     starts = list(optimizer.target_starting_position) + [len(calc)]
+    counted = np.zeros(len(calc), dtype=bool)
     for i, spec in enumerate(specs):
-        sl = slice(starts[i], starts[i + 1])
+        pads = 1 if padded(spec) else 0  # padding points (see padded()) are not part of the target
+        sl = slice(starts[i] + pads, starts[i + 1] - pads)
+        counted[sl] = True
         d = deviation[sl]
         unit = TIME_UNITS.get(spec.get("kind"), 1.0)  # GD/GDD reported in fs / fs^2
         row = {"target": i, "kind": spec.get("kind"), "points": int(d.size),
@@ -778,12 +830,14 @@ def target_report(optimizer, specs):
         # Colour targets (3 coordinates, no wavelength per point) have no single worst value.
         values, kind = calc[sl], ineq[starts[i]]
         wvls = optimizer.wvls[i] if i < len(optimizer.wvls) else None
+        if wvls is not None and pads and len(wvls) == values.size + 2 * pads:
+            wvls = wvls[pads:len(wvls) - pads]
         if values.size and np.all(np.isfinite(values)) and wvls is not None and len(wvls) == values.size:
             j = int(np.argmax(values) if kind < 0 else np.argmin(values) if kind > 0 else np.argmax(np.abs(goal[sl] - values)))
             row["worst_value"] = sig(values[j] * unit)
             row["worst_at_nm"] = round(float(wvls[j]), 3)
         rows.append(row)
-    return rows, bool(np.all(passed))
+    return rows, bool(np.all(passed[counted]))
 
 
 def sig(value, digits=6):
@@ -791,14 +845,60 @@ def sig(value, digits=6):
     return float(f"{float(value):.{digits}g}")
 
 
+def with_margin(target_specs, margin):
+    """Target specs with inequality limits tightened by margin (same units as the values: fractions
+    for R/T/A, fs or fs^2 for GD/GDD), so an optimum does not sit exactly on the specification."""
+    out = []
+    for spec in target_specs:
+        ineq = INEQUALITIES.get(str(spec.get("inequality", "equal")).lower())
+        if not ineq or str(spec.get("kind", "")).endswith("_color"):
+            out.append(spec)
+            continue
+        shift = -margin if ineq == "smaller" else margin
+        clip = (lambda v: min(max(v, 0.0), 1.0)) if spec.get("kind") in ("R", "T", "A") else (lambda v: v)
+        spec = dict(spec)
+        if "value" in spec:
+            spec["value"] = clip(float(spec["value"]) + shift)
+        if spec.get("points"):
+            spec["points"] = [[p[0], clip(float(p[1]) + shift), *p[2:]] for p in spec["points"]]
+        out.append(spec)
+    return out
+
+
+def between_points_warning(design, target_specs, refine=4):
+    """Optima sit on the limits, so a design that meets its targets on their wavelength grid can fail
+    between grid points. Re-check spectral targets on a grid `refine` times finer."""
+    fine, changed = [], False
+    for spec in target_specs:
+        if "from" in spec and "to" in spec and "wavelength" not in spec:
+            step = float(spec.get("step", max((float(spec["to"]) - float(spec["from"])) / 100.0, 0.1)))
+            fine.append(dict(spec, step=step / refine))
+            changed = True
+        else:
+            fine.append(spec)
+    if not changed:
+        return None
+    rows, ok = target_report(_evaluator(build_filter(design), build_targets(fine, pad=True)), fine)
+    if ok:
+        return None
+    worst = "; ".join(f"target {r['target']} ({r['kind']}) worst {r.get('worst_value')} at {r.get('worst_at_nm')} nm"
+                      for r in rows if r["pass_fraction"] < 1)
+    return (f"met on the targets' wavelength grid but not between its points ({refine}x finer grid): {worst}. "
+            "Use a finer step, or optimize with options margin to keep away from the limits.")
+
+
 def evaluate(design, target_specs):
     f = build_filter(design)
-    targets = build_targets(target_specs)
+    targets = build_targets(target_specs, pad=True)
     warnings = material_warnings(design, target_wavelengths(target_specs))  # before computing: n = 0 divides by 0
     optimizer = _evaluator(f, targets)
     rows, all_pass = target_report(optimizer, target_specs)
     out = {"merit_chi2": float(optimizer.get_chi_2()), "all_targets_met": all_pass, "targets": rows,
            "nb_layers": f.get_nb_layers(), "total_thickness_nm": round(float(f.get_total_thickness()), 3)}
+    if all_pass:
+        between = between_points_warning(design, target_specs)
+        if between:
+            warnings.append(between)
     if warnings:
         out["warnings"] = warnings
     return out
@@ -956,7 +1056,29 @@ def _guarded(cls):
             if getattr(self, "_deadline", None) and time.time() > self._deadline:
                 raise _Overrun()
             return cls.calculate_values(self, *args, **kwargs)
-        _GUARDED[cls] = type(cls.__name__, (cls,), {"calculate_values": calculate_values})
+
+        def cap_thicknesses(self):
+            # OpenFilters leaves thicknesses unbounded above: a layer that is optically invisible (same
+            # index as its neighbour, e.g. Ge on a Ge substrate) has no gradient and ran off to 4e16 nm.
+            cap = getattr(self, "_max_thickness", None)
+            if cap and getattr(self, "optimizer", None) is not None:
+                for i, (kind, _) in enumerate(self.parameters):
+                    if kind == THICKNESS:
+                        self.parameter_max[i] = min(self.parameter_max[i], cap)
+                self.optimizer.set_limits(self.parameter_min, self.parameter_max)
+
+        def rebuilding(name):
+            # The three places OpenFilters (re)creates its solver with fresh, unbounded limits.
+            def method(self, *args, **kwargs):
+                out = getattr(cls, name)(self, *args, **kwargs)
+                cap_thicknesses(self)
+                return out
+            return method
+
+        members = {"calculate_values": calculate_values}
+        members.update({name: rebuilding(name) for name in ("prepare", "remove_thin_layers_", "add_parameters")
+                        if hasattr(cls, name)})
+        _GUARDED[cls] = type(cls.__name__, (cls,), members)
     return _GUARDED[cls]
 
 
@@ -1002,8 +1124,13 @@ def _run(method, design, targets, options, deadline, progress, floor=None, info=
     if f.get_nb_layers(FRONT) == 0:
         raise EngineError("optimization needs at least one front layer to start from (e.g. a thin layer of one "
                           "of the coating materials); back layers are never optimized")
-    o = _guarded(METHODS[method])(f, targets)
-    o._deadline = deadline + DEADLINE_GRACE if deadline else None
+    guarded = _guarded(METHODS[method])
+    o = guarded.__new__(guarded)
+    # Set before construction: OpenFilters' constructor already prepares the solver.
+    thicknesses = [l["thickness"] for l in design.get("layers", []) if "thickness" in l and not l.get("graded")]
+    o._max_thickness = float(options.get("max_layer_thickness") or max([20000.0] + [10 * t for t in thicknesses]))
+    o.__init__(f, targets)
+    o._deadline = deadline + DEADLINE_GRACE if deadline else None  # after construction: it evaluates once
     if floor:
         # OpenFilters bounds thicknesses at 0; raise the bound to the floor.
         for i, (kind, _) in enumerate(o.parameters):
@@ -1030,6 +1157,8 @@ def _run(method, design, targets, options, deadline, progress, floor=None, info=
         # be positive", Python IndexError), or a solver step overran the deadline (_Overrun):
         # keep the best design seen before.
         stop = "time_limit" if isinstance(error, _Overrun) or isinstance(error.__cause__, _Overrun) else "openfilters_error"
+        if info is not None and stop == "openfilters_error":
+            info["error"] = f"{type(error).__name__}: {error}"
         if monitor.best_layers is None:
             if stop == "time_limit":
                 return design, float(_evaluator(build_filter(design), targets).get_chi_2()), stop, o.get_iteration()
@@ -1071,7 +1200,7 @@ STOP_REASONS = {
     "min_thickness_not_reached": "not every layer could be brought to min_thickness in the time available",
     "numerical_error": "OpenFilters' optimizer failed numerically (all thicknesses NaN); the best finite design "
                        "is returned",
-    "openfilters_error": "OpenFilters' optimizer failed (e.g. it removed every layer); the best design seen is returned",
+    "openfilters_error": "OpenFilters' optimizer failed (see error_detail); the best design seen is returned",
 }
 
 EDGE_NEEDLE_NM = 1.0
@@ -1149,17 +1278,20 @@ def optimize(design, target_specs, method="needle", options=None, progress=None)
     if method not in METHODS:
         raise EngineError(f"method must be one of {', '.join(METHODS)}")
     min_thickness = float(options.get("min_thickness") or 0.0)
-    targets = build_targets(target_specs)
+    spec_targets = build_targets(target_specs, pad=True)
+    margin = float(options.get("margin") or 0.0)
+    targets = build_targets(with_margin(target_specs, margin), pad=True) if margin else spec_targets
     warnings = material_warnings(design, target_wavelengths(target_specs))
     start = time.time()
     deadline = start + float(options.get("time_limit", 300))
     design = design_from_filter(build_filter(design))
     cw = design["center_wavelength"]
-    initial = _evaluator(build_filter(design), targets).get_chi_2()
+    initial = _evaluator(build_filter(design), spec_targets).get_chi_2()
 
     info = {}
     edge_needles = 0
     current, chi2, stop, iterations = _run(method, design, targets, options, deadline, progress, info=info)
+    error_detail = info.get("error")
     if method == "needle":
         current, chi2, stop, its, edge_needles = _continue_needles(
             current, chi2, stop, info, targets, options, deadline, progress)
@@ -1187,8 +1319,12 @@ def optimize(design, target_specs, method="needle", options=None, progress=None)
     # 0 nm layers (left at OpenFilters' lower bound) are optically invisible: drop them.
     current = dict(current, layers=_drop_empty_layers(current["layers"]) or current["layers"])
     f = build_filter(current)
-    final = _evaluator(f, targets)
+    final = _evaluator(f, spec_targets)
     rows, all_pass = target_report(final, target_specs)
+    if all_pass:
+        between = between_points_warning(current, target_specs)
+        if between:
+            warnings.append(between)
     if time.time() >= deadline and stop not in ("max_layers", "max_total_thickness", "min_thickness_not_reached"):
         stop = "time_limit"
     thicknesses = [l["thickness"] for l in current["layers"] if not l.get("graded")]
@@ -1201,7 +1337,8 @@ def optimize(design, target_specs, method="needle", options=None, progress=None)
             "thin_layers_removed": removed, "edge_needles_added": edge_needles,
             "rounds": rounds if min_thickness else 1,
             "elapsed_s": round(time.time() - start, 2), "stop_explanation": STOP_REASONS.get(stop, ""),
-            **({"warnings": warnings} if warnings else {}), "design": current}
+            **({"warnings": warnings} if warnings else {}), **({"error_detail": error_detail} if error_detail else {}),
+            "design": current}
 
 
 # ---------------------------------------------------------------------------
@@ -1220,7 +1357,7 @@ def tolerance(design, target_specs, n_trials=200, thickness_error=None, index_er
     rng = np.random.default_rng(seed)
     base = build_filter(design)
     nominal = design_from_filter(base)
-    targets = build_targets(target_specs)
+    targets = build_targets(target_specs, pad=True)
     material_warnings(design, target_wavelengths(target_specs))  # refuses unphysical indices
     nominal_eval = _evaluator(base, targets)
     _, nominal_pass = target_report(nominal_eval, target_specs)
@@ -1294,7 +1431,7 @@ def _scale_indices(f, factors):
 def sensitivity(design, target_specs, relative_step=0.01):
     """Merit change when each layer thickness is increased by relative_step."""
     nominal = design_from_filter(build_filter(design))
-    targets = build_targets(target_specs)
+    targets = build_targets(target_specs, pad=True)
     material_warnings(design, target_wavelengths(target_specs))  # refuses unphysical indices
     base = _evaluator(build_filter(nominal), targets).get_chi_2()
     rows = []
