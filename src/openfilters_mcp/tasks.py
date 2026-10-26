@@ -13,7 +13,7 @@ import traceback
 
 import numpy as np
 
-from . import engine
+from . import engine, thermal
 
 
 def worker_init():
@@ -88,6 +88,8 @@ OPS = {
     "tolerance": _tolerance_task,
     "sensitivity": lambda a: engine.sensitivity(**a),
     "color": lambda a: engine.color(**a),
+    "thermal_sensitivity": lambda a: thermal.sensitivity(**a),
+    "thermal_sweep": lambda a: thermal.sweep(**a),
 }
 
 

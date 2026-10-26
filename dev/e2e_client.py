@@ -50,6 +50,13 @@ async def main(home):
             show("compute_monitoring_curves", await call("compute_monitoring_curves", {
                 "design": {"substrate": "BK7", "layers": [["TiO2", 60], ["SiO2", 95], ["TiO2", 60]]},
                 "wavelengths": [550, 633]}), 300)
+            bandpass = {"substrate": "FusedSilica", "center_wavelength": 532,
+                        "formula": {"formula": "(HL)^5 HH (LH)^5", "materials": {"H": "TiO2", "L": "SiO2"}}}
+            heat = {"materials": {"TiO2": {"dn_dT": -1e-4, "cte": 5e-6, "poisson": 0.27},
+                                  "SiO2": {"dn_dT": 1e-5, "cte": 0.5e-6, "poisson": 0.17}}, "substrate_cte": 0.55e-6}
+            show("thermal_sensitivity", await call("thermal_sensitivity", {"design": bandpass, "thermal": heat}), 600)
+            show("thermal_sweep", await call("thermal_sweep", {"design": bandpass, "delta_T": [0, 50, 100],
+                                                               "thermal": heat}), 300)
             show("evaluate_design", await call("evaluate_design", {"design": MIRROR, "targets": TARGETS}), 300)
             show("bad input", await call("evaluate_design", {"design": {"layers": [["Unobtainium", 10]]}, "targets": TARGETS}))
             opt = show("optimize_design", await call("optimize_design", {

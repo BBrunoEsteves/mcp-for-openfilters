@@ -76,6 +76,9 @@ public data from refractiveindex.info; prefer thin-film entries for coatings and
 Workflow: list_materials -> describe_design / compute_spectrum -> evaluate_design -> optimize_design
 (refine = thickness refinement, needle = adds layers, step = graded index) -> tolerance_analysis.
 For high blocking use the "OD" quantity (optical density, -log10 T) rather than T.
+Temperature (tunable or athermal filters): thermal_sensitivity gives how a peak moves per index and thickness
+change of each material, and with dn/dT, expansion and Poisson ratios, d(lambda)/dT; thermal_sweep follows
+the peak over temperature changes.
 Tool calls time out after about 60 s in some apps: wait_seconds is capped at 45 s; long jobs return a job_id.
 For many cases use run_batch (sweeps) and run_optimization_campaign (many starts, ranked, optional
 yield analysis); they return a job_id: poll job_status, then get_results.
@@ -577,6 +580,52 @@ async def compute_monitoring_curves(design: Design, wavelengths: list[float], an
                               "Deposited thickness (nm)", "Signal", r["layer_boundaries_nm"])
         return with_plots(out, png, "monitoring")
     return out
+
+
+Thermal = Annotated[dict[str, Any], Field(description=(
+    'Thermal properties: {"materials": {"TiO2": {"dn_dT": -1e-4, "cte": 5e-6, "poisson": 0.27, "dk_dT": 0}, '
+    '"SiO2": {"dn_dT": 1e-5, "cte": 0.5e-6, "poisson": 0.17}}, "substrate_cte": 0.55e-6, "clamped": true}, per '
+    'kelvin. dn_dT depends strongly on the deposition process (amorphous TiO2 ranges from about -2e-4 to +1e-4): '
+    'use measured values when available and say which values were assumed. A film clamped to its substrate '
+    '(default) changes thickness by (1+nu)/(1-nu)*cte - 2nu/(1-nu)*substrate_cte per kelvin (needs poisson and '
+    'substrate_cte: fused silica 0.55e-6, BK7 7.1e-6); "clamped": false uses cte alone. Materials left out count as '
+    '0. Not included: the elasto-optic effect and the substrate\'s own dn/dT.'))]
+PeakWindow = Annotated[dict[str, float] | None, Field(description=(
+    'Where to look for the peak first, {"from": 507, "to": 557, "step": 0.05}; default near +/- 25 nm. It is '
+    'widened if the peak does not fit and then refined to FWHM/500.'))]
+
+
+@mcp.tool(title="Thermal sensitivity of a peak", annotations=READ)
+async def thermal_sensitivity(design: Design, near: float | None = None, quantity: str = "T",
+                              thermal: Thermal | None = None, window: PeakWindow = None, angle: float = 0.0,
+                              polarization: str = "unpolarized") -> dict:
+    """How the peak of R or T nearest `near` (default the center wavelength; e.g. a band-pass line) moves
+    when each material's index or thickness changes: d(lambda)/dn in nm per refractive-index unit and
+    d(lambda)/d(strain) in nm per unit relative thickness change, for all layers of that material
+    (half-maximum centre, central differences). These do not depend on any thermal property, so they can be
+    combined with measured dn/dT later. With `thermal`, also d(lambda)/dT in pm/K, each material's
+    contribution, kelvin per FWHM (the heating that moves the peak by its width) and, per material, the dn/dT
+    that would make the peak athermal."""
+    return await compute("thermal_sensitivity", design=design, quantity=quantity, near=near, window=window,
+                         angle=angle, polarization=polarization, thermal=thermal)
+
+
+@mcp.tool(title="Thermal tuning sweep", annotations=READ)
+async def thermal_sweep(design: Design, delta_T: list[float], thermal: Thermal, near: float | None = None,
+                        quantity: str = "T", window: PeakWindow = None, angle: float = 0.0,
+                        polarization: str = "unpolarized", plot: bool = True):
+    """The peak of R or T nearest `near` at each temperature change delta_T (K, relative to the temperature the
+    design's materials and thicknesses describe), with every material's dn/dT, dk/dT and thickness strain
+    applied together: half-maximum centre, peak wavelength and value, FWHM; a linear fit gives
+    d(lambda)/dT in pm/K. The model is linear in temperature: check it against measurements over wide ranges."""
+    r = await compute("thermal_sweep", design=design, delta_T=delta_T, thermal=thermal, quantity=quantity,
+                      near=near, window=window, angle=angle, polarization=polarization)
+    if plot and len(r["rows"]) > 1:
+        x = [row["delta_T_K"] for row in r["rows"]]
+        png = plotting.curves(x, {"half-maximum centre": [row["center_nm"] for row in r["rows"]]},
+                              f"{quantity} peak versus temperature", "Temperature change (K)", "Wavelength (nm)")
+        return with_plots(r, png, "thermal_sweep")
+    return r
 
 
 @mcp.tool(title="Evaluate a design", annotations=READ)

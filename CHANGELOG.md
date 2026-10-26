@@ -4,6 +4,12 @@
 
 From a field test (tunable Fabry-Perot filter with an ITO heater, 2026-10-26):
 
+- Thermal model (new tools `thermal_sensitivity`, `thermal_sweep`): the peak of R or T nearest a wavelength,
+  its shift per index and thickness change of each material, and with dn/dT, expansion coefficients and
+  Poisson ratios (films clamped to the substrate, or free), d(lambda)/dT, kelvin per FWHM and the dn/dT that
+  makes a design athermal; or the peak over a list of temperature changes. Materials are perturbed in
+  memory. Validated against the hand-made analysis of that test (20 values within 0.07 pm/K).
+
 - Fix: saving a project whose description or comment contained characters outside Latin-1 (e.g. "λ") failed on
   Windows with no message; they are now spelled out (λ -> lambda) with a warning, and project files are
   always written in Latin-1, the encoding they are read in (accented text read back garbled on macOS/Linux).

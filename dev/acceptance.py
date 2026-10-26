@@ -156,6 +156,20 @@ async def run(c, k, offline):
     k.check("compute_monitoring_curves: final signal = transmission of the finished stack",
             abs(end - (1 - R_MIRROR)) < 1e-4, f"{end} vs {1 - R_MIRROR:.6g}")
 
+    # --- thermal: with constant indices, uniform expansion scales the whole spectrum ---
+    fp = {"substrate": "AT_S", "center_wavelength": W0,
+          "formula": {"formula": "(HL)^4 HH (LH)^4", "materials": {"H": "AT_H", "L": "AT_L"}}}
+    free = {"materials": {"AT_H": {"cte": 1e-5}, "AT_L": {"cte": 1e-5}}, "clamped": False}
+    sweep, _ = await c.ok("thermal_sweep", {"design": fp, "delta_T": [0, 100], "thermal": free, "plot": False})
+    k.check("thermal_sweep: uniform expansion moves the peak by cte x wavelength per kelvin",
+            abs(sweep["dlambda_dT_pm_per_K"] - 1e-5 * W0 * 1e3) < 0.01 and abs(sweep["rows"][0]["center_nm"] - W0) < 0.05,
+            f"{sweep['dlambda_dT_pm_per_K']} pm/K vs {1e-5 * W0 * 1e3:.3f}")
+    sens, _ = await c.ok("thermal_sensitivity", {"design": fp, "thermal": free})
+    total = sum(m["dlambda_dstrain_nm"] for m in sens["materials"].values())
+    k.check("thermal_sensitivity: strain sensitivities add up to the wavelength (scale invariance)",
+            abs(total - W0) < 0.05 and abs(sens["dlambda_dT_pm_per_K"] - 1e-5 * W0 * 1e3) < 0.01,
+            f"sum {total:.4f} nm, {sens['dlambda_dT_pm_per_K']} pm/K")
+
     # --- targets: the strict rule for inequalities --------------------------------
     near = [{"kind": "R", "wavelength": W0, "value": 0.0125, "inequality": "<="}]  # R = 1.26 %, within 1 % tolerance
     ev, _ = await c.ok("evaluate_design", {"design": AR, "targets": near, "plot": False})
@@ -333,7 +347,7 @@ async def main():
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     tools = {t.name for t in (await session.list_tools()).tools}
-                    k.check("tools: all 25 tools offered", len(tools) == 25, f"{len(tools)} tools")
+                    k.check("tools: all 27 tools offered", len(tools) == 27, f"{len(tools)} tools")
                     await run(Client(session), k, args.offline)
     except Exception as error:  # report, then show the summary
         k.check("acceptance run completed", False, f"{type(error).__name__}: {error}")

@@ -30,7 +30,7 @@ runs in parallel worker processes, results go to disk, tools return compact summ
 - Tests: `.venv/Scripts/python -m pytest tests -q`
 - End-to-end: `.venv/Scripts/python dev/e2e_client.py`
 - Acceptance (every tool/prompt/resource vs known answers, via the installed exe, temp data folder):
-  `.venv/Scripts/python dev/acceptance.py` (44 checks); manual chat tests: `docs/TEST_PLAN.md`. Run both before a release.
+  `.venv/Scripts/python dev/acceptance.py` (46 checks); manual chat tests: `docs/TEST_PLAN.md`. Run both before a release.
 - Scenario tests for a Claude chat (4 batches, reference values from the engine): `docs/SCENARIO_TESTS.md`.
 - After a version bump or a tool change: `.venv/Scripts/python dev/sync_packaging.py`
 - Fast C++ core without a local compiler: `.venv/Scripts/python dev/fetch_compiled.py` (downloads what GitHub Actions
@@ -46,7 +46,7 @@ DESTRUCTIVE in server.py; required by Claude's directory, checked by tests/test_
 ## Status (2026-10-22)
 
 Done: Python 3 port validated (analytic + independent TMM, < 1e-9; needle derivatives vs finite differences),
-all optimizers working, 25 MCP tools + 5 prompts + 9 resources working end to end, 138 tests + 44 acceptance checks. Private GitHub repo
+all optimizers working, 27 MCP tools + 5 prompts + 9 resources working end to end, 172 tests + 46 acceptance checks. Private GitHub repo
 BBrunoEsteves/openfilters-mcp; CI compiles the C++ core and tests on Windows/macOS/Linux and builds wheels
 (cp310-cp314, runtime DLLs bundled). Compiled core is 15-30x faster than pure Python.
 Registered locally (user scope) in Claude Code and Claude Desktop, pointing at .venv/Scripts/openfilters-mcp.exe;
@@ -174,7 +174,12 @@ reusing tool schemas loaded before the update; the server sends them (checked wi
 (unreachable T = 1, ITO free) is cut by time_limit, so its result depends on CPU speed (270-510 it/s seen); given
 300 s it converges by thinning both ITO layers to 0 and removing them. The six converged optimizations of the
 first report reproduce exactly (dev check, not a test). Fixed: removed_layers + warning, thin_layers_removed in job
-rows, server_info build/started (N1). Still open: B5 as a real constraint, B9, F1-F3.
+rows, server_info build/started (N1). Still open: B5 as a real constraint, B9, F2, F3.
+F1 thermal model (thermal.py, tools thermal_sensitivity/thermal_sweep; tests/test_thermal.py): materials shifted
+in memory (_Catalog wrapper + material_table sampled at the calculation's wavelengths, via build_filter(materials=));
+peak = half-maximum centre, coarse then FWHM/500; central differences 0.002 RIU / 0.2 %. Reproduces the report's
+20 dlambda/dT values within 0.07 pm/K. Acceptance checks scale invariance (constant indices, uniform cte).
+Server tests that use compute(): the worker pool keeps the data folder it started with (see fresh_pool).
 Regenerating the core on Windows: clone third_party with -c core.autocrlf=false, or every file shows as changed.
 NEXT: release prep (see Pending) and outside testers; tag v0.1.3 after 2026-11-01. For each finding: verify it (reproduce; for OpenFilters behaviour check
 third_party/openfilters_original and the pure-Python core before blaming OpenFilters), fix with a regression test,

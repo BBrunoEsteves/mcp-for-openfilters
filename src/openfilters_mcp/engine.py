@@ -251,12 +251,13 @@ def _check_keys(obj, valid, what):
                           f"valid keys: {', '.join(sorted(valid))}")
 
 
-def build_filter(design, wavelengths=None):
-    """Create an OpenFilters filter from a design dict."""
+def build_filter(design, wavelengths=None, materials=None):
+    """Create an OpenFilters filter from a design dict. materials: a catalog to use instead of the
+    user's (e.g. with materials perturbed for a thermal calculation)."""
     if not isinstance(design, dict):
         raise EngineError("design must be an object")
     _check_keys(design, DESIGN_KEYS, "design")
-    f = optical_filter.optical_filter(catalog())
+    f = optical_filter.optical_filter(materials or catalog())
     try:
         f.set_center_wavelength(float(design.get("center_wavelength", 550.0)))
         if wavelengths is not None:

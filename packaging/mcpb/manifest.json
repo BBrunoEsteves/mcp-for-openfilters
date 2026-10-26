@@ -94,6 +94,14 @@
       "description": "Optical monitoring curves"
     },
     {
+      "name": "thermal_sensitivity",
+      "description": "Thermal sensitivity of a peak"
+    },
+    {
+      "name": "thermal_sweep",
+      "description": "Thermal tuning sweep"
+    },
+    {
       "name": "evaluate_design",
       "description": "Evaluate a design"
     },

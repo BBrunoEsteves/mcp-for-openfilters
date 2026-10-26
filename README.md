@@ -22,6 +22,7 @@ Montréal.*
 | Single design | `describe_design`, `compute_spectrum` (R/T/A, phase, GD, GDD; s/p/unpolarized; any angle; reverse side), `compute_angle_scan`, `compute_color`, `compute_electric_field`, `compute_monitoring_curves` |
 | Targets & merit | `evaluate_design`, `layer_sensitivity` |
 | Optimization | `optimize_design` — OpenFilters' refinement, **needle** and **step** methods |
+| Temperature | `thermal_sensitivity` (how a peak moves per index and thickness change of each material; d&lambda;/dT, kelvin per FWHM, athermal dn/dT), `thermal_sweep` (peak versus temperature) — tunable and athermal filters |
 | Campaigns | `run_batch` (parameter sweeps), `run_optimization_campaign` (many starts → ranked → optional yield stage), `tolerance_analysis` (Monte Carlo yield with thickness and index errors) |
 | Jobs | `job_status`, `get_results`, `list_jobs`, `cancel_job` — results survive a server restart |
 | Files | `load_project`, `save_project` (native `.ofp`) |
