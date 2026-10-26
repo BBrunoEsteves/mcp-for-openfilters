@@ -147,14 +147,15 @@ def test_optimizer_uses_the_compiled_solver_when_installed():
 
 def test_materials_outside_their_valid_range():
     # OpenFilters evaluates every model anywhere: Ge (data 124-1771 nm) gave n = -34 at 10 um and
-    # BK7's Sellmeier formula n = 0, silently.
-    with pytest.raises(engine.EngineError, match="unphysical index"):
+    # BK7's Sellmeier formula n = 0, silently. Tables are now held constant beyond their data, and
+    # refused far beyond it.
+    with pytest.raises(engine.EngineError, match="beyond the data"):
         engine.spectra({"substrate": "Si", "layers": [{"material": "Ge", "thickness": 500}]}, ["R"], [10000])
     with pytest.raises(engine.EngineError, match="unphysical index"):
         engine.evaluate({"substrate": "BK7", "layers": [{"material": "SiO2", "thickness": 100}]},
                         [{"kind": "R", "wavelength": 10000, "value": 0.1, "inequality": "<="}])
     out = engine.spectra({"substrate": "BK7", "layers": [{"material": "Ge", "thickness": 50}]}, ["R"], [1500, 2500])
-    assert out["warnings"] and "extrapolated" in out["warnings"][0]
+    assert out["warnings"] and "held at the value" in out["warnings"][0]
     assert not engine.spectra(ar_design([50.0, 90.0]), ["R"], [550])["warnings"]
 
 
@@ -238,4 +239,4 @@ def test_material_summary_gives_the_data_range():
     row = next(r for r in engine.list_materials("Ge") if r["name"] == "Ge")
     assert row["data_range_nm"][1] < 2000 and "note" not in row  # 400-1550 nm are inside the data
     row = next(r for r in engine.list_materials("Ge", wavelengths=(550.0, 2500.0)) if r["name"] == "Ge")
-    assert "2500" in row["note"] and "extrapolated" in row["note"]
+    assert "2500" in row["note"] and "held at the value" in row["note"]

@@ -130,8 +130,8 @@ to shorter wavelengths).
 **S2.8 Infrared AR on germanium.** *AR for a Ge window over 8–12 µm. First try with the built-in Ge, then
 import Ge and ZnS (or YbF3) data covering 8–12 µm from refractiveindex.info and design a 2–4 layer AR with
 R ≤ 1 %.*
-Check: the built-in Ge is **refused** (its data end at 1.77 µm; the connector reports an unphysical index or
-an extrapolation warning, not a silent result); with imported data a design is found.
+Check: the built-in Ge is **refused** (its data end at 1.77 µm, and 8–12 µm is far beyond them: the connector
+refuses, it does not give a silent result); with imported data a design is found.
 
 **S2.9 Dispersive mirror.** *Mirror for 760–840 nm, s-polarized, R ≥ 99.5 %, with GDD = −20 ± 5 fs² across
 the band, starting from (HL)^10 H at 800 nm (TiO2/SiO2, FusedSilica).*
@@ -223,8 +223,8 @@ Expected: each error lists or points to the valid choices.
 
 **S4.7 Out-of-range wavelengths.** *Spectrum of 500 nm Ge on Si from 8 to 12 µm with built-in materials;
 then 50 nm Ge on BK7 at 1500 and 2500 nm.*
-Expected: the first is refused (unphysical index); the second works with a warning that Ge is extrapolated
-beyond 1771 nm.
+Expected: the first is refused (far beyond Ge's data); the second works with a warning that Ge's n,k are
+held at their 1771 nm values beyond 1771 nm.
 
 **S4.8 Empty design.** *Evaluate bare BK7 (no layers) against R ≤ 5 % at 550 nm; then try to optimize it.*
 Expected: the evaluation works (R = 4.24 %, met); the optimization explains that it needs a starting layer.
@@ -299,8 +299,9 @@ Reference: the thin start ends as one layer at n = 1.4847 with a **warning** tha
 steps (layer 1 at the lowest index of SiO2TiO2) and that this is a local optimum, not a limit of the
 materials. The 500 nm start ends with several layers and worst R **0.500 %**, with no such warning.
 
-**S5.7 Extrapolation warning** (was S4.7). *50 nm Ge on BK7 at 1500 and 2500 nm.*
-Reference: R = 61.22 % / 24.64 %; the warning names only **1771-2500 nm** as extrapolated.
+**S5.7 Out-of-data warning** (was S4.7). *50 nm Ge on BK7 at 1500 and 2500 nm.*
+Reference: R = 61.22 % / 39.34 % (Ge's n,k held at their 1771 nm values; before 2026-10-26 the extrapolated
+index gave 24.64 %); the warning names only **1771-2500 nm** as outside the data.
 
 **S5.8 Refused optimization** (was S4.8). *list_jobs; optimize bare BK7 (no layers) for R ≤ 5 % at 550 nm;
 optimize S1.6's band-pass with method "annealing"; list_jobs again.*

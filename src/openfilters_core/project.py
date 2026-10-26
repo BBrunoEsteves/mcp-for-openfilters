@@ -487,7 +487,7 @@ def write_project(project, filename):
 	                directory;
 	  project       the project to save."""
 	
-	temporary_file = tempfile.NamedTemporaryFile(mode="w", suffix=".ofp", prefix="", dir=os.path.dirname(filename), delete=False)
+	temporary_file = tempfile.NamedTemporaryFile(mode="w", encoding="latin-1", errors="replace", suffix=".ofp", prefix="", dir=os.path.dirname(filename), delete=False)
 	temporary_file_name = temporary_file.name
 	
 	temporary_file.write("Version: %s\n" % release.VERSION)

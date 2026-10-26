@@ -38,8 +38,12 @@ A design is a JSON object:
 Layers are listed FROM THE SUBSTRATE OUTWARD (first layer touches the substrate). A layer may give
 "thickness" (nm) or "qwot" (quarter-wave optical thickness at center_wavelength); mixtures need "index";
 optional flags refine_thickness / add_needles (default true), refine_index / add_steps / preserve_ot (mixtures).
+To KEEP A LAYER AS IT IS in every optimization (e.g. an electrode whose thickness is set by its resistance),
+give it "fixed": true (= refine_thickness false, no needles in it).
 Instead of layers, a stack formula:
   "formula": {"formula": "(HL)^8 H", "materials": {"H": "TiO2", "L": "SiO2"}}  (letters = quarter waves).
+A formula symbol can be fixed too: "materials": {"H": "TiO2", "L": "SiO2", "I": {"material": "ITO", "fixed": true}}
+(every layer of that material stays fixed, so a fixed material must not also be used by a free symbol).
 Optional design fields kept in .ofp projects: "description", "needle_materials" (names), "step_spacing",
 "wavelength_range" ({"from", "to", "step"}: what the OpenFilters GUI analyses).
 
@@ -112,6 +116,9 @@ async def compute(op, **args):
         global _interactive
         _interactive = None
         raise ToolError("the calculation process crashed; please retry") from error
+    except Exception as error:
+        # An unexpected failure: say what it was, as "Error executing tool" alone cannot be diagnosed.
+        raise ToolError(f"{op} failed: {type(error).__name__}: {error}") from error
 
 
 def checked(fn, *args, **kwargs):
@@ -119,6 +126,10 @@ def checked(fn, *args, **kwargs):
         return fn(*args, **kwargs)
     except engine.EngineError as error:
         raise ToolError(str(error)) from error
+    except ToolError:
+        raise
+    except Exception as error:
+        raise ToolError(f"{getattr(fn, '__name__', 'operation')} failed: {type(error).__name__}: {error}") from error
 
 
 def outputs_dir():
@@ -210,8 +221,9 @@ Design = Annotated[dict[str, Any], Field(description=(
     '"layers": '
     '[{"material": "TiO2", "thickness": 58.6}, {"material": "SiO2", "qwot": 1}]} with layers listed FROM THE '
     'SUBSTRATE OUTWARD (thickness in nm, or qwot = quarter waves at center_wavelength), or instead of layers '
-    '"formula": {"formula": "(HL)^8 H", "materials": {"H": "TiO2", "L": "SiO2"}}. A part coated on both faces is '
-    'ONE design: add "back_layers" and "consider_backside": true.'))]
+    '"formula": {"formula": "(HL)^8 H", "materials": {"H": "TiO2", "L": "SiO2"}}. A layer that optimizations must '
+    'not change gets "fixed": true; in a formula, a symbol {"material": "ITO", "fixed": true}. A part coated on both '
+    'faces is ONE design: add "back_layers" and "consider_backside": true.'))]
 Targets = Annotated[list[dict[str, Any]], Field(description=(
     'Targets, each {"kind": "R"|"T"|"A"|"R_phase"|"T_phase"|"R_GD"|"T_GD"|"R_GDD"|"T_GDD", "angle": 0, '
     '"polarization": "unpolarized"|"s"|"p", then either "wavelength": 1064 or "from": 400, "to": 700, "step": 5, '
@@ -384,29 +396,7 @@ def sig(value, digits=6):
     return float(f"{float(value):.{digits}g}")
 
 
-def _crossing_ranges(x, values, level, above=True):
-    """[start, end] ranges of x where values >= level (or <= level), with edges interpolated
-    linearly between the points on either side of each crossing."""
-    import numpy as np
-    x, values = np.asarray(x, dtype=float), np.asarray(values, dtype=float)
-    inside = values >= level if above else values <= level
-    ranges, i = [], 0
-    while i < len(x):
-        if not inside[i]:
-            i += 1
-            continue
-        j = i
-        while j + 1 < len(x) and inside[j + 1]:
-            j += 1
-
-        def edge(a, b):  # a outside, b inside
-            return float(x[a] + (level - values[a]) * (x[b] - x[a]) / (values[b] - values[a])) if values[b] != values[a] else float(x[b])
-        start = edge(i - 1, i) if i > 0 else float(x[i])
-        end = edge(j + 1, j) if j + 1 < len(x) else float(x[j])
-        ranges.append([round(start, 4), round(end, 4)])
-        i = j + 1
-    return ranges
-
+_crossing_ranges = engine.crossing_ranges
 
 def _summarize_series(x, values, n_points, axis="nm", threshold=None):
     """Statistics with 8 significant figures (99.99955 % must not read 0.999996), the position of
@@ -425,11 +415,7 @@ def _summarize_series(x, values, n_points, axis="nm", threshold=None):
         if "below" in threshold:
             summary[f"ranges_below_{threshold['below']:g}"] = _crossing_ranges(x, values, float(threshold["below"]), False)
         if threshold.get("half_max"):
-            half = values[i_max] / 2.0
-            peak = next((r for r in _crossing_ranges(x, values, half) if r[0] <= x[i_max] <= r[1]), None)
-            if peak:
-                summary["fwhm"] = round(peak[1] - peak[0], 6)
-                summary["half_max_edges"] = peak
+            summary.update(engine.half_max_summary(x, values, threshold, axis))
     return summary
 
 
@@ -444,7 +430,10 @@ async def compute_spectrum(design: Design,
                            threshold: Annotated[dict[str, Any] | None, Field(description=(
                                '{"above": 0.999} or {"below": 0.01}: ranges where each series is above/below the '
                                'level, edges interpolated (e.g. the high-reflection band of a mirror); {"half_max": true}: '
-                               'FWHM of the highest peak (e.g. a band-pass)'))] = None,
+                               'FWHM, peak and half-maximum centre of the highest peak (e.g. a band-pass); add "near": 532 '
+                               'for the local peak closest to 532 nm (not a higher ripple at a band edge) or "from"/"to" '
+                               'to search the peak only there. If an edge lies beyond the computed range, fwhm is null '
+                               'and fwhm_at_least gives the width seen.'))] = None,
                            plot: bool = True,
                            save_csv: bool = False):
     """Compute R, T, A, OD, phase, GD or GDD spectra (quantity names R, T, A, OD, R_phase, T_phase, R_GD,
@@ -531,6 +520,8 @@ async def compute_electric_field(design: Design, wavelength: float, angle: float
         boundary_values.append(round(values[j], 5))
     out = {"peak_E_squared": round(values[i_max], 5), "peak_position_nm_from_substrate": r["position_nm"][i_max],
            "E_squared_at_layer_tops": boundary_values, "note": r["note"]}
+    if r.get("warnings"):
+        out["warnings"] = r["warnings"]
     if plot:
         png = plotting.curves(r["position_nm"], {"|E|²": values}, f"Electric field at {wavelength:g} nm",
                               "Distance from substrate (nm)", "|E|² / |E_incident|²", r["layer_boundaries_nm"])
@@ -555,6 +546,8 @@ async def compute_monitoring_curves(design: Design, wavelengths: list[float], an
             ends[w].append(sig(values[j]))  # high reflectors end near T = 1e-6
     out = {"mode": mode, "signal_at_layer_ends": ends, "layer_boundaries_nm": [round(b, 3) for b in r["layer_boundaries_nm"]],
            "includes_backside": r["includes_backside"]}
+    if r.get("warnings"):
+        out["warnings"] = r["warnings"]
     if plot:
         png = plotting.curves(r["deposited_thickness_nm"], r["signal"], f"{mode.title()} monitoring",
                               "Deposited thickness (nm)", "Signal", r["layer_boundaries_nm"])
@@ -622,7 +615,9 @@ async def optimize_design(design: Design, targets: Targets, method: str = "needl
                               "time_limit (s, default 300), max_iterations, min_thickness (nm; guaranteed in the "
                               "result: thin layers are clamped or removed and the design re-refined with that bound; a clamped design "
                               "that already meets every target has merit 0 and stays as clamped), "
-                              "max_layers, max_total_thickness (nm), max_layer_thickness (nm; default the larger of "
+                              "max_layers, max_total_thickness (nm; both STOP the optimizer when the design grows past them and return the "
+                              "best design within them: they are not constraints, so start well inside them), "
+                              "max_layer_thickness (nm; default the larger of "
                               "20000 and 10x the thickest starting layer), margin (optimize inequality targets that "
                               "much inside their limit, in the targets' units, e.g. 0.0005 for R <= 0.005; results are "
                               "still judged against the targets), needle_materials (list), nb_needles, nb_steps, "
@@ -685,7 +680,15 @@ def _expand(template, parameters, mode):
             return {k: substitute(v, values) for k, v in obj.items()}
         return obj
 
-    return [(dict(zip(names, combo)), substitute(template, dict(zip(names, combo)))) for combo in combos]
+    def label(name, value):
+        # A swept object (e.g. a whole design) is shown in the result rows by its name or position.
+        if isinstance(value, (dict, list)):
+            position = next(i for i, v in enumerate(parameters[name]) if v is value) + 1
+            return value.get("name") or f"{name} {position}" if isinstance(value, dict) else f"{name} {position}"
+        return value
+
+    return [({n: label(n, v) for n, v in zip(names, combo)}, substitute(template, dict(zip(names, combo))))
+            for combo in combos]
 
 
 @mcp.tool(title="Run a parameter sweep", annotations=JOB)
@@ -702,6 +705,11 @@ async def run_batch(operation: str,
     For "spectrum", give `metrics` to reduce each spectrum to numbers, e.g.
     [{"name": "Rmin_vis", "quantity": "R", "from": 400, "to": 700, "stat": "min"}, {"name": "T633",
     "quantity": "T", "stat": "at", "wavelength": 633}] (stat: mean|min|max|std|at; optional angle/polarization).
+    Peak stats for a band-pass: peak_wavelength, peak_value, fwhm and center (middle of the half-maximum
+    edges), for the peak between from/to or the local peak nearest "near", e.g. {"name": "center", "quantity":
+    "T", "stat": "center", "near": 532}; fwhm is null when an edge is beyond the computed wavelengths.
+    To compare several designs, sweep the whole design: template {"design": "$design", ...} with parameters
+    {"design": [design1, design2, ...]}; rows show each design's "name" (or its position).
     mode "grid" = all combinations, "zip" = parallel lists. Returns a job_id; then job_status/get_results
     (one row per case with parameters and results; full table in summary.csv)."""
     if operation not in tasks.OPS:
@@ -917,9 +925,16 @@ async def save_project(path: str, designs: list[dict[str, Any]], targets: list[d
         raise ToolError("OpenFilters' example projects are read-only: save under another name")
     path = _project_path(path)
     result = {"path": await compute("save_project", path=path, designs=designs, target_specs=targets, comment=comment)}
+    warnings = []
     if not targets:
-        result["warning"] = ("Saved without targets: in the OpenFilters GUI the Design/Optimize menu is disabled "
-                             "until targets are added. Save again with the targets if there are any.")
+        warnings.append("Saved without targets: in the OpenFilters GUI the Design/Optimize menu is disabled "
+                        "until targets are added. Save again with the targets if there are any.")
+    texts = [comment] + [d.get("description") or "" for d in designs if isinstance(d, dict)]
+    if any(engine.latin1_text(t) != t for t in texts):
+        warnings.append(".ofp files are Latin-1: characters outside it were replaced in the comment or "
+                        "descriptions (Greek letters spelled out, e.g. lambda; dashes and quotes simplified).")
+    if warnings:
+        result["warning"] = " ".join(warnings)
     return result
 
 

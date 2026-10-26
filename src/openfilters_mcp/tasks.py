@@ -26,12 +26,18 @@ def worker_init():
     sys.stdout = sys.stderr
 
 
+# run_batch peak statistics -> key of engine.half_max_summary.
+PEAK_STATS = {"peak_wavelength": "peak_nm", "peak_value": "peak_value", "fwhm": "fwhm", "center": "half_max_center_nm"}
+
+
 def spectrum_metrics(result, metrics):
     """Reduce spectra to scalar metrics.
 
     metrics: [{"name": "R_mean_vis", "quantity": "R", "from": 400, "to": 700,
-               "stat": "mean"|"min"|"max"|"std"|"at", "wavelength": 550,
-               "angle": 0, "polarization": "unpolarized"}]"""
+               "stat": "mean"|"min"|"max"|"std"|"at"|"peak_wavelength"|"peak_value"|"fwhm"|"center",
+               "wavelength": 550, "near": 532, "angle": 0, "polarization": "unpolarized"}]
+    The peak stats use the peak between from and to (or the local peak nearest "near"); "center" is
+    the middle of its half-maximum edges, "fwhm" is None when an edge is beyond the computed range."""
     wvls = result["wavelengths"]
     out = {}
     for i, m in enumerate(metrics or []):
@@ -47,6 +53,13 @@ def spectrum_metrics(result, metrics):
         if stat == "at":
             out[name] = float(np.interp(float(m["wavelength"]), wvls, values))
             continue
+        if stat in PEAK_STATS:
+            peak = engine.half_max_summary(wvls, values, {k: m[k] for k in ("near", "from", "to") if k in m})
+            out[name] = peak[PEAK_STATS[stat]]
+            continue
+        if stat not in ("mean", "min", "max", "std"):
+            raise engine.EngineError(f"metric {name}: stat must be one of mean, min, max, std, at, "
+                                     f"{', '.join(PEAK_STATS)}")
         mask = (wvls >= float(m.get("from", wvls[0]))) & (wvls <= float(m.get("to", wvls[-1])))
         if not mask.any():
             raise engine.EngineError(f"metric {name}: empty wavelength band")

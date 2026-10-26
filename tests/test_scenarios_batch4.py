@@ -41,7 +41,7 @@ def test_extrapolation_warning_names_only_the_wavelengths_outside_the_data():
     # S4.7: "values at 1500-2500 nm are extrapolated" although Ge's data reach 1771 nm.
     design = {"substrate": "BK7", "layers": [{"material": "Ge", "thickness": 50}]}
     (warning,) = engine.material_warnings(design, [1500, 2500])
-    assert "1771-2500 nm are extrapolated" in warning and "1500" not in warning
+    assert "at 1771-2500 nm n,k are held" in warning and "1500" not in warning
 
 
 def test_worse_between_grid_points_is_reported_for_a_failing_design():

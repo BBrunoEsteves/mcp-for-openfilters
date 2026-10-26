@@ -735,9 +735,11 @@ class material_table(material):
 		length = len(self.wvls)
 		
 		# Set the dispersion object.
-		self.dispersion = abeles.table(length)
-		for i in range(length):
-			self.dispersion.set_table(i, self.wvls[i], self.N[i])
+		wvls = [0.001*self.wvls[0]] + list(self.wvls) + [1000.0*self.wvls[-1]]
+		N = [self.N[0]] + list(self.N) + [self.N[-1]]
+		self.dispersion = abeles.table(length+2)
+		for i in range(length+2):
+			self.dispersion.set_table(i, wvls[i], N[i])
 	
 	
 	######################################################################

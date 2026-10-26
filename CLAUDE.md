@@ -161,6 +161,15 @@ blocked by Claude's classifier). Fixed: campaign rows carry the optimizer's warn
 yield_ci95; summary counts openfilters_errors; build errors number layers from 1; compute_spectrum text names
 the quantities; S1.4 reference allows film MgF2 (n 1.42 -> 2.0 %). Not done (judgment): inert substrate-side
 layers as duplicates, dedup of partial results, default margin with a yield stage.
+Field report 2026-10-26 (tunable FP at 532 nm, ITO heater; tests/test_field_report.py): B2 .ofp writer used the OS
+locale (cp1252 on Windows) vs Latin-1 reader -> port fix + engine.latin1_text; B1 tables now held constant beyond
+the data (port fix pads the PCHIP table; DEVIATION in PROVENANCE.md), refused beyond TABLE_REACH = 1.5x; B4
+"fixed" layers / formula symbols, _snapshot keeps flags (best design lost them), min-thickness steps skip fixed
+layers; B3/B7 half_max near/from/to + clipped edges (engine.half_max_summary); B6 was NOT stagnation (chi2 kept
+falling slowly toward an unreachable T = 1 with absorbing ITO): warning instead; B5 warning only (a true thickness
+constraint would need a merit term); B8 batch peak stats. Open from that report: F1 thermal model (validate
+against its dlambda/dT table), F2 peak-position target, B9 plots shown to the user (client limit).
+Regenerating the core on Windows: clone third_party with -c core.autocrlf=false, or every file shows as changed.
 NEXT: release prep (see Pending) and outside testers; tag v0.1.3 after 2026-11-01. For each finding: verify it (reproduce; for OpenFilters behaviour check
 third_party/openfilters_original and the pure-Python core before blaming OpenFilters), fix with a regression test,
 run pytest (compiled and OPENFILTERS_PURE_PYTHON=1), dev/acceptance.py and dev/e2e_client.py, then commit, and

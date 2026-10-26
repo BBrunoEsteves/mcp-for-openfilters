@@ -2,6 +2,31 @@
 
 ## 0.1.3 — 2026-10-24
 
+From a field test (tunable Fabry-Perot filter with an ITO heater, 2026-10-26):
+
+- Fix: saving a project whose description or comment contained characters outside Latin-1 (e.g. "λ") failed on
+  Windows with no message; they are now spelled out (λ -> lambda) with a warning, and project files are
+  always written in Latin-1, the encoding they are read in (accented text read back garbled on macOS/Linux).
+- Unexpected tool failures now say what went wrong instead of only "Error executing tool".
+- Tabulated materials hold n,k at their end values beyond their data instead of extrapolating the interpolation
+  (a 520-544 nm table gave n = 4.9 at 1550 nm; imported ITO n < 0), with a warning; more than 1.5x beyond the
+  data is refused. This deliberately differs from OpenFilters (see `openfilters_core/PROVENANCE.md`). Colour,
+  electric field and monitoring calculations now check materials too.
+- Layers can be kept fixed in every optimization: `"fixed": true` on a layer, or a formula symbol
+  `{"material": "ITO", "fixed": true}`. Fix: the best design recorded during an optimization lost the layer
+  flags, and minimum-thickness rounds could change or remove fixed layers.
+- `{"half_max": true}` takes `"near"` (the local peak nearest a wavelength, not a higher band-edge ripple) or
+  `"from"`/`"to"`, and returns the peak and half-maximum centre; an edge beyond the computed range gives
+  `fwhm: null` with `fwhm_at_least`.
+- `run_batch` spectrum metrics: `peak_wavelength`, `peak_value`, `fwhm`, `center`; sweeping whole designs
+  labels rows by design name.
+- Warnings: a T/R = 1 (or A = 0) target that absorption makes unreachable (the optimizer otherwise creeps
+  until its time limit); a start already at `max_total_thickness` (a stop, not a constraint); a fixed layer
+  next to a free one of the same material (OpenFilters merges them).
+- Fix: a formula symbol written `[mixture, index]` crashed the material check.
+
+Earlier in 0.1.3:
+
 - `remove_material` tool.
 - Fix: refractiveindex.info imports kept only the range where both n and k are given (ZnS: 0.4-1 um instead of
   0.4-14 um); the whole n range is kept, with k = 0 where the entry gives none (stated in `notes`).

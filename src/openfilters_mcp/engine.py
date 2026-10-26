@@ -106,11 +106,12 @@ def list_materials(name_filter=None, wavelengths=(400.0, 550.0, 800.0, 1550.0)):
             row["n,k"] = {f"{w:g}": [round(float(z.real), 4), round(float(-z.imag), 5) + 0.0]
                           for w, z in zip(wavelengths, N)}
             data = getattr(material, "wvls", None)
-            if data is not None and len(data):  # tabulated: values outside the data are extrapolated
+            if data is not None and len(data):  # tabulated: n,k held constant outside the data
                 row["data_range_nm"] = [round(float(data[0]), 3), round(float(data[-1]), 3)]
                 outside = [f"{w:g}" for w in wavelengths if not data[0] <= w <= data[-1]]
                 if outside:
-                    row["note"] = f"n,k at {', '.join(outside)} nm are extrapolated beyond the data"
+                    row["note"] = (f"n,k at {', '.join(outside)} nm are outside the data: held at the value at the "
+                                   "nearest end of the data, not measured")
         else:
             row["index_range_at_550"] = [round(x, 4) for x in material.get_index_range(550.0)]
         rows.append(row)
@@ -235,7 +236,7 @@ DESIGN_KEYS = {"substrate", "incident_medium", "exit_medium", "center_wavelength
                "substrate_thickness_mm", "consider_backside_on_monitoring", "illuminant", "observer", "description",
                "needle_materials", "step_spacing", "wavelength_range", "layers", "back_layers", "formula",
                "back_formula", "name", "notes"}
-LAYER_KEYS = {"material", "thickness", "qwot", "index", "graded", "refine_thickness", "refine_index", "preserve_ot",
+LAYER_KEYS = {"material", "thickness", "qwot", "index", "graded", "fixed", "refine_thickness", "refine_index", "preserve_ot",
               "add_needles", "add_steps"}
 
 
@@ -273,7 +274,7 @@ def build_filter(design, wavelengths=None):
             f.set_observer(design["observer"])
         # Settings saved in .ofp projects so they are kept when the GUI opens them.
         if design.get("description"):
-            f.set_description(" ".join(str(design["description"]).split()))
+            f.set_description(latin1_text(" ".join(str(design["description"]).split())))
         if design.get("needle_materials"):
             f.set_needle_materials([str(m) for m in design["needle_materials"]])
         if design.get("step_spacing"):
@@ -286,11 +287,12 @@ def build_filter(design, wavelengths=None):
                 formula = design[formula_key]
                 if isinstance(formula, str):
                     raise EngineError(f"{formula_key} must be {{\"formula\": \"(HL)^8 H\", \"materials\": {{\"H\": \"TiO2\", \"L\": \"SiO2\"}}}}")
-                # OpenFilters expects {symbol: (material, index_for_mixtures)}.
-                symbols = {sym: (tuple(v) if isinstance(v, (list, tuple)) else (v, None))
-                           for sym, v in formula["materials"].items()}
+                symbols, fixed = _formula_symbols(formula["materials"], formula_key)
                 f.set_stack_formula(formula["formula"], symbols, side)
                 f.apply_stack_formula(side)
+                for position in range(f.get_nb_layers(side)):
+                    if f.get_layer_material_name(position, side) in fixed:
+                        _fix_layer(f, position, side)
             for i, layer in enumerate(design.get(key) or []):
                 _add_layer(f, layer, side, i)
     except of_materials.material_does_not_exist_error as error:
@@ -302,6 +304,30 @@ def build_filter(design, wavelengths=None):
     except (optical_filter.filter_error, of_materials.material_error) as error:
         raise EngineError(str(error)) from error
     return f
+
+
+def _formula_symbols(materials, formula_key):
+    """OpenFilters' {symbol: (material, index_for_mixtures)} from a formula's materials, and the
+    materials of the symbols marked fixed. A symbol is a name, [name, index], or
+    {"material": name, "index": n, "fixed": true}."""
+    symbols, fixed, free = {}, set(), set()
+    for sym, value in materials.items():
+        if isinstance(value, dict):
+            _check_keys(value, {"material", "index", "fixed"}, f"{formula_key} symbol {sym}")
+            if "material" not in value:
+                raise EngineError(f"{formula_key} symbol {sym} needs a material")
+            pair = (value["material"], value.get("index"))
+            (fixed if value.get("fixed") else free).add(pair[0])
+        else:
+            pair = tuple(value) if isinstance(value, (list, tuple)) else (value, None)
+            free.add(pair[0])
+        symbols[sym] = pair
+    if fixed & free:
+        name = sorted(fixed & free)[0]
+        raise EngineError(f"{formula_key}: {name} is used by a fixed symbol and by a free one, so its layers cannot "
+                          "be told apart after the formula is expanded. Give the fixed layer its own symbol only, or "
+                          "list the layers explicitly with \"fixed\": true on the fixed ones.")
+    return symbols, fixed
 
 
 def _add_layer(f, layer, side, i):
@@ -347,6 +373,17 @@ def _add_layer(f, layer, side, i):
     for flag, setter in _LAYER_FLAGS:
         if flag in layer:
             getattr(f, "set_" + setter)(position, bool(layer[flag]), side)
+    if layer.get("fixed"):
+        _fix_layer(f, position, side)
+
+
+def _fix_layer(f, position, side):
+    """Keep a layer as it is in every optimization: OpenFilters' refine_thickness false (which also
+    stops needles in it) and, for a mixture, refine_index false."""
+    f.set_refine_layer_thickness(position, False, side)
+    if f.get_layer_material(position, side).is_mixture():
+        f.set_refine_layer_index(position, False, side)
+        f.set_add_steps(position, False, side)
 
 
 # Per-layer optimization flags: design key -> OpenFilters set_/get_ suffix.
@@ -467,14 +504,22 @@ def _design_materials(design):
         names |= {l.get("material") for l in design.get(key) or [] if isinstance(l, dict)}
     for key in ("formula", "back_formula"):
         if isinstance(design.get(key), dict):
-            names |= set((design[key].get("materials") or {}).values())
+            for value in (design[key].get("materials") or {}).values():  # name, [name, index] or {"material": ...}
+                names.add(value.get("material") if isinstance(value, dict)
+                          else value[0] if isinstance(value, (list, tuple)) else value)
     return sorted(n for n in names if isinstance(n, str))
 
 
+# Tabulated n,k are held constant beyond the data (see openfilters_core/PROVENANCE.md); a
+# calculation further than this factor beyond the data is refused instead.
+TABLE_REACH = 1.5
+
+
 def material_warnings(design, wavelengths):
-    """Warnings for tabulated materials used outside their data (extrapolated), and an error
-    where a material's model gives an unphysical index (n <= 0), e.g. a Sellmeier formula
-    near its infrared pole: OpenFilters evaluates every model at any wavelength without checking."""
+    """Warnings for tabulated materials used outside their data (held constant there), an error
+    when they are used far beyond it (TABLE_REACH), and an error where a material's model gives an
+    unphysical index (n <= 0), e.g. a Sellmeier formula near its infrared pole: OpenFilters
+    evaluates every model at any wavelength without checking."""
     wavelengths = [float(w) for w in wavelengths]
     if not wavelengths:
         return []
@@ -486,10 +531,17 @@ def material_warnings(design, wavelengths):
         if material.is_mixture():
             continue
         data = getattr(material, "wvls", None)
+        if data is not None and len(data) and (lo < data[0] / TABLE_REACH or hi > data[-1] * TABLE_REACH):
+            far = ([f"{lo:g} nm"] if lo < data[0] / TABLE_REACH else []) + \
+                  ([f"{hi:g} nm"] if hi > data[-1] * TABLE_REACH else [])
+            raise EngineError(f"{name}: its data cover {data[0]:g}-{data[-1]:g} nm, so its n,k at {' and '.join(far)} "
+                              f"(more than {TABLE_REACH:g}x beyond the data) are unknown. Use a material with data for "
+                              "this range (search_refractiveindex and import_refractiveindex_material).")
         if data is not None and len(data) and (lo < data[0] * (1 - 1e-6) or hi > data[-1] * (1 + 1e-6)):
             outside = ([f"{lo:g}-{data[0]:g} nm"] if lo < data[0] * (1 - 1e-6) else []) +                       ([f"{data[-1]:g}-{hi:g} nm"] if hi > data[-1] * (1 + 1e-6) else [])
-            warnings.append(f"{name}: its data cover {data[0]:g}-{data[-1]:g} nm; values at {' and '.join(outside)} "
-                            "are extrapolated and may be wrong")
+            warnings.append(f"{name}: its data cover {data[0]:g}-{data[-1]:g} nm; at {' and '.join(outside)} n,k are "
+                            "held at the value at the nearest end of the data (not measured: results there are "
+                            "approximate)")
         N = material_N(name, grid)
         bad = [(w, z) for w, z in zip(grid, N) if not (np.isfinite(z.real) and np.isfinite(z.imag)) or z.real <= 0]
         if bad:
@@ -593,6 +645,7 @@ def color(design, angles=(0.0,), polarization="unpolarized", illuminant="CIE-D65
         raise EngineError(f"illuminant must be one of {', '.join(of_color.get_illuminant_names())}")
     if observer not in of_color.get_observer_names():
         raise EngineError(f"observer must be one of {', '.join(of_color.get_observer_names())}")
+    warnings = material_warnings(design, [380.0, 780.0])  # the visible range the colour integrates over
     f = build_filter(design)
     out = []
     for angle in angles:
@@ -608,8 +661,9 @@ def color(design, angles=(0.0,), polarization="unpolarized", illuminant="CIE-D65
                     "sRGB": srgb, "linear_RGB": list(linear),
                     "hex": "#%02x%02x%02x" % tuple(int(round(v * 255)) for v in srgb),
                     "out_of_gamut": bool(c.get_RGB_error())})
-    return {"illuminant": illuminant, "observer": observer, "mode": mode,
-            "polarization": polarization_name(polarization_value(polarization)), "colors": out}
+    return _with_warnings({"illuminant": illuminant, "observer": observer, "mode": mode,
+                           "polarization": polarization_name(polarization_value(polarization)), "colors": out},
+                          warnings)
 
 
 def electric_field(design, wavelength, angle=0.0, polarization="s"):
@@ -620,6 +674,7 @@ def electric_field(design, wavelength, angle=0.0, polarization="s"):
         raise EngineError("electric field needs s or p polarization")
     wavelength, angle = float(wavelength), float(angle)
     design = dict(design, consider_backside=False)
+    warnings = material_warnings(design, [wavelength])
     f = build_filter(design, [wavelength])
     positions, fields = f.electric_field(wavelength, angle, pol)
     # OpenFilters returns |E| relative to the field at the substrate. With
@@ -637,15 +692,23 @@ def electric_field(design, wavelength, angle=0.0, polarization="s"):
         depth += [float(x) for x in layer_positions]
         value += [float(v) ** 2 * scale for v in layer_field]
         boundaries.append(float(layer_positions[-1]))
-    return {"position_nm": depth, "E_squared": value, "layer_boundaries_nm": boundaries,
-            "note": "position from the substrate interface outward; |E|^2 relative to the incident wave"}
+    return _with_warnings({"position_nm": depth, "E_squared": value, "layer_boundaries_nm": boundaries,
+                           "note": "position from the substrate interface outward; |E|^2 relative to the incident wave"},
+                          warnings)
+
+
+def _with_warnings(result, warnings):
+    if warnings:
+        result["warnings"] = warnings
+    return result
 
 
 def monitoring(design, wavelengths, angle=0.0, polarization="unpolarized", mode="reflection"):
     """Monitoring signal versus deposited thickness at each monitoring
     wavelength (as used for optical monitoring during deposition)."""
-    f = build_filter(design)
     wvls = [float(w) for w in wavelengths]
+    warnings = material_warnings(design, wvls)
+    f = build_filter(design)
     if mode == "reflection":
         thickness, signal = f.reflection_monitoring(wvls, float(angle), polarization_value(polarization))
     elif mode == "transmission":
@@ -657,8 +720,8 @@ def monitoring(design, wavelengths, angle=0.0, polarization="unpolarized", mode=
     boundaries = [float(layer_thickness[-1]) for layer_thickness in thickness]
     curves = {f"{w:g}": [float(v) for layer_signal in signal[i] for v in layer_signal]
               for i, w in enumerate(wvls)}
-    return {"deposited_thickness_nm": deposited, "signal": curves, "layer_boundaries_nm": boundaries,
-            "includes_backside": bool(f.get_consider_backside_on_monitoring())}
+    return _with_warnings({"deposited_thickness_nm": deposited, "signal": curves, "layer_boundaries_nm": boundaries,
+                           "includes_backside": bool(f.get_consider_backside_on_monitoring())}, warnings)
 
 
 # ---------------------------------------------------------------------------
@@ -856,6 +919,65 @@ def sig(value, digits=6):
     return float(f"{float(value):.{digits}g}")
 
 
+def crossing_ranges(x, values, level, above=True):
+    """[start, end] ranges of x where values >= level (or <= level), with edges interpolated
+    linearly between the points on either side of each crossing."""
+    import numpy as np
+    x, values = np.asarray(x, dtype=float), np.asarray(values, dtype=float)
+    inside = values >= level if above else values <= level
+    ranges, i = [], 0
+    while i < len(x):
+        if not inside[i]:
+            i += 1
+            continue
+        j = i
+        while j + 1 < len(x) and inside[j + 1]:
+            j += 1
+
+        def edge(a, b):  # a outside, b inside
+            return float(x[a] + (level - values[a]) * (x[b] - x[a]) / (values[b] - values[a])) if values[b] != values[a] else float(x[b])
+        start = edge(i - 1, i) if i > 0 else float(x[i])
+        end = edge(j + 1, j) if j + 1 < len(x) else float(x[j])
+        ranges.append([round(start, 4), round(end, 4)])
+        i = j + 1
+    return ranges
+
+
+def find_peak(x, values, near=None, start=None, stop=None):
+    """Index of the peak: the highest point between start and stop, or with near, the local
+    maximum closest to near (a band-pass resonance, not the higher ripple at a band edge)."""
+    import numpy as np
+    x, values = np.asarray(x, dtype=float), np.asarray(values, dtype=float)
+    window = np.flatnonzero((x >= (x[0] if start is None else start)) & (x <= (x[-1] if stop is None else stop)))
+    if not len(window):
+        raise EngineError(f"no computed point between {start} and {stop}")
+    if near is None:
+        return int(window[np.argmax(values[window])])
+    peaks = [i for i in window if (i == 0 or values[i] >= values[i - 1]) and (i == len(x) - 1 or values[i] >= values[i + 1])
+             and 0 < i < len(x) - 1]
+    if not peaks:  # monotonic in the window: its highest end
+        return int(window[np.argmax(values[window])])
+    return int(min(peaks, key=lambda i: (abs(x[i] - near), -values[i])))
+
+
+def half_max_summary(x, values, options, axis="nm"):
+    """FWHM of one peak (see find_peak). Edges are searched in the whole computed range; an edge that
+    reaches its end is clipped, and then fwhm is null with fwhm_at_least the width seen."""
+    i = find_peak(x, values, options.get("near"), options.get("from"), options.get("to"))
+    half = values[i] / 2.0
+    edges = next(r for r in crossing_ranges(x, values, half) if r[0] <= x[i] <= r[1])
+    clipped = ([] if edges[0] > x[0] or values[0] < half else ["low"]) + \
+              ([] if edges[1] < x[-1] or values[-1] < half else ["high"])
+    out = {f"peak_{axis}": round(float(x[i]), 6), "peak_value": sig(values[i], 8), "half_max_edges": edges,
+           f"half_max_center_{axis}": round((edges[0] + edges[1]) / 2, 6)}
+    if clipped:
+        out.update(fwhm=None, fwhm_at_least=round(edges[1] - edges[0], 6), half_max_edge_clipped=clipped,
+                   fwhm_note=f"the half-maximum edge ({' and '.join(clipped)}) is beyond the computed range: widen it")
+    else:
+        out["fwhm"] = round(edges[1] - edges[0], 6)
+    return out
+
+
 def with_margin(target_specs, margin):
     """Target specs with inequality limits tightened by margin (same units as the values: fractions
     for R/T/A, fs or fs^2 for GD/GDD), so an optimum does not sit exactly on the specification."""
@@ -1006,8 +1128,10 @@ class _Monitor:
 
 
 def _snapshot(o):
-    """Front layers of an optimizer's current state as design layers (None
-    for graded layers, which are not tracked)."""
+    """Front layers of an optimizer's current state as design layers, with their flags (a fixed
+    layer must stay fixed in the next round); None for graded layers, which are not tracked."""
+    flags = {"refine_thickness": o.refine_thickness, "refine_index": o.refine_index, "preserve_ot": o.preserve_OT,
+             "add_needles": o.add_needles_in_layer, "add_steps": o.add_steps_in_layer}
     layers = []
     for i in range(o.nb_front_layers):
         thickness = o.front_thickness[i]
@@ -1017,6 +1141,8 @@ def _snapshot(o):
         layer = {"material": material.get_name(), "thickness": float(thickness)}
         if material.is_mixture():
             layer["index"] = float(o.front_index[i])
+        defaults = _default_layer_flags(FRONT, material.is_mixture())
+        layer.update({flag: bool(values[i]) for flag, values in flags.items() if bool(values[i]) != defaults[flag]})
         layers.append(layer)
     return layers
 
@@ -1029,8 +1155,13 @@ def _flat(thicknesses):
             yield t
 
 
+def _adjustable(layer):
+    """A homogeneous layer whose thickness the optimizers may change (not graded, not fixed)."""
+    return not layer.get("graded") and layer.get("refine_thickness", True)
+
+
 def _thin_layers(layers, min_thickness):
-    return [i for i, l in enumerate(layers) if not l.get("graded") and l["thickness"] < min_thickness]
+    return [i for i, l in enumerate(layers) if _adjustable(l) and l["thickness"] < min_thickness]
 
 
 def _remove_layer(layers, i, center_wavelength):
@@ -1042,7 +1173,7 @@ def _remove_layer(layers, i, center_wavelength):
         return layer["index"] if "index" in layer else _material(layer["material"]).get_index(center_wavelength)
 
     ot = layers[i]["thickness"] * n(layers[i])
-    neighbours = [k for k in (i - 1, i + 1) if 0 <= k < len(layers) and not layers[k].get("graded")]
+    neighbours = [k for k in (i - 1, i + 1) if 0 <= k < len(layers) and _adjustable(layers[k])]
     for k in neighbours:
         layers[k]["thickness"] += ot / len(neighbours) / n(layers[k])
     del layers[i]
@@ -1062,7 +1193,7 @@ def _enforce_min_thickness(design, targets, options, deadline, progress, floor, 
     stuck at the floor, keeping a removal when the merit does not get worse
     (fewer layers are preferred). Returns (design, chi2, removed, iterations)."""
     def clamp(layers):
-        return [dict(l, thickness=max(l["thickness"], floor)) if not l.get("graded") else l for l in layers]
+        return [dict(l, thickness=max(l["thickness"], floor)) if _adjustable(l) else l for l in layers]
 
     def refine(layers):
         d, chi2, _, it = _run("refine", dict(design, layers=clamp(layers)), targets, options, deadline, progress, floor)
@@ -1071,7 +1202,10 @@ def _enforce_min_thickness(design, targets, options, deadline, progress, floor, 
     current, chi2, iterations = refine(design["layers"])
     removed = 0
     while time.time() < deadline and len(current["layers"]) > 1:
-        stuck = [i for i, l in enumerate(current["layers"]) if not l.get("graded") and l["thickness"] <= floor * (1 + 1e-6)]
+        layers = current["layers"]
+        # Removing a layer must not leave a fixed layer next to a free one of the same material (merged).
+        stuck = [i for i, l in enumerate(layers) if _adjustable(l) and l["thickness"] <= floor * (1 + 1e-6)
+                 and not _fixed_layer_merges(layers[max(i - 1, 0):i] + layers[i + 1:i + 2])]
         best = None
         for i in stuck:
             candidate, c_chi2, it = refine(_remove_layer(current["layers"], i, center_wavelength))
@@ -1306,6 +1440,51 @@ def _continue_needles(current, chi2, stop, info, targets, options, deadline, pro
     return current, chi2, stop, iterations, inserted
 
 
+def _unreachable_targets(design, target_specs):
+    """T or R targets of 1 (and A targets of 0) cannot be met when a material absorbs: the optimizer
+    then creeps towards them slowly until its time limit instead of converging."""
+    warnings = []
+    for spec in target_specs:
+        kind, value = spec.get("kind"), spec.get("value")
+        inequality = str(spec.get("inequality", "equal")).strip()
+        wants_one = kind in ("T", "R") and isinstance(value, (int, float)) and value >= 0.9999 and inequality != "<="
+        wants_zero = kind == "A" and isinstance(value, (int, float)) and value <= 1e-4 and inequality != ">="
+        wavelengths = target_wavelengths([spec])
+        if not (wants_one or wants_zero) or not wavelengths:
+            continue
+        # Only absorption that matters at the target's tolerance (TiO2's k = 4e-6 does not).
+        A = min(spectra(design, ["A"], sorted(set(wavelengths)), [float(spec.get("angle", 0.0))],
+                        [spec.get("polarization", "unpolarized")])["series"][0]["values"])
+        if A <= 0.1 * float(spec.get("tolerance", 0.01)):
+            continue
+        names = [name for name in _design_materials(design) if name != "void"
+                 and max(-z.imag for z in material_N(name, wavelengths)) > 1e-6]
+        absorbers = f"the design absorbs A = {A:.3g} there ({', '.join(names)})"
+        if names:
+            level = (f"{kind} = 1 cannot be met: {absorbers}, so {kind} <= 1 - A. Ask for a reachable level instead, "
+                     f"e.g. {kind} >= {math.floor((1 - A) * 100) / 100:g}" if wants_one else
+                     f"A = 0 cannot be met: {absorbers}. Ask for a reachable level instead, e.g. A <= "
+                     f"{math.ceil(A * 100) / 100:g}")
+            warnings.append(f"{level}. An unreachable target makes the optimizer creep towards it slowly until its "
+                            "time limit instead of converging.")
+    return warnings
+
+
+def _fixed_layer_merges(layers):
+    """OpenFilters' optimizers merge adjacent layers of the same material into one, which keeps the
+    flags of the lower layer only: a fixed layer next to a free one of the same material is not kept."""
+    warnings = []
+    for i in range(len(layers) - 1):
+        a, b = layers[i], layers[i + 1]
+        if a["material"] == b["material"] and not a.get("graded") and not b.get("graded") \
+                and a.get("index") == b.get("index") \
+                and a.get("refine_thickness", True) != b.get("refine_thickness", True):
+            warnings.append(f"layers {i + 1} and {i + 2} are both {a['material']}, one fixed and one not: the optimizer "
+                            "merges them into one layer and the fixed thickness is lost. Put another material between "
+                            "them, or fix or free both.")
+    return warnings
+
+
 def optimization_description(method, initial_chi2, chi2, all_pass, min_thickness, stop):
     """One line saying how a design was made, stored as the filter description in .ofp projects
     (the format has no fields for the optimizer settings)."""
@@ -1352,6 +1531,13 @@ def optimize(design, target_specs, method="needle", options=None, progress=None)
     start = time.time()
     deadline = start + float(options.get("time_limit", 300))
     design = design_from_filter(build_filter(design))
+    warnings += _fixed_layer_merges(design["layers"]) + _unreachable_targets(design, target_specs)
+    limit = options.get("max_total_thickness")
+    total = sum(l["thickness"] for l in design["layers"])
+    if limit and total >= 0.98 * float(limit):
+        warnings.append(f"the start is {total:.1f} nm thick, at max_total_thickness ({float(limit):g} nm): the "
+                        "optimizer stops as soon as the design grows past the limit (a stop, not a constraint), so it "
+                        "may barely move. Start from a thinner design or raise the limit.")
     cw = design["center_wavelength"]
     initial = _evaluator(build_filter(design), spec_targets).get_chi_2()
 
@@ -1627,12 +1813,43 @@ def target_wavelength_range(target_specs):
     return {"from": float(low), "to": float(high), "step": step}
 
 
+# Characters missing from Latin-1 (the encoding of .ofp files) that have a readable equivalent.
+_LATIN1_EQUIVALENTS = {
+    "–": "-", "—": "-", "−": "-", "‐": "-", "‘": "'", "’": "'", "“": '"',
+    "”": '"', "…": "...", "•": "*", "≤": "<=", "≥": ">=", "≈": "~", "≠": "!=",
+    "→": "->", "←": "<-", "∞": "inf", "∇": "nabla", "∂": "d", "√": "sqrt",
+    "⁰": "0", "⁴": "4", "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9",
+    "⁺": "+", "⁻": "-", "₀": "0", "₁": "1", "₂": "2", "₃": "3", "μ": "µ",
+    "Ω": "Ohm", "‰": " per mille", "€": "EUR",
+}
+_GREEK = ("alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho final_sigma "
+          "sigma tau upsilon phi chi psi omega").split()
+
+
+def latin1_text(text):
+    """Text that .ofp files (Latin-1) can hold: Greek letters spelled out (λ -> lambda), dashes,
+    quotes and common symbols replaced, anything else '?'."""
+    out = []
+    for char in str(text):
+        if ord(char) < 256:
+            out.append(char)
+        elif char in _LATIN1_EQUIVALENTS:
+            out.append(_LATIN1_EQUIVALENTS[char])
+        elif 0x391 <= ord(char) <= 0x3a9 and ord(char) != 0x3a2:
+            out.append(_GREEK[ord(char) - 0x391].capitalize())
+        elif 0x3b1 <= ord(char) <= 0x3c9:
+            out.append(_GREEK[ord(char) - 0x3b1].replace("final_", ""))
+        else:
+            out.append("?")
+    return "".join(out)
+
+
 def save_project(path, designs, target_specs=None, comment=""):
     """Write an .ofp project. Designs without a wavelength_range get one covering the targets,
     so the GUI analyses the region that matters."""
     p = of_project.project(catalog())
     if comment:
-        p.set_comment(comment)
+        p.set_comment(latin1_text(comment))
     wavelength_range = target_wavelength_range(target_specs)
     for design in designs:
         if wavelength_range and not design.get("wavelength_range"):

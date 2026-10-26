@@ -15,3 +15,9 @@ Source chain:
      source folders were being imported as empty namespace packages), and added
      the `OPENFILTERS_PURE_PYTHON` environment variable to force the pure-Python
      implementation
+   - project files (.ofp) are written in Latin-1, the encoding they are read in
+     (the writer used the OS locale)
+   - **deviation from OpenFilters:** tabulated (regular) materials hold n and k
+     constant beyond their data instead of extrapolating the PCHIP end segments,
+     which gave unphysical values (n < 0, or n = 4.9 for TiO2 far from its data).
+     Values within the data are unchanged; the OpenFilters GUI still extrapolates.

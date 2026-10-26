@@ -87,6 +87,26 @@ MANUAL = [
      "\t\t\t\tself.module = imp.load_module(self.filename, file, path_name, description)",
      "\t\t\t\tself.module = importlib.util.module_from_spec(spec)\n"
      "\t\t\t\tspec.loader.exec_module(self.module)"),
+    # The project writer used the OS locale (cp1252 on Windows, UTF-8 elsewhere)
+    # while the reader uses Latin-1, so non-Latin-1 text failed to save on
+    # Windows and accented text read back garbled elsewhere. Write Latin-1.
+    ("project.py", 'tempfile.NamedTemporaryFile(mode="w", ',
+     'tempfile.NamedTemporaryFile(mode="w", encoding="latin-1", errors="replace", '),
+    # DEVIATION from OpenFilters: tabulated n,k were extrapolated with the end
+    # segments of the PCHIP interpolation (allow_extrapolation), which gives
+    # unphysical values far from the data (n = 4.9 for TiO2 at 1550 nm from data
+    # at 520-544 nm, n < 0 for ITO). Pad the table with the end values far
+    # outside the data: PCHIP then stays flat, i.e. n,k are held constant beyond
+    # the data. Values at the data points are unchanged.
+    ("materials.py",
+     "\t\tself.dispersion = abeles.table(length)\n"
+     "\t\tfor i in range(length):\n"
+     "\t\t\tself.dispersion.set_table(i, self.wvls[i], self.N[i])",
+     "\t\twvls = [0.001*self.wvls[0]] + list(self.wvls) + [1000.0*self.wvls[-1]]\n"
+     "\t\tN = [self.N[0]] + list(self.N) + [self.N[-1]]\n"
+     "\t\tself.dispersion = abeles.table(length+2)\n"
+     "\t\tfor i in range(length+2):\n"
+     "\t\t\tself.dispersion.set_table(i, wvls[i], N[i])"),
     # exec() can no longer create local variables.
     ("modules.py", "exec((\"submodule_function = self.module.\" + submodule_description[1]))",
      "submodule_function = getattr(self.module, submodule_description[1])"),
