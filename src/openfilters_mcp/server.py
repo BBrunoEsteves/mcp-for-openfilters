@@ -248,10 +248,34 @@ Wavelengths = Annotated[dict[str, float] | list[float] | None,
 
 @mcp.tool(title="Server information", annotations=READ)
 async def server_info() -> dict:
-    """Version, data folder, worker count and whether the compiled C++ core is in use."""
+    """Version, build (git commit of a source checkout, and when this server started: a server started
+    before a code change still runs the old code until the app is restarted), data folder, worker count
+    and whether the compiled C++ core is in use."""
     accel = await compute("acceleration_status")
-    return {"version": __version__, "data_folder": settings.home(), "workers": settings.workers(),
-            **accel, "materials_folder": settings.materials_dir(), "jobs_folder": settings.jobs_dir()}
+    return {"version": __version__, "build": BUILD, "started": STARTED, "data_folder": settings.home(),
+            "workers": settings.workers(), **accel, "materials_folder": settings.materials_dir(),
+            "jobs_folder": settings.jobs_dir()}
+
+
+def _build():
+    """The git commit this server runs from ("+changes" with uncommitted edits), or "release" for an
+    installed package."""
+    import subprocess
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if not os.path.isdir(os.path.join(root, ".git")):
+        return "release"
+    try:
+        run = functools.partial(subprocess.run, cwd=root, capture_output=True, text=True, timeout=10,
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))  # no console flash
+        commit = run(["git", "log", "-1", "--format=%h %cs"]).stdout.strip()
+        changed = run(["git", "status", "--porcelain", "--untracked-files=no", "--", "src"]).stdout.strip()
+        return f"{commit}{' +changes' if changed else ''}" if commit else "source checkout"
+    except (OSError, subprocess.SubprocessError):
+        return "source checkout"
+
+
+BUILD = _build()
+STARTED = datetime.datetime.now().isoformat(timespec="seconds")
 
 
 @mcp.tool(title="List materials", annotations=READ)
@@ -628,8 +652,9 @@ async def optimize_design(design: Design, targets: Targets, method: str = "needl
     Waits up to wait_seconds (max 45); if not finished, returns a job_id to poll. Returns the best design found
     (not merely the last), stop_reason with a plain stop_explanation, thinnest_layer_nm,
     and an .ofp project (start + optimized) openable in OpenFilters. thin_layers_removed counts layers removed
-    while enforcing min_thickness (a layer held at the minimum is dropped when that does not worsen the merit).
-    A warning flags a result that meets its targets on their grid but not between grid points. One run finds a local optimum; for
+    while enforcing min_thickness (a layer held at the minimum is dropped when that does not worsen the merit;
+    removed_layers and a warning name them). Layers with "fixed": true (or a fixed formula symbol) are never
+    changed or removed: use it for functional layers such as electrodes. A warning flags a result that meets its targets on their grid but not between grid points. One run finds a local optimum; for
     hard specifications use run_optimization_campaign (many starts). Only FRONT layers are optimized;
     back_layers (if any) stay fixed and count in the merit when consider_backside is true."""
     checked(engine.build_targets, targets)

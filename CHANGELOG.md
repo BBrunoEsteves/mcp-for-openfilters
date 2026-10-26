@@ -18,10 +18,13 @@ From a field test (tunable Fabry-Perot filter with an ITO heater, 2026-10-26):
 - `{"half_max": true}` takes `"near"` (the local peak nearest a wavelength, not a higher band-edge ripple) or
   `"from"`/`"to"`, and returns the peak and half-maximum centre; an edge beyond the computed range gives
   `fwhm: null` with `fwhm_at_least`.
+- Removed layers are named (`removed_layers` and a warning), and job result rows include `thin_layers_removed`.
+- `server_info` gives the build (git commit of a source checkout) and when the server started, to spot a
+  server still running old code.
 - `run_batch` spectrum metrics: `peak_wavelength`, `peak_value`, `fwhm`, `center`; sweeping whole designs
   labels rows by design name.
-- Warnings: a T/R = 1 (or A = 0) target that absorption makes unreachable (the optimizer otherwise creeps
-  until its time limit); a start already at `max_total_thickness` (a stop, not a constraint); a fixed layer
+- Warnings: a T/R = 1 (or A = 0) target that absorption makes unreachable (the optimizer then slowly thins the
+  absorbing layers, e.g. heater electrodes, and removes them with min_thickness); a start already at `max_total_thickness` (a stop, not a constraint); a fixed layer
   next to a free one of the same material (OpenFilters merges them).
 - Fix: a formula symbol written `[mixture, index]` crashed the material check.
 

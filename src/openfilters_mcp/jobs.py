@@ -49,7 +49,7 @@ def result_row(index, op, result):
         row.update(r["metrics"])
     elif op in ("optimize", "evaluate"):
         for key in ("merit_chi2", "all_targets_met", "nb_layers", "total_thickness_nm", "iterations",
-                    "stop_reason", "elapsed_s", "initial_chi2", "error_detail", "warnings"):
+                    "stop_reason", "elapsed_s", "initial_chi2", "thin_layers_removed", "error_detail", "warnings"):
             if key in r:
                 row[key] = r[key]
     elif op == "tolerance":

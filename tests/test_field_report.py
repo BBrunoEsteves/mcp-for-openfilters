@@ -238,3 +238,27 @@ def test_b8_batch_can_sweep_whole_designs():
     cases = server._expand({"design": "$design", "quantities": ["T"]}, {"design": designs}, "grid")
     assert [params for params, _ in cases] == [{"design": "order 1"}, {"design": "design 2"}]
     assert [args["design"] for _, args in cases] == designs
+
+
+# Verification report (same day, after the fixes above): N1, N3.
+
+def test_n3_removed_layers_are_named_and_reach_job_rows():
+    # A heater layer disappeared and the only sign was the layer count (25 -> 24).
+    from openfilters_mcp import jobs
+    design = {"substrate": "BK7", "center_wavelength": 550,
+              "formula": {"formula": "0.25H 0.25L H L", "materials": {"H": "TiO2", "L": "SiO2"}}}
+    targets = [{"kind": "R", "from": 420, "to": 680, "step": 10, "value": 0, "tolerance": 0.01}]
+    r = engine.optimize(design, targets, "refine", {"time_limit": 30, "min_thickness": 30})
+    assert r["thin_layers_removed"] == len(r["removed_layers"]) == 2 and r["nb_layers"] == 2
+    first = r["removed_layers"][0]
+    assert first == {"position": 1, "material": "TiO2", "thickness_nm": 30.0}
+    assert any("were removed because the merit was no worse" in w and first["material"] in w for w in r["warnings"])
+    row = jobs.result_row(0, "optimize", {"ok": True, "result": r})
+    assert row["thin_layers_removed"] == r["thin_layers_removed"] and row["warnings"] == r["warnings"]
+
+
+def test_n1_server_info_reports_the_build():
+    import asyncio
+    from openfilters_mcp import server
+    info = asyncio.run(server.server_info())
+    assert info["build"] and info["started"]  # a git commit in a checkout, "release" when installed

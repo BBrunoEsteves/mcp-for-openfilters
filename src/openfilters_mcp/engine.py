@@ -1191,7 +1191,8 @@ def _enforce_min_thickness(design, targets, options, deadline, progress, floor, 
     """Make every layer at least `floor` thick: clamp thin layers to the
     floor and refine with the floor as a bound; then try removing layers
     stuck at the floor, keeping a removal when the merit does not get worse
-    (fewer layers are preferred). Returns (design, chi2, removed, iterations)."""
+    (fewer layers are preferred). Returns (design, chi2, removed, iterations), removed being the
+    removed layers in order, each with its material, thickness and position at the time."""
     def clamp(layers):
         return [dict(l, thickness=max(l["thickness"], floor)) if _adjustable(l) else l for l in layers]
 
@@ -1200,7 +1201,7 @@ def _enforce_min_thickness(design, targets, options, deadline, progress, floor, 
         return d, chi2, it
 
     current, chi2, iterations = refine(design["layers"])
-    removed = 0
+    removed = []
     while time.time() < deadline and len(current["layers"]) > 1:
         layers = current["layers"]
         # Removing a layer must not leave a fixed layer next to a free one of the same material (merged).
@@ -1211,11 +1212,12 @@ def _enforce_min_thickness(design, targets, options, deadline, progress, floor, 
             candidate, c_chi2, it = refine(_remove_layer(current["layers"], i, center_wavelength))
             iterations += it
             if best is None or c_chi2 < best[1]:
-                best = (candidate, c_chi2)
+                best = (candidate, c_chi2, i)
         if best is None or best[1] > chi2 * (1 + 1e-3) + 1e-12:
             break
-        current, chi2 = best
-        removed += 1
+        i = best[2]
+        removed.append({"position": i + 1, "material": layers[i]["material"], "thickness_nm": round(layers[i]["thickness"], 3)})
+        current, chi2 = best[:2]
     return current, chi2, removed, iterations
 
 
@@ -1442,7 +1444,7 @@ def _continue_needles(current, chi2, stop, info, targets, options, deadline, pro
 
 def _unreachable_targets(design, target_specs):
     """T or R targets of 1 (and A targets of 0) cannot be met when a material absorbs: the optimizer
-    then creeps towards them slowly until its time limit instead of converging."""
+    then slowly thins the absorbing layers towards 0 nm, so a run cut by its time limit depends on CPU speed."""
     warnings = []
     for spec in target_specs:
         kind, value = spec.get("kind"), spec.get("value")
@@ -1465,8 +1467,9 @@ def _unreachable_targets(design, target_specs):
                      f"e.g. {kind} >= {math.floor((1 - A) * 100) / 100:g}" if wants_one else
                      f"A = 0 cannot be met: {absorbers}. Ask for a reachable level instead, e.g. A <= "
                      f"{math.ceil(A * 100) / 100:g}")
-            warnings.append(f"{level}. An unreachable target makes the optimizer creep towards it slowly until its "
-                            "time limit instead of converging.")
+            warnings.append(f"{level}. Chasing it, the optimizer slowly thins the absorbing layers towards 0 nm (with "
+                            "min_thickness it then removes them), and if the time limit comes first the result depends "
+                            "on how far it got. Give layers that must stay (e.g. electrodes) \"fixed\": true.")
     return warnings
 
 
@@ -1549,23 +1552,26 @@ def optimize(design, target_specs, method="needle", options=None, progress=None)
         current, chi2, stop, its, edge_needles = _continue_needles(
             current, chi2, stop, info, targets, options, deadline, progress)
         iterations += its
-    removed, rounds = 0, 1
+    removed, rounds = [], 1
     if min_thickness:
         best = None
         for rounds in range(1, 6):
-            clean, clean_chi2, n_removed, its = _enforce_min_thickness(
+            clean, clean_chi2, round_removed, its = _enforce_min_thickness(
                 current, targets, options, deadline, progress, min_thickness, cw)
-            removed += n_removed
             iterations += its
             if best is None or clean_chi2 < best[1] * (1 - 1e-3):
-                best = (clean, clean_chi2)
+                best = (clean, clean_chi2, (best[2] if best else []) + round_removed)
             else:
                 break  # another round did not improve the clean design
             if method == "refine" or time.time() >= deadline:
                 break
             current, chi2, stop, it = _run(method, best[0], targets, options, deadline, progress)
             iterations += it
-        current, chi2 = best
+        current, chi2, removed = best
+        if removed:
+            names = "; ".join(f"{r['material']} ({r['thickness_nm']:g} nm, then layer {r['position']})" for r in removed)
+            warnings.append(f"{len(removed)} layer(s) held at min_thickness were removed because the merit was no "
+                            f"worse without them: {names}. Give a layer \"fixed\": true to keep it.")
         if _thin_layers(current["layers"], min_thickness * (1 - 1e-9)):
             stop = "min_thickness_not_reached"
 
@@ -1604,7 +1610,8 @@ def optimize(design, target_specs, method="needle", options=None, progress=None)
             "all_targets_met": all_pass, "targets": rows, "iterations": iterations, "stop_reason": stop,
             "nb_layers": f.get_nb_layers(), "total_thickness_nm": round(float(f.get_total_thickness()), 3),
             "thinnest_layer_nm": round(min(thicknesses), 3) if thicknesses else None,
-            "thin_layers_removed": removed, "edge_needles_added": edge_needles,
+            "thin_layers_removed": len(removed), **({"removed_layers": removed} if removed else {}),
+            "edge_needles_added": edge_needles,
             "rounds": rounds if min_thickness else 1,
             "elapsed_s": round(time.time() - start, 2), "stop_explanation": STOP_REASONS.get(stop, ""),
             **({"warnings": warnings} if warnings else {}), **({"error_detail": error_detail} if error_detail else {}),

@@ -169,6 +169,12 @@ layers; B3/B7 half_max near/from/to + clipped edges (engine.half_max_summary); B
 falling slowly toward an unreachable T = 1 with absorbing ITO): warning instead; B5 warning only (a true thickness
 constraint would need a merit term); B8 batch peak stats. Open from that report: F1 thermal model (validate
 against its dlambda/dT table), F2 peak-position target, B9 plots shown to the user (client limit).
+Verification report (same day): all fixes confirmed in a chat. N2 (options missing from descriptions) was the chat
+reusing tool schemas loaded before the update; the server sends them (checked with list_tools). N4: the B6 case
+(unreachable T = 1, ITO free) is cut by time_limit, so its result depends on CPU speed (270-510 it/s seen); given
+300 s it converges by thinning both ITO layers to 0 and removing them. The six converged optimizations of the
+first report reproduce exactly (dev check, not a test). Fixed: removed_layers + warning, thin_layers_removed in job
+rows, server_info build/started (N1). Still open: B5 as a real constraint, B9, F1-F3.
 Regenerating the core on Windows: clone third_party with -c core.autocrlf=false, or every file shows as changed.
 NEXT: release prep (see Pending) and outside testers; tag v0.1.3 after 2026-11-01. For each finding: verify it (reproduce; for OpenFilters behaviour check
 third_party/openfilters_original and the pure-Python core before blaming OpenFilters), fix with a regression test,
