@@ -262,3 +262,24 @@ def test_n1_server_info_reports_the_build():
     from openfilters_mcp import server
     info = asyncio.run(server.server_info())
     assert info["build"] and info["started"]  # a git commit in a checkout, "release" when installed
+
+
+def test_b4_fixed_layers_with_the_needle_and_step_methods():
+    # The report only tried refine. Needle: a fixed cavity stays while needles go elsewhere and thin
+    # layers are removed. Step: a fixed mixture layer keeps its thickness and index and gets no steps.
+    stack = engine.describe({"substrate": "FusedSilica", "center_wavelength": 532, "formula": {
+        "formula": "(HL)^4 H LL H (LH)^4", "materials": {"H": "TiO2", "L": "SiO2"}}})["design"]["layers"]
+    cavity = len(stack) // 2
+    stack[cavity] = dict(stack[cavity], fixed=True)
+    r = engine.optimize({"substrate": "FusedSilica", "center_wavelength": 532, "layers": stack}, TARGETS_STD,
+                        "needle", {"time_limit": 30, "min_thickness": 20})
+    fixed = [l for l in r["design"]["layers"] if l.get("refine_thickness") is False]
+    assert [l["thickness"] for l in fixed] == [stack[cavity]["thickness"]]
+    mixture = {"substrate": "BK7", "center_wavelength": 550, "layers": [
+        {"material": "SiO2TiO2", "thickness": 100, "index": 1.7, "fixed": True},
+        {"material": "SiO2TiO2", "thickness": 300, "index": 1.9}]}
+    r = engine.optimize(mixture, [{"kind": "R", "from": 450, "to": 650, "step": 5, "value": 0.005, "inequality": "<="}],
+                        "step", {"time_limit": 30})
+    first = r["design"]["layers"][0]
+    assert (first["thickness"], first["index"]) == (100.0, 1.7) and not first.get("graded")
+    assert first["refine_index"] is False and first["add_steps"] is False
