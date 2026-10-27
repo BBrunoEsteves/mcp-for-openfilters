@@ -145,6 +145,41 @@ def test_profiles_work_in_every_layer_position():
     assert engine.describe(design)["nb_layers"] == 3
 
 
+def test_adjacent_profiles_without_matching():
+    """Found in a chat check (2026-10-27): a ramp next to a custom profile was refused because the rugate ripple
+    hint looked up both neighbours of every profile layer."""
+    design = dict(BASE, center_wavelength=550, layers=[
+        {"material": "IdealMixture", "graded": {"profile": {"type": "quintic", "n_start": 1.5, "n_end": 2.4,
+                                                            "optical_thickness": 550}}},
+        {"material": "IdealMixture", "graded": {"profile": {"type": "custom", "points": [[0, 2.4], [100, 2.0],
+                                                                                         [200, 2.0], [300, 1.6]]}}},
+        {"material": "IdealMixture", "graded": {"profile": {"type": "rugate", "n_min": 1.6, "n_max": 2.0,
+                                                            "periods": 4}}}])
+    layers, warnings = expanded(design)
+    assert [l["graded"]["steps"][0] for l in layers] == [0, 90, 29]  # the rugate starts at the geometric mean, 1.789
+    assert engine.describe(design)["nb_layers"] == 3
+    assert any("void" in w for w in warnings) and any("next to layer 2 (IdealMixture) (n = 1.6000)" in w for w in warnings)
+
+
+def test_matching_to_a_neighbouring_profile():
+    """Profiles are expanded from the substrate outward: one below is already steps and can be matched to (its
+    last step); one above cannot."""
+    ramp = {"material": "IdealMixture", "graded": {"profile": {"type": "linear", "n_start": 1.6, "n_end": 2.0, "qwot": 1}}}
+    rugate = {"profile": {"type": "rugate", "n_min": 1.6, "n_max": 2.0, "periods": 4}}
+    layers, _ = expanded(dict(BASE, layers=[ramp, {"material": "IdealMixture",
+                                                   "graded": dict(rugate, matching={"substrate": "quintic"})}]))
+    assert layers[1]["graded"]["steps"][0] == 50  # from the ramp's last index, 2.0
+    with pytest.raises(engine.EngineError, match="layer 2 is a profile too"):
+        expanded(dict(BASE, layers=[{"material": "IdealMixture", "graded": dict(rugate, matching={"medium": "quintic"})},
+                                    ramp]))
+
+
+def test_rounding_warning_names_the_layer():
+    design = dict(BASE, layers=[{"material": "IdealMixture",
+                                 "graded": {"indices_at_cw": [1.503, 2.2149], "step_thicknesses": [100, 100]}}])
+    assert any(w.startswith("layer 1: indices_at_cw rounded") for w in engine.material_warnings(design, [1064]))
+
+
 @pytest.mark.parametrize("graded, message", [
     ({"profile": {"type": "rugate", "n_min": 1.4, "n_max": 2.2, "periods": 4}}, "covers 1.5000-2.4000"),
     ({"profile": {"type": "rugate", "n_min": 1.5, "n_max": 2.2}}, "needs 'periods'"),

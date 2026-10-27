@@ -46,7 +46,7 @@ DESTRUCTIVE in server.py; required by Claude's directory, checked by tests/test_
 ## Status (2026-10-22)
 
 Done: Python 3 port validated (analytic + independent TMM, < 1e-9; needle derivatives vs finite differences),
-all optimizers working, 27 MCP tools + 5 prompts + 9 resources working end to end, 217 tests + 46 acceptance checks. Private GitHub repo
+all optimizers working, 27 MCP tools + 5 prompts + 9 resources working end to end, 220 tests + 46 acceptance checks. Private GitHub repo
 BBrunoEsteves/openfilters-mcp; CI compiles the C++ core and tests on Windows/macOS/Linux and builds wheels
 (cp310-cp314, runtime DLLs bundled). Compiled core is 15-30x faster than pure Python.
 Registered locally (user scope) in Claude Code and Claude Desktop, pointing at .venv/Scripts/openfilters-mcp.exe;
@@ -196,7 +196,7 @@ Phase 2, F1 done 2026-10-27 (graded.py, tests/test_graded_profiles.py): "graded"
 "resolution"} expanded by engine.expand_profiles (called by build_filter and material_warnings, so every tool takes
 it; warnings come from material_warnings). Sampled at 8000 points per lambda0/2, rounded to the nearest step,
 runs merged, optical-coordinate step thickness = optical length / rounded n. Matching ramps go to the neighbour
-(substrate, medium or an adjacent homogeneous/stepped layer; not another profile). Report criterion 8 met: full
+(substrate, medium, an adjacent homogeneous/stepped layer, or a profile below: profiles expand from the substrate outward). Report criterion 8 met: full
 Hann + quintic matching gives side lobes and lambda0/2, lambda0/3 at the air floor (~4.3 %); q = 0.05 reproduces C4
 within 2e-4. Later: F2 custom mixtures (Bruggeman), F4 analysis tools with graded layers, F6 several designs on one
 plot.

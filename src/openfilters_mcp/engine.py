@@ -349,8 +349,11 @@ def expand_profiles(design):
         layers = list(design.get(key) or [])
         medium = design.get(medium_key, design.get("incident_medium", "void"))
 
-        def neighbour(j, wl, end):
-            """(name, n at wl) of what lies at index j (-1: substrate, len: medium); end: the side facing us."""
+        label = "layer" if key == "layers" else "back layer"
+
+        def neighbour(j, wl, end, matched):
+            """(name, n at wl) of what lies at index j (-1: substrate, len: medium); end: the side facing us.
+            Another profile: refused when it is to be matched, else None (no unmatched-ripple hint)."""
             if j < 0:
                 name = design.get("substrate", "FusedSilica")
                 return name, float(material_N(name, [wl])[0].real)
@@ -361,14 +364,16 @@ def expand_profiles(design):
             name = other.get("material")
             graded = other.get("graded")
             if isinstance(graded, dict) and "profile" in graded:
-                raise EngineError(f"{key} {j + 1} and the profile next to it cannot be matched to each other: put "
-                                  "both in one profile, or match one of them only")
+                if not matched:
+                    return None
+                raise EngineError(f"{label} {j + 1} is a profile too, so the profile next to it cannot be matched to it: "
+                                  "put both in one profile, or match only the sides facing other layers")
             if isinstance(graded, dict):
                 steps, _ = graded_steps(name, graded, cw, f"graded layer {j + 1}")
-                return f"{key} {j + 1} ({name})", mixture_steps(name, wl)[steps[end]]
+                return f"{label} {j + 1} ({name})", mixture_steps(name, wl)[steps[end]]
             if other.get("index") is not None:
-                return f"{key} {j + 1} ({name})", float(other["index"])
-            return f"{key} {j + 1} ({name})", float(material_N(name, [wl])[0].real)
+                return f"{label} {j + 1} ({name})", float(other["index"])
+            return f"{label} {j + 1} ({name})", float(material_N(name, [wl])[0].real)
 
         for i, layer in enumerate(layers):
             if not (isinstance(layer, dict) and isinstance(layer.get("graded"), dict) and "profile" in layer["graded"]):
@@ -377,10 +382,16 @@ def expand_profiles(design):
             material = layer.get("material")
             wl = of_graded.wavelength(layer["graded"], cw)
             table = mixture_steps(material, wl)
-            matching = layer["graded"].get("matching") or {}
-            wanted = {side for side in ("substrate", "medium") if not matching or matching.get(side, "none") != "none"}
-            neighbours = {"substrate": neighbour(i - 1, wl, -1) if "substrate" in wanted else None,
-                          "medium": neighbour(i + 1, wl, 0) if "medium" in wanted else None}
+            matching = layer["graded"].get("matching")
+            profile = layer["graded"]["profile"]
+            # Neighbours of the sides to match; with no matching at all, of both sides for a rugate (ripple hint).
+            # (Malformed matching or profile values are refused by graded.expand.)
+            matched = {side for side in ("substrate", "medium")
+                       if isinstance(matching, dict) and matching.get(side, "none") != "none"}
+            hint = (set() if matching or not isinstance(profile, dict) or profile.get("type") != "rugate"
+                    else {"substrate", "medium"})
+            neighbours = {side: neighbour(i + offset, wl, end, side in matched) if side in matched | hint else None
+                          for side, offset, end in (("substrate", -1, -1), ("medium", 1, 0))}
             steps, thicknesses, notes = of_graded.expand(material, layer["graded"], table, wl, neighbours, where)
             layers[i] = {k: v for k, v in layer.items() if k != "thickness"} | {
                 "graded": {"steps": steps, "step_thicknesses": thicknesses}}
@@ -790,7 +801,7 @@ def _graded_rounding(design):
             worst = max(abs(table[_nearest_step(table, float(n), layer["material"], cw, "")] - float(n))
                         for n in graded["indices_at_cw"])
             if worst > 1e-6:
-                warnings.append(f"{key} {i + 1}: indices_at_cw rounded to {layer['material']}'s composition steps "
+                warnings.append(f"{'layer' if key == 'layers' else 'back layer'} {i + 1}: indices_at_cw rounded to {layer['material']}'s composition steps "
                                 f"(about {abs(table[1] - table[0]):.4g} apart at {cw:g} nm); largest change {worst:.3g}")
     return warnings
 
