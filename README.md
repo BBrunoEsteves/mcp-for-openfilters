@@ -14,6 +14,10 @@ results to disk, including `.ofp` project files that open in the OpenFilters GUI
 *Unofficial: this project is not affiliated with or endorsed by the OpenFilters authors or Polytechnique
 Montréal.*
 
+> **Built and tested with Claude.** The server follows the open MCP standard, but it has so far been
+> developed and tested only with Claude (Claude Desktop and Claude Code). Other MCP clients may work,
+> but they are untested: tool descriptions, plots and long-running jobs may behave differently there.
+
 ## What it can do
 
 | Area | Tools |
@@ -110,6 +114,12 @@ A design:
 ```
 
 or with a stack formula: `{"formula": {"formula": "(HL)^8 H", "materials": {"H": "TiO2", "L": "SiO2"}}}`.
+
+Materials given as n,k tables have no data outside their wavelength range. There the design field
+`"table_extrapolation"` decides: `"hold"` (default: n,k stay at the value at the nearest end of the data),
+`"openfilters"` (OpenFilters' own extrapolation, identical to its GUI) or `"refuse"`. Every result computed
+outside the data says so, with the n,k used and what the other choice would give; optimizations, campaigns
+and yield analyses do not start until the choice is made (Claude asks you).
 
 A target:
 

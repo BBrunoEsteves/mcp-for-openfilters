@@ -87,6 +87,7 @@ OPS = {
     "optimize": lambda a: engine.optimize(**a),
     "tolerance": _tolerance_task,
     "check_tolerance": lambda a: engine.check_tolerance(**a),
+    "check_long_job": lambda a: engine.check_long_job(**a),
     "sensitivity": lambda a: engine.sensitivity(**a),
     "color": lambda a: engine.color(**a),
     "thermal_sensitivity": lambda a: thermal.sensitivity(**a),

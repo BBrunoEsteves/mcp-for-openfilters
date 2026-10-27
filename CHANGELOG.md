@@ -66,6 +66,15 @@ From a second rugate test (2026-10-27):
   model before creating a job (a graded design used to fail in every task).
 - `layer_sensitivity` includes graded layers (scaled as a whole) instead of skipping them silently.
 
+- New design field `table_extrapolation` for tabulated materials used beyond their data: `"hold"` (default,
+  end values), `"openfilters"` (OpenFilters' own extrapolation, as in its GUI) or `"refuse"`. Warnings give
+  the n,k used and what the other choice would give. Optimizations, campaigns, tolerance analyses and batches
+  do not start until the choice is made when a material is outside its data; more than 1.5x beyond the data
+  is computed only when it is set. Saving a project warns when the GUI will extrapolate where the connector
+  held values.
+- Documentation: the connector has been developed and tested only with Claude (Claude Desktop and Claude
+  Code); other MCP clients are untested.
+
 Earlier in 0.1.3:
 
 - `remove_material` tool.

@@ -21,3 +21,6 @@ Source chain:
      constant beyond their data instead of extrapolating the PCHIP end segments,
      which gave unphysical values (n < 0, or n = 4.9 for TiO2 far from its data).
      Values within the data are unchanged; the OpenFilters GUI still extrapolates.
+     This is the connector's default only: a design with "table_extrapolation":
+     "openfilters" uses OpenFilters' original extrapolation (openfilters_mcp/engine.py
+     rebuilds those tables without the padding).

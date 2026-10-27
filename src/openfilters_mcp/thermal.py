@@ -32,8 +32,8 @@ STRAIN_STEP = 0.002  # relative thickness change, central differences for d(lamb
 class _Catalog:
     """The user's catalog, with some materials replaced by shifted copies."""
 
-    def __init__(self, shifted):
-        self.base, self.shifted = engine.catalog(), shifted
+    def __init__(self, shifted, mode="hold"):
+        self.base, self.shifted = engine.catalog_for(mode), shifted
 
     def get_material(self, name):
         return self.shifted[name] if name in self.shifted else self.base.get_material(name)
@@ -42,12 +42,12 @@ class _Catalog:
         return getattr(self.base, attribute)
 
 
-def _shifted_material(name, dn, dk, wavelengths):
+def _shifted_material(name, dn, dk, wavelengths, mode="hold"):
     """An in-memory table copy of a regular material with n + dn and k + dk at the wavelengths."""
     material = engine._material(name)
     if material.is_mixture():
         raise EngineError(f"{name} is a mixture: thermal calculations support regular materials only")
-    N = engine.material_N(name, wavelengths)
+    N = engine.material_N(name, wavelengths, mode)
     table = of_materials.material_table()
     table.name = name
     table.set_properties(list(wavelengths), [complex(z.real + dn, -max(-z.imag + dk, 0.0)) for z in N])
@@ -73,9 +73,10 @@ def _values(design, quantity, wavelengths, angle, polarization, dn=None, dk=None
                               for layer in design[key]]
     grid = sorted(set(wavelengths) | {float(design["center_wavelength"])})
     names = set(dn or {}) | set(dk or {})
-    shifted = {name: _shifted_material(name, (dn or {}).get(name, 0.0), (dk or {}).get(name, 0.0), grid)
+    shifted = {name: _shifted_material(name, (dn or {}).get(name, 0.0), (dk or {}).get(name, 0.0), grid,
+                                         engine.extrapolation_mode(design))
                for name in names}
-    f = engine.build_filter(perturbed, wavelengths, materials=_Catalog(shifted) if shifted else None)
+    f = engine.build_filter(perturbed, wavelengths, materials=_Catalog(shifted, engine.extrapolation_mode(design)) if shifted else None)
     if quantity not in ("R", "T", "A"):
         raise EngineError("quantity must be R, T or A")
     method = getattr(f, engine.QUANTITIES[quantity])

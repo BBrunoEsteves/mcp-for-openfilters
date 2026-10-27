@@ -72,17 +72,77 @@ def catalog(reload=False):
     return _catalog
 
 
-def _material(name):
+# What a tabulated material gives beyond its data (design key "table_extrapolation"):
+#   hold        n,k held at the end values (the port's default, see openfilters_core/PROVENANCE.md)
+#   openfilters OpenFilters' own extrapolation of the interpolation's end segments (as in its GUI)
+#   refuse      any calculation outside the data is refused
+TABLE_EXTRAPOLATION = ("hold", "openfilters", "refuse")
+
+
+def extrapolation_mode(design):
+    mode = design.get("table_extrapolation", "hold") if isinstance(design, dict) else "hold"
+    if mode not in TABLE_EXTRAPOLATION:
+        raise EngineError(f"table_extrapolation must be one of {', '.join(TABLE_EXTRAPOLATION)} (\"hold\": n,k held "
+                          "at the end of the data; \"openfilters\": OpenFilters' own extrapolation; \"refuse\")")
+    return mode
+
+
+def _openfilters_table(material):
+    """A copy of a table material with OpenFilters' original dispersion object: the table without the
+    port's end padding, so PCHIP extrapolates its end segments as in the OpenFilters GUI."""
+    wvls, N = material.get_properties()
+    copy = of_materials.material_table()
+    copy.name = material.get_name()
+    copy.set_properties(list(wvls), list(N))
+    copy.dispersion = of_materials.abeles.table(len(wvls))
+    for i in range(len(wvls)):
+        copy.dispersion.set_table(i, wvls[i], N[i])
+    return copy
+
+
+class _OpenFiltersCatalog:
+    """The user's catalog with every table material extrapolated as OpenFilters does."""
+
+    def __init__(self, base):
+        self.base, self.copies = base, {}
+
+    def get_material(self, name):
+        material = self.base.get_material(name)
+        if material.get_model() != of_materials.TABLE:
+            return material
+        if name not in self.copies:
+            self.copies[name] = _openfilters_table(material)
+        return self.copies[name]
+
+    def __getattr__(self, attribute):
+        return getattr(self.base, attribute)
+
+
+_openfilters_catalog = None
+
+
+def catalog_for(mode):
+    """The catalog a calculation uses for a table_extrapolation mode."""
+    global _openfilters_catalog
+    base = catalog()
+    if mode != "openfilters":
+        return base
+    if _openfilters_catalog is None or _openfilters_catalog.base is not base:
+        _openfilters_catalog = _OpenFiltersCatalog(base)
+    return _openfilters_catalog
+
+
+def _material(name, mode="hold"):
     try:
-        return catalog().get_material(name)
+        return catalog_for(mode).get_material(name)
     except of_materials.material_error as error:
         raise EngineError(f"Unknown material '{name}'. Use list_materials to see what is available, or "
                           "search_refractiveindex and import_refractiveindex_material to add it.") from error
 
 
-def material_N(name, wavelengths):
-    """Complex index (n - ik) of a regular material at the wavelengths."""
-    material = _material(name)
+def material_N(name, wavelengths, mode="hold"):
+    """Complex index (n - ik) of a regular material at the wavelengths (mode: table_extrapolation)."""
+    material = _material(name, mode)
     if material.is_mixture():
         raise EngineError(f"'{name}' is a mixture; its index depends on the composition.")
     f = optical_filter.optical_filter(catalog())
@@ -236,7 +296,7 @@ def polarization_name(value):
 DESIGN_KEYS = {"substrate", "incident_medium", "exit_medium", "center_wavelength", "consider_backside",
                "substrate_thickness_mm", "consider_backside_on_monitoring", "illuminant", "observer", "description",
                "needle_materials", "step_spacing", "wavelength_range", "layers", "back_layers", "formula",
-               "back_formula", "name", "notes"}
+               "back_formula", "name", "notes", "table_extrapolation"}
 LAYER_KEYS = {"material", "thickness", "qwot", "index", "graded", "fixed", "refine_thickness", "refine_index", "preserve_ot",
               "add_needles", "add_steps"}
 
@@ -259,7 +319,9 @@ def build_filter(design, wavelengths=None, materials=None):
         raise EngineError("design must be an object")
     _check_keys(design, DESIGN_KEYS, "design")
     design, _ = expand_profiles(design)
-    f = optical_filter.optical_filter(materials or catalog())
+    f = optical_filter.optical_filter(materials or catalog_for(extrapolation_mode(design)))
+    if "table_extrapolation" in design:
+        f.table_extrapolation = design["table_extrapolation"]  # kept by design_from_filter
     try:
         f.set_center_wavelength(float(design.get("center_wavelength", 550.0)))
         if wavelengths is not None:
@@ -626,6 +688,8 @@ def design_from_filter(f):
     }
     if f.get_description():
         design["description"] = f.get_description()
+    if getattr(f, "table_extrapolation", None):
+        design["table_extrapolation"] = f.table_extrapolation
     if f.get_needle_materials():
         design["needle_materials"] = list(f.get_needle_materials())
     if f.get_step_spacing() != _DEFAULT_STEP_SPACING:
@@ -751,41 +815,116 @@ def _design_materials(design):
 TABLE_REACH = 1.5
 
 
-def material_warnings(design, wavelengths):
-    """Warnings for tabulated materials used outside their data (held constant there), an error
-    when they are used far beyond it (TABLE_REACH), and an error where a material's model gives an
-    unphysical index (n <= 0), e.g. a Sellmeier formula near its infrared pole: OpenFilters
-    evaluates every model at any wavelength without checking."""
+def _data_range(material):
+    data = getattr(material, "wvls", None)
+    return (float(data[0]), float(data[-1])) if data is not None and len(data) else None
+
+
+def outside_data(design, wavelengths):
+    """[(material, (data from, to), [outside ranges as (from, to)])] for tabulated materials of the design
+    used outside their data at these wavelengths."""
     wavelengths = [float(w) for w in wavelengths]
     if not wavelengths:
         return []
+    design, _ = expand_profiles(design)
+    lo, hi = min(wavelengths), max(wavelengths)
+    out = []
+    for name in _design_materials(design):
+        material = _material(name)
+        data = None if material.is_mixture() else _data_range(material)
+        if data is None:
+            continue
+        ranges = ([(lo, data[0])] if lo < data[0] * (1 - 1e-6) else []) + \
+                 ([(data[1], hi)] if hi > data[1] * (1 + 1e-6) else [])
+        if ranges:
+            out.append((name, data, ranges))
+    return out
+
+
+def _nk(z):
+    return f"n = {z.real:.4g}, k = {-z.imag + 0.0:.3g}"  # k < 0 (gain) shown as it is
+
+
+def material_warnings(design, wavelengths):
+    """Warnings for tabulated materials used outside their data, saying what was used there (held end
+    values or OpenFilters' extrapolation, per table_extrapolation) and what the other mode would give;
+    errors for "refuse", for use far beyond the data (TABLE_REACH) when no mode was chosen, and where a
+    material's model gives an unphysical index (n <= 0), e.g. a Sellmeier formula near its infrared
+    pole: OpenFilters evaluates every model at any wavelength without checking."""
+    wavelengths = [float(w) for w in wavelengths]
+    if not wavelengths:
+        return []
+    mode = extrapolation_mode(design)
+    chosen = isinstance(design, dict) and "table_extrapolation" in design
     design, warnings = expand_profiles(design)
     lo, hi = min(wavelengths), max(wavelengths)
     grid = sorted(set(np.linspace(lo, hi, 64).tolist()) | set(wavelengths[:: max(1, len(wavelengths) // 200)]))
+    for name, data, ranges in outside_data(design, wavelengths):
+        where = " and ".join(f"{a:g}-{b:g} nm" for a, b in ranges)
+        if mode == "refuse":
+            raise EngineError(f"{name}: its data cover {data[0]:g}-{data[1]:g} nm and it is used at {where}, which "
+                              "table_extrapolation \"refuse\" forbids. Limit the wavelengths, use a material with data "
+                              "there, or choose \"hold\" or \"openfilters\".")
+        if not chosen and (lo < data[0] / TABLE_REACH or hi > data[1] * TABLE_REACH):
+            raise EngineError(f"{name}: its data cover {data[0]:g}-{data[1]:g} nm, so its n,k at {where} (more than "
+                              f"{TABLE_REACH:g}x beyond the data) are unknown. Use a material with data for this range "
+                              "(search_refractiveindex and import_refractiveindex_material), or ask the user and set "
+                              "the design's table_extrapolation to \"hold\" (end values) or \"openfilters\" "
+                              "(OpenFilters' extrapolation) to compute anyway.")
+        ends = [a if a < data[0] else b for a, b in ranges]  # the farthest wavelength on each side
+        held, extrapolated = material_N(name, ends), material_N(name, ends, "openfilters")
+        used, other = (held, extrapolated) if mode == "hold" else (extrapolated, held)
+        values = "; ".join(f"at {w:g} nm {_nk(u)}" for w, u in zip(ends, used))
+        others = "; ".join(f"{_nk(o)}" for o in other)
+        how = ("held at the value at the nearest end of the data" if mode == "hold"
+               else "extrapolated as OpenFilters does (end segments of the interpolation)")
+        other_name = "OpenFilters' extrapolation" if mode == "hold" else "Holding the end values"
+        warnings.append(f"{name}: its data cover {data[0]:g}-{data[1]:g} nm; at {where} n,k are {how} "
+                        f"(table_extrapolation \"{mode}\"{'' if chosen else ', the default'}): {values}. "
+                        f"{other_name} would give {others} there. Not measured: results there are approximate.")
     for name in _design_materials(design):
-        material = _material(name)
-        if material.is_mixture():
+        if _material(name).is_mixture():
             continue
-        data = getattr(material, "wvls", None)
-        if data is not None and len(data) and (lo < data[0] / TABLE_REACH or hi > data[-1] * TABLE_REACH):
-            far = ([f"{lo:g} nm"] if lo < data[0] / TABLE_REACH else []) + \
-                  ([f"{hi:g} nm"] if hi > data[-1] * TABLE_REACH else [])
-            raise EngineError(f"{name}: its data cover {data[0]:g}-{data[-1]:g} nm, so its n,k at {' and '.join(far)} "
-                              f"(more than {TABLE_REACH:g}x beyond the data) are unknown. Use a material with data for "
-                              "this range (search_refractiveindex and import_refractiveindex_material).")
-        if data is not None and len(data) and (lo < data[0] * (1 - 1e-6) or hi > data[-1] * (1 + 1e-6)):
-            outside = ([f"{lo:g}-{data[0]:g} nm"] if lo < data[0] * (1 - 1e-6) else []) +                       ([f"{data[-1]:g}-{hi:g} nm"] if hi > data[-1] * (1 + 1e-6) else [])
-            warnings.append(f"{name}: its data cover {data[0]:g}-{data[-1]:g} nm; at {' and '.join(outside)} n,k are "
-                            "held at the value at the nearest end of the data (not measured: results there are "
-                            "approximate)")
-        N = material_N(name, grid)
+        N = material_N(name, grid, mode)
         bad = [(w, z) for w, z in zip(grid, N) if not (np.isfinite(z.real) and np.isfinite(z.imag)) or z.real <= 0]
         if bad:
             w, z = bad[0]
-            raise EngineError(f"{name} gives an unphysical index (n = {z.real:.4g}) at {w:g} nm: its model is not valid "
-                              "there. Use a material with data for this range (search_refractiveindex and "
-                              "import_refractiveindex_material).")
+            raise EngineError(f"{name} gives an unphysical index (n = {z.real:.4g}) at {w:g} nm"
+                              f"{' with table_extrapolation openfilters' if mode == 'openfilters' else ''}: its model "
+                              "is not valid there. Use a material with data for this range (search_refractiveindex "
+                              "and import_refractiveindex_material).")
     return warnings + _invisible_layers(design, (lo + hi) / 2) + _graded_rounding(design)
+
+
+def check_long_job(operation, args):
+    """Before a job: refuse long work whose materials are used outside their data unless the design
+    chose table_extrapolation (see require_extrapolation_choice)."""
+    design = args.get("design")
+    if args.get("target_specs"):
+        wavelengths = target_wavelengths(args["target_specs"])
+    elif operation == "spectrum":
+        wavelengths = _wavelength_list(args.get("wavelengths"))
+    else:
+        return
+    what = {"optimize": "This optimization", "tolerance": "This tolerance analysis"}.get(operation, f"This {operation} job")
+    require_extrapolation_choice(design, wavelengths, what)
+
+
+def require_extrapolation_choice(design, wavelengths, what):
+    """Long work (optimizations, campaigns, tolerance analyses, batches) must not run on a guess nobody
+    chose: refuse it when a table material is used outside its data and the design does not set
+    table_extrapolation."""
+    if not isinstance(design, dict) or "table_extrapolation" in design:
+        return
+    outside = outside_data(design, wavelengths)
+    if outside:
+        listed = "; ".join(f"{name} (data {d[0]:g}-{d[1]:g} nm, used at "
+                           f"{' and '.join(f'{a:g}-{b:g} nm' for a, b in r)})" for name, d, r in outside)
+        raise EngineError(f"{what} uses materials outside their measured data: {listed}. Ask the user how n,k should "
+                          "be filled in there before starting, and set the design's \"table_extrapolation\": "
+                          "\"hold\" (end values, the default for quick calculations), \"openfilters\" (OpenFilters' "
+                          "own extrapolation, as in its GUI) or \"refuse\". compute_spectrum's warnings show the n,k "
+                          "each choice gives.")
 
 
 def _graded_rounding(design):
@@ -955,8 +1094,9 @@ def electric_field(design, wavelength, angle=0.0, polarization="s"):
     T = f.transmission(angle, pol)[0]
     if T <= 0:
         raise EngineError("electric field normalization needs a non-zero transmission")
-    n0 = material_N(design.get("incident_medium", "void"), [wavelength])[0]
-    ns = material_N(design.get("substrate", "FusedSilica"), [wavelength])[0]
+    mode = extrapolation_mode(design)
+    n0 = material_N(design.get("incident_medium", "void"), [wavelength], mode)[0]
+    ns = material_N(design.get("substrate", "FusedSilica"), [wavelength], mode)[0]
     sin0 = n0 * math.sin(math.radians(angle))
     eta = lambda N: (N * np.sqrt(1 - (sin0 / N) ** 2 + 0j)) if pol == S else (N / np.sqrt(1 - (sin0 / N) ** 2 + 0j))
     scale = (eta(n0).real * T) / eta(ns).real
@@ -1933,6 +2073,7 @@ def check_tolerance(design, target_specs, thickness_error=None, index_error=None
     model then fails at once instead of in every task). Returns the analysis' warnings."""
     tolerance_errors(thickness_error, index_error)
     build_targets(target_specs, pad=True)
+    require_extrapolation_choice(design, target_wavelengths(target_specs), "This tolerance analysis")
     return material_warnings(design, target_wavelengths(target_specs)) + \
         _mixture_index_note(design_from_filter(build_filter(design)), index_error)
 
@@ -2207,6 +2348,26 @@ def save_project(path, designs, target_specs=None, comment=""):
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     of_project.write_project(p, path)
     return os.path.abspath(path)
+
+
+def gui_extrapolation_notes(designs, target_specs=None):
+    """The OpenFilters GUI always extrapolates tables (it has no table_extrapolation): say which saved
+    designs it will show differently, over the range it analyses (the design's or the targets')."""
+    notes = []
+    targets_range = target_wavelength_range(target_specs)
+    for i, design in enumerate(designs):
+        if not isinstance(design, dict) or extrapolation_mode(design) == "openfilters":
+            continue
+        r = design.get("wavelength_range") or targets_range
+        if not r:
+            continue
+        names = sorted(name for name, _, _ in outside_data(design, [float(r["from"]), float(r["to"])]))
+        if names:
+            notes.append(f"design {i + 1}: {', '.join(names)} are used beyond their data in its wavelength range; "
+                         f"the connector uses table_extrapolation \"{extrapolation_mode(design)}\" there, but the "
+                         "OpenFilters GUI extrapolates, so it will show different results there (table_extrapolation "
+                         "is not stored in .ofp files)")
+    return notes
 
 
 def acceleration_status():

@@ -70,7 +70,9 @@ def manifests(version=__version__):
                                  "(S. Larouche and L. Martinu, Polytechnique Montréal): spectra, color, electric "
                                  "field, monitoring curves, refinement/needle/step optimization, campaigns and "
                                  "Monte Carlo yield, with .ofp projects that open in the OpenFilters GUI. "
-                                 "Unofficial: not affiliated with or endorsed by the OpenFilters authors."),
+                                 "Unofficial: not affiliated with or endorsed by the OpenFilters authors. "
+                                 "Developed and tested with Claude (Claude Desktop and Claude Code); other MCP "
+                                 "clients are untested."),
             "author": AUTHOR,
             "repository": {"type": "git", "url": REPO},
             "homepage": REPO,

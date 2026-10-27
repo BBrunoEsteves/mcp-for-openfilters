@@ -46,7 +46,7 @@ DESTRUCTIVE in server.py; required by Claude's directory, checked by tests/test_
 ## Status (2026-10-22)
 
 Done: Python 3 port validated (analytic + independent TMM, < 1e-9; needle derivatives vs finite differences),
-all optimizers working, 27 MCP tools + 5 prompts + 9 resources working end to end, 237 tests + 46 acceptance checks. Private GitHub repo
+all optimizers working, 27 MCP tools + 5 prompts + 9 resources working end to end, 247 tests + 46 acceptance checks. Private GitHub repo
 BBrunoEsteves/openfilters-mcp; CI compiles the C++ core and tests on Windows/macOS/Linux and builds wheels
 (cp310-cp314, runtime DLLs bundled). Compiled core is 15-30x faster than pure Python.
 Registered locally (user scope) in Claude Code and Claude Desktop, pointing at .venv/Scripts/openfilters-mcp.exe;
@@ -206,6 +206,14 @@ graded layer as a whole (index_error skips mixtures, with a warning); N3 check_t
 any job (tool, batch, campaign); N2 layer_sensitivity scales graded layers. R1-R6 reproduce exactly. R5 yield at
 sigma 1 % is ~45 % (band margins 4.3/7.7 nm), not "high". Later: F2 custom mixtures (Bruggeman), index errors
 for mixtures (offset/gain), F6 several designs on one plot; B8 concurrency test and opening the .ofp in the GUI.
+Table extrapolation option (2026-10-27, tests/test_table_extrapolation.py): design key "table_extrapolation" =
+hold (default; the port's padded tables) | openfilters (engine.catalog_for -> _OpenFiltersCatalog rebuilds table
+materials without the padding = original PCHIP extrapolation) | refuse. build_filter sets f.table_extrapolation so
+design_from_filter keeps it (optimizer results, saved designs in memory; NOT stored in .ofp: save_project warns via
+gui_extrapolation_notes). material_warnings give the n,k used and the other mode's; TABLE_REACH refusal only when
+unset. check_long_job / require_extrapolation_choice refuse optimize/campaign/tolerance/batch before any job when a
+table material is outside its data and the mode is unset (Claude asks the user). Thermal follows the mode.
+Docs say the connector is developed and tested only with Claude (README, RELEASE_NOTES, .mcpb long_description).
 NEXT: release prep (see Pending) and outside testers; tag v0.1.3 after 2026-11-01. For each finding: verify it (reproduce; for OpenFilters behaviour check
 third_party/openfilters_original and the pure-Python core before blaming OpenFilters), fix with a regression test,
 run pytest (compiled and OPENFILTERS_PURE_PYTHON=1), dev/acceptance.py and dev/e2e_client.py, then commit, and

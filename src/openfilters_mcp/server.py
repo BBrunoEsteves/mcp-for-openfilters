@@ -66,6 +66,12 @@ Or a generated profile (expanded into steps at the mixture's own resolution, ste
 Designs with many graded steps are written to files: pass {"design_file": path} as the design to any tool.
 Optional design fields kept in .ofp projects: "description", "needle_materials" (names), "step_spacing",
 "wavelength_range" ({"from", "to", "step"}: what the OpenFilters GUI analyses).
+Tabulated materials (n,k tables) used OUTSIDE their data: the design field "table_extrapolation" says how n,k are
+filled in there: "hold" (default: the values at the nearest end of the data), "openfilters" (OpenFilters' own
+extrapolation, as its GUI does) or "refuse". Results then carry a warning giving the n,k used and what the other
+choice would give: tell the user. Optimizations, campaigns, tolerance analyses and batches refuse to start while a
+material is outside its data and the design does not set table_extrapolation: ask the user which they want (show
+the two sets of values), then set it in the design. More than 1.5x beyond the data is refused unless it is set.
 
 Coatings on BOTH faces of the substrate are ONE design (= one OpenFilters filter): put the second face in
 "back_layers" (also listed from the substrate outward; or "back_formula") and set "consider_backside": true
@@ -91,7 +97,8 @@ Color targets: {"kind": "R_color", "color_space": "Lab", "values": [L, a, b], "t
 (color_space: Lab, XYZ, xyY, Luv, LChab or LChuv; illuminant and observer as in compute_color).
 
 Materials missing from list_materials: search_refractiveindex then import_refractiveindex_material (downloads
-public data from refractiveindex.info; prefer thin-film entries for coatings and give the user the references).
+public data from refractiveindex.info; prefer thin-film entries for coatings and give the user the references;
+check that the entry's data cover the wavelengths needed, see table_extrapolation above).
 
 Workflow: list_materials -> describe_design / compute_spectrum -> evaluate_design -> optimize_design
 (refine = thickness refinement, needle = adds layers, step = graded index) -> tolerance_analysis.
@@ -262,7 +269,8 @@ Design = Annotated[dict[str, Any], BeforeValidator(_design_from_file), Field(des
     '"n_min": 1.5, "n_max": 2.2, "periods": 16, "apodization": {"type": "hann"}}, "matching": {"substrate": "quintic", '
     '"medium": "quintic"}} (ln n sinusoidal in optical thickness; types rugate, quintic, linear (n_start, n_end, '
     'thickness/optical_thickness/qwot), custom (points [[nm, n], ...]); see the server instructions); a homogeneous mixture layer gives "index" within the range of '
-    'the mixture at center_wavelength. A long design can be passed as {"design_file": path} (load_project and describe_design '
+    'the mixture at center_wavelength. Tabulated materials used beyond their data: "table_extrapolation": '
+    '"hold" (default) | "openfilters" | "refuse". A long design can be passed as {"design_file": path} (load_project and describe_design '
     'write them).'))]
 Targets = Annotated[list[dict[str, Any]], Field(description=(
     'Targets, each {"kind": "R"|"T"|"A"|"R_phase"|"T_phase"|"R_GD"|"T_GD"|"R_GDD"|"T_GDD", "angle": 0, '
@@ -802,6 +810,7 @@ async def optimize_design(design: Design, targets: Targets, method: str = "needl
     if not (await compute("describe", design=design))["nb_layers"]:
         raise ToolError("optimization needs at least one front layer to start from (e.g. a thin layer of one "
                         "of the coating materials); back layers are never optimized")
+    await compute("check_long_job", operation="optimize", args={"design": design, "target_specs": targets})
     job_id = manager().submit("optimize", [{"op": "optimize", "params": {"method": method},
                                             "args": {"design": design, "target_specs": targets,
                                                      "method": method, "options": options}}],
@@ -886,6 +895,9 @@ async def run_batch(operation: str,
         await compute("check_tolerance", **first)
     elif "design" in first:
         await compute("describe", design=first["design"])
+    for _, args in cases[:200]:
+        if isinstance(args.get("design"), dict):
+            await compute("check_long_job", operation=operation, args=args)
     job_id = manager().submit("batch", task_list, meta={"operation": operation}, label=label or f"batch {operation}")
     return {"job_id": job_id, "tasks": len(task_list), "workers": manager().workers,
             "note": "poll job_status, then get_results"}
@@ -941,6 +953,8 @@ async def run_optimization_campaign(targets: Targets,
         if m not in engine.METHODS:
             raise ToolError(f"unknown method {m}")
     await compute("describe", design=designs[0])
+    for d in designs:
+        await compute("check_long_job", operation="optimize", args={"design": d, "target_specs": targets})
     if tolerance:
         if not isinstance(tolerance, dict):
             raise ToolError('tolerance is {"n_trials": 200, "thickness_error": {...}, "index_error": {...}, "seed": 0}')
@@ -1119,6 +1133,7 @@ async def save_project(path: str, designs: list[dict[str, Any]], targets: list[d
     if any(engine.latin1_text(t) != t for t in texts):
         warnings.append(".ofp files are Latin-1: characters outside it were replaced in the comment or "
                         "descriptions (Greek letters spelled out, e.g. lambda; dashes and quotes simplified).")
+    warnings += await compute("gui_extrapolation_notes", designs=designs, target_specs=targets)
     if warnings:
         result["warning"] = " ".join(warnings)
     return result

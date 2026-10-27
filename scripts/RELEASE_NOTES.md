@@ -1,6 +1,10 @@
 OpenFilters thin-film design for Claude (Claude Desktop and Claude Code), with the OpenFilters
 calculation engine built in. Nothing else to install besides Python.
 
+> **Built and tested with Claude.** The server follows the open MCP standard, but it has so far been
+> developed and tested only with Claude (Claude Desktop and Claude Code). Other MCP clients may work,
+> but they are untested: tool descriptions, plots and long-running jobs may behave differently there.
+
 ## Changes in this version
 
 **Fixes (please update):**
