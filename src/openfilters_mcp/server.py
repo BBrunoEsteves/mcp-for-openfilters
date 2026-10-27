@@ -50,6 +50,19 @@ center_wavelength: a homogeneous layer gives "index" inside it. A graded (rugate
 mixture: {"material": "IdealMixture", "graded": {"steps": [k, ...], "step_thicknesses": [nm, ...]}}, k being the
 composition steps of the mixture (get_material_index lists the n of each step; IdealMixture: n = 1.5 + 0.01 k), or
 "indices_at_cw": [n, ...] instead of steps (rounded to the nearest step). Its thickness is the sum of the steps.
+Or a generated profile (expanded into steps at the mixture's own resolution, step optical thickness exact):
+  "graded": {"profile": {"type": "rugate", "n_min": 1.5, "n_max": 2.2, "periods": 16,
+                         "apodization": {"type": "hann"}},
+             "matching": {"substrate": "quintic", "medium": "quintic", "periods": 1}}
+  rugate: ln n modulated sinusoidally in optical thickness (no harmonics at lambda0/2, lambda0/3; "modulate": "n" /
+  "coordinate": "physical" for the naive form), period lambda0/2 with lambda0 = "wavelength" (default the center
+  wavelength), or "n_mean" + "delta_n"; "phase_deg"; "harmonics": [{"wavelength", "amplitude", "phase_deg"}, ...] for
+  several notches; apodization none | sin2 / hann | quintic | gaussian, over the whole layer or over "taper_periods" at
+  each end. Ramps: {"type": "quintic" (Southwell) | "linear", "n_start", "n_end", and "thickness" (physical nm) or
+  "optical_thickness" or "qwot"}. Custom: {"type": "custom", "points": [[position nm, n], ...], "coordinate":
+  "physical" | "optical"}. "matching" adds ramps (optical thickness "periods" x lambda0/2) to the substrate side and
+  the medium side, from the neighbouring index; beyond the mixture's range they stop at its end, with a warning
+  giving the mismatch left. "resolution": "native" (default) or a coarser index step, e.g. 0.05.
 Designs with many graded steps are written to files: pass {"design_file": path} as the design to any tool.
 Optional design fields kept in .ofp projects: "description", "needle_materials" (names), "step_spacing",
 "wavelength_range" ({"from", "to", "step"}: what the OpenFilters GUI analyses).
@@ -245,7 +258,10 @@ Design = Annotated[dict[str, Any], BeforeValidator(_design_from_file), Field(des
     'faces is ONE design: add "back_layers" and "consider_backside": true. A graded (rugate) layer of a mixture: '
     '{"material": "IdealMixture", "graded": {"steps": [k, ...], "step_thicknesses": [nm, ...]}}, k being the '
     'composition steps of the mixture (get_material_index lists the n of each step), or "indices_at_cw": [n, ...] '
-    'instead of steps (rounded to the nearest step); a homogeneous mixture layer gives "index" within the range of '
+    'instead of steps (rounded to the nearest step), or a generated profile "graded": {"profile": {"type": "rugate", '
+    '"n_min": 1.5, "n_max": 2.2, "periods": 16, "apodization": {"type": "hann"}}, "matching": {"substrate": "quintic", '
+    '"medium": "quintic"}} (ln n sinusoidal in optical thickness; types rugate, quintic, linear (n_start, n_end, '
+    'thickness/optical_thickness/qwot), custom (points [[nm, n], ...]); see the server instructions); a homogeneous mixture layer gives "index" within the range of '
     'the mixture at center_wavelength. A long design can be passed as {"design_file": path} (load_project and describe_design '
     'write them).'))]
 Targets = Annotated[list[dict[str, Any]], Field(description=(

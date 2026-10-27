@@ -40,6 +40,10 @@ async def main(home):
             show("server_info", await call("server_info", {}))
             show("list_materials", await call("list_materials", {"name_filter": "SiO"}), 300)
             show("describe_design", await call("describe_design", {"design": MIRROR}), 300)
+            show("describe_design (rugate profile)", await call("describe_design", {"design": {
+                "substrate": "FusedSilica", "center_wavelength": 1064, "layers": [{"material": "IdealMixture", "graded": {
+                    "profile": {"type": "rugate", "n_min": 1.5, "n_max": 2.2, "periods": 16, "apodization": {"type": "hann"}},
+                    "matching": {"substrate": "quintic", "medium": "quintic"}}}]}, "plot_index_profile": True}), 600)
             show("compute_spectrum", await call("compute_spectrum", {
                 "design": MIRROR, "quantities": ["R"], "wavelengths": {"from": 800, "to": 1300, "step": 1},
                 "angles": [0, 30], "polarizations": ["s", "p"], "sample_points": 3}), 500)

@@ -258,6 +258,7 @@ def build_filter(design, wavelengths=None, materials=None):
     if not isinstance(design, dict):
         raise EngineError("design must be an object")
     _check_keys(design, DESIGN_KEYS, "design")
+    design, _ = expand_profiles(design)
     f = optical_filter.optical_filter(materials or catalog())
     try:
         f.set_center_wavelength(float(design.get("center_wavelength", 550.0)))
@@ -329,6 +330,64 @@ def resolve_design_files(obj):
     if isinstance(obj, list):
         return [resolve_design_files(value) for value in obj]
     return obj
+
+
+def _has_profiles(design):
+    return any(isinstance(layer, dict) and isinstance(layer.get("graded"), dict) and "profile" in layer["graded"]
+               for key in ("layers", "back_layers") for layer in design.get(key) or [])
+
+
+def expand_profiles(design):
+    """The design with every graded {"profile": ...} layer expanded into steps and step thicknesses
+    (graded.py), and the warnings of the expansion (ranges clipped, mismatch left)."""
+    if not isinstance(design, dict) or not _has_profiles(design):
+        return design, []
+    from . import graded as of_graded
+    cw = float(design.get("center_wavelength", 550.0))
+    out, warnings = dict(design), []
+    for key, medium_key in (("layers", "incident_medium"), ("back_layers", "exit_medium")):
+        layers = list(design.get(key) or [])
+        medium = design.get(medium_key, design.get("incident_medium", "void"))
+
+        def neighbour(j, wl, end):
+            """(name, n at wl) of what lies at index j (-1: substrate, len: medium); end: the side facing us."""
+            if j < 0:
+                name = design.get("substrate", "FusedSilica")
+                return name, float(material_N(name, [wl])[0].real)
+            if j >= len(layers):
+                return medium, float(material_N(medium, [wl])[0].real)
+            other = layers[j]
+            other = {"material": other[0]} if isinstance(other, (list, tuple)) else other
+            name = other.get("material")
+            graded = other.get("graded")
+            if isinstance(graded, dict) and "profile" in graded:
+                raise EngineError(f"{key} {j + 1} and the profile next to it cannot be matched to each other: put "
+                                  "both in one profile, or match one of them only")
+            if isinstance(graded, dict):
+                steps, _ = graded_steps(name, graded, cw, f"graded layer {j + 1}")
+                return f"{key} {j + 1} ({name})", mixture_steps(name, wl)[steps[end]]
+            if other.get("index") is not None:
+                return f"{key} {j + 1} ({name})", float(other["index"])
+            return f"{key} {j + 1} ({name})", float(material_N(name, [wl])[0].real)
+
+        for i, layer in enumerate(layers):
+            if not (isinstance(layer, dict) and isinstance(layer.get("graded"), dict) and "profile" in layer["graded"]):
+                continue
+            where = f"graded layer {i + 1}" if key == "layers" else f"back graded layer {i + 1}"
+            material = layer.get("material")
+            wl = of_graded.wavelength(layer["graded"], cw)
+            table = mixture_steps(material, wl)
+            matching = layer["graded"].get("matching") or {}
+            wanted = {side for side in ("substrate", "medium") if not matching or matching.get(side, "none") != "none"}
+            neighbours = {"substrate": neighbour(i - 1, wl, -1) if "substrate" in wanted else None,
+                          "medium": neighbour(i + 1, wl, 0) if "medium" in wanted else None}
+            steps, thicknesses, notes = of_graded.expand(material, layer["graded"], table, wl, neighbours, where)
+            layers[i] = {k: v for k, v in layer.items() if k != "thickness"} | {
+                "graded": {"steps": steps, "step_thicknesses": thicknesses}}
+            warnings += notes
+        if design.get(key):
+            out[key] = layers
+    return out, warnings
 
 
 def _check_mixture_index(name, index, center_wavelength, where):
@@ -689,9 +748,9 @@ def material_warnings(design, wavelengths):
     wavelengths = [float(w) for w in wavelengths]
     if not wavelengths:
         return []
+    design, warnings = expand_profiles(design)
     lo, hi = min(wavelengths), max(wavelengths)
     grid = sorted(set(np.linspace(lo, hi, 64).tolist()) | set(wavelengths[:: max(1, len(wavelengths) // 200)]))
-    warnings = []
     for name in _design_materials(design):
         material = _material(name)
         if material.is_mixture():
