@@ -46,7 +46,7 @@ DESTRUCTIVE in server.py; required by Claude's directory, checked by tests/test_
 ## Status (2026-10-22)
 
 Done: Python 3 port validated (analytic + independent TMM, < 1e-9; needle derivatives vs finite differences),
-all optimizers working, 27 MCP tools + 5 prompts + 9 resources working end to end, 220 tests + 46 acceptance checks. Private GitHub repo
+all optimizers working, 27 MCP tools + 5 prompts + 9 resources working end to end, 237 tests + 46 acceptance checks. Private GitHub repo
 BBrunoEsteves/openfilters-mcp; CI compiles the C++ core and tests on Windows/macOS/Linux and builds wheels
 (cp310-cp314, runtime DLLs bundled). Compiled core is 15-30x faster than pure Python.
 Registered locally (user scope) in Claude Code and Claude Desktop, pointing at .venv/Scripts/openfilters-mcp.exe;
@@ -198,8 +198,14 @@ it; warnings come from material_warnings). Sampled at 8000 points per lambda0/2,
 runs merged, optical-coordinate step thickness = optical length / rounded n. Matching ramps go to the neighbour
 (substrate, medium, an adjacent homogeneous/stepped layer, or a profile below: profiles expand from the substrate outward). Report criterion 8 met: full
 Hann + quintic matching gives side lobes and lambda0/2, lambda0/3 at the air floor (~4.3 %); q = 0.05 reproduces C4
-within 2e-4. Later: F2 custom mixtures (Bruggeman), F4 analysis tools with graded layers, F6 several designs on one
-plot.
+within 2e-4.
+Rugate report 2 (2026-10-27, tests/test_rugate_report2.py): N1 OpenFilters' electric_field samples graded layers only
+at step boundaries (monitoring() uses monitoring_sublayer_thickness for homogeneous layers only) -> engine cuts
+graded steps into 1 nm pieces for the field (identical points to a homogeneous layer); F4 tolerance scales each
+graded layer as a whole (index_error skips mixtures, with a warning); N3 check_tolerance / tolerance_errors before
+any job (tool, batch, campaign); N2 layer_sensitivity scales graded layers. R1-R6 reproduce exactly. R5 yield at
+sigma 1 % is ~45 % (band margins 4.3/7.7 nm), not "high". Later: F2 custom mixtures (Bruggeman), index errors
+for mixtures (offset/gain), F6 several designs on one plot; B8 concurrency test and opening the .ofp in the GUI.
 NEXT: release prep (see Pending) and outside testers; tag v0.1.3 after 2026-11-01. For each finding: verify it (reproduce; for OpenFilters behaviour check
 third_party/openfilters_original and the pure-Python core before blaming OpenFilters), fix with a regression test,
 run pytest (compiled and OPENFILTERS_PURE_PYTHON=1), dev/acceptance.py and dev/e2e_client.py, then commit, and

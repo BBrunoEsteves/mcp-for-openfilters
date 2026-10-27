@@ -930,6 +930,25 @@ def electric_field(design, wavelength, angle=0.0, polarization="s"):
     design = dict(design, consider_backside=False)
     warnings = material_warnings(design, [wavelength])
     f = build_filter(design, [wavelength])
+    graded = [i for i in range(f.get_nb_layers(FRONT)) if f.is_graded(i, FRONT)]
+    if graded:
+        # OpenFilters samples a homogeneous layer every monitoring_sublayer_thickness (1 nm) but a graded
+        # layer only at its step boundaries, so |E|^2 inside a thick step was a straight line and its peak
+        # could be missed. Cut the steps into the same 1 nm pieces (same index): identical physics, and
+        # identical points to a homogeneous layer.
+        design = design_from_filter(f)
+        piece = f.get_monitoring_sublayer_thickness()
+        for i in graded:
+            layer = design["layers"][i]
+            steps, thicknesses = [], []
+            for k, d in zip(layer["graded"]["steps"], layer["graded"]["step_thicknesses"]):
+                whole = int(d // piece)
+                rest = d - whole * piece
+                pieces = [piece] * whole + ([rest] if rest > 1e-9 or not whole else [])
+                steps += [k] * len(pieces)
+                thicknesses += pieces
+            design["layers"][i] = dict(layer, graded={"steps": steps, "step_thicknesses": thicknesses})
+        f = build_filter(design, [wavelength])
     positions, fields = f.electric_field(wavelength, angle, pol)
     # OpenFilters returns |E| relative to the field at the substrate. With
     # E_substrate = 1, Macleod gives |E_incident|^2 = Re(eta_s) / (eta_0 T).
@@ -941,14 +960,21 @@ def electric_field(design, wavelength, angle=0.0, polarization="s"):
     sin0 = n0 * math.sin(math.radians(angle))
     eta = lambda N: (N * np.sqrt(1 - (sin0 / N) ** 2 + 0j)) if pol == S else (N / np.sqrt(1 - (sin0 / N) ** 2 + 0j))
     scale = (eta(n0).real * T) / eta(ns).real
-    depth, value, boundaries = [], [], []
-    for layer_positions, layer_field in zip(positions, fields):
-        depth += [float(x) for x in layer_positions]
-        value += [float(v) ** 2 * scale for v in layer_field]
-        boundaries.append(float(layer_positions[-1]))
-    return _with_warnings({"position_nm": depth, "E_squared": value, "layer_boundaries_nm": boundaries,
-                           "note": "position from the substrate interface outward; |E|^2 relative to the incident wave"},
-                          warnings)
+    depth, value, boundaries, graded_peaks = [], [], [], []
+    for i, (layer_positions, layer_field) in enumerate(zip(positions, fields)):
+        x, e2 = [float(x) for x in layer_positions], [float(float(v) ** 2 * scale) for v in layer_field]
+        depth += x
+        value += e2
+        boundaries.append(x[-1])
+        if i in graded:
+            j = int(np.argmax(e2))
+            graded_peaks.append({"layer": i + 1, "E_squared": e2[j], "position_nm": x[j]})
+    out = {"position_nm": depth, "E_squared": value, "layer_boundaries_nm": boundaries,
+           "note": "position from the substrate interface outward; |E|^2 relative to the incident wave, "
+                   "sampled every 1 nm inside every layer"}
+    if graded_peaks:
+        out["graded_layer_peaks"] = graded_peaks
+    return _with_warnings(out, warnings)
 
 
 def _with_warnings(result, warnings):
@@ -1876,6 +1902,49 @@ def optimize(design, target_specs, method="needle", options=None, progress=None)
 # Tolerance analysis
 # ---------------------------------------------------------------------------
 
+def tolerance_errors(thickness_error=None, index_error=None):
+    """The error model of a tolerance analysis, validated: (kind, sigma, distribution, systematic, index sigma)."""
+    thickness_error = dict(thickness_error or {"type": "relative", "sigma": 0.01})
+    _check_keys(thickness_error, {"type", "sigma", "distribution", "systematic"}, "thickness_error")
+    index_error = dict(index_error or {})
+    _check_keys(index_error, {"sigma", "per_material"}, "index_error")
+    kind = thickness_error.get("type", "relative")
+    dist = thickness_error.get("distribution", "normal")
+    if kind not in ("relative", "absolute"):
+        raise EngineError('thickness_error type must be "relative" (sigma a fraction) or "absolute" (sigma in nm)')
+    if dist not in ("normal", "uniform"):
+        raise EngineError('thickness_error distribution must be "normal" or "uniform"')
+    values = []
+    for name, obj, key, default in (("thickness_error sigma", thickness_error, "sigma", 0.01),
+                                    ("thickness_error systematic", thickness_error, "systematic", 0.0),
+                                    ("index_error sigma", index_error, "sigma", 0.0)):
+        try:
+            value = float(obj.get(key, default))
+        except (TypeError, ValueError):
+            value = math.nan
+        if not math.isfinite(value) or (key == "sigma" and value < 0):
+            raise EngineError(f"{name} must be a finite number{' >= 0' if key == 'sigma' else ''}")
+        values.append(value)
+    return kind, values[0], dist, values[1], values[2]
+
+
+def check_tolerance(design, target_specs, thickness_error=None, index_error=None, **_):
+    """Everything a tolerance analysis needs, checked before a job is created (a bad design or error
+    model then fails at once instead of in every task). Returns the analysis' warnings."""
+    tolerance_errors(thickness_error, index_error)
+    build_targets(target_specs, pad=True)
+    return material_warnings(design, target_wavelengths(target_specs)) + \
+        _mixture_index_note(design_from_filter(build_filter(design)), index_error)
+
+
+def _mixture_index_note(nominal, index_error):
+    if not float((index_error or {}).get("sigma", 0.0) or 0.0):
+        return []
+    mixtures = sorted({l["material"] for key in ("layers", "back_layers") for l in nominal.get(key) or []
+                       if _material(l["material"]).is_mixture()})
+    return [f"index_error does not perturb mixtures ({', '.join(mixtures)}): only their thicknesses vary"] if mixtures else []
+
+
 def tolerance(design, target_specs, n_trials=200, thickness_error=None, index_error=None, seed=0, keep_values=False):
     """Monte Carlo yield: perturb thicknesses (and optionally material
     indices) and count designs meeting all targets.
@@ -1883,26 +1952,34 @@ def tolerance(design, target_specs, n_trials=200, thickness_error=None, index_er
     thickness_error: {"type": "relative"|"absolute", "sigma": 0.01 (or nm),
                       "distribution": "normal"|"uniform", "systematic": 0.0}
     index_error: {"sigma": 0.005 (relative), "per_material": true}
+    A graded layer is scaled as a whole (every step by one drawn factor: a deposition-rate error); an
+    absolute error applies to its total thickness. Mixtures' indices are not perturbed.
     """
+    kind, sigma, dist, systematic, idx_sigma = tolerance_errors(thickness_error, index_error)
     thickness_error = dict(thickness_error or {"type": "relative", "sigma": 0.01})
     rng = np.random.default_rng(seed)
     base = build_filter(design)
     nominal = design_from_filter(base)
     targets = build_targets(target_specs, pad=True)
-    material_warnings(design, target_wavelengths(target_specs))  # refuses unphysical indices
+    warnings = material_warnings(design, target_wavelengths(target_specs))  # refuses unphysical indices
+    warnings += _mixture_index_note(nominal, index_error)
     nominal_eval = _evaluator(base, targets)
     _, nominal_pass = target_report(nominal_eval, target_specs)
 
     # Both faces are perturbed (independently drawn errors per layer).
     sides = [key for key in ("layers", "back_layers") if nominal.get(key)]
-    if any(l.get("graded") for key in sides for l in nominal[key]):
-        raise EngineError("tolerance analysis does not support graded layers yet")
     materials_used = sorted({l["material"] for key in sides for l in nominal[key]})
-    kind = thickness_error.get("type", "relative")
-    sigma = float(thickness_error.get("sigma", 0.01))
-    dist = thickness_error.get("distribution", "normal")
-    systematic = float(thickness_error.get("systematic", 0.0))
-    idx_sigma = float((index_error or {}).get("sigma", 0.0))
+
+    def total(layer):
+        return sum(layer["graded"]["step_thicknesses"]) if layer.get("graded") else layer["thickness"]
+
+    def perturbed(layer, new):
+        new = max(float(new), 0.0)
+        if not layer.get("graded"):
+            return dict(layer, thickness=new)
+        factor = new / total(layer) if total(layer) else 1.0
+        steps = [d * factor for d in layer["graded"]["step_thicknesses"]]
+        return dict(layer, thickness=sum(steps), graded=dict(layer["graded"], step_thicknesses=steps))
 
     def draw(size):
         if dist == "uniform":
@@ -1913,13 +1990,13 @@ def tolerance(design, target_specs, n_trials=200, thickness_error=None, index_er
     for _ in range(int(n_trials)):
         trial = dict(nominal)
         for key in sides:
-            d = np.array([l["thickness"] for l in nominal[key]])
+            d = np.array([total(l) for l in nominal[key]])
             e = draw(len(d))
             if kind == "relative":
                 d = d * (1 + e + systematic)
             else:
                 d = d + e + systematic * d
-            trial[key] = [dict(l, thickness=max(float(t), 0.0)) for l, t in zip(nominal[key], d)]
+            trial[key] = [perturbed(l, t) for l, t in zip(nominal[key], d)]
         f = build_filter(trial)
         if idx_sigma:
             _scale_indices(f, {m: 1 + rng.normal(0.0, idx_sigma) for m in materials_used})
@@ -1930,12 +2007,15 @@ def tolerance(design, target_specs, n_trials=200, thickness_error=None, index_er
         per_target_fail += [r["pass_fraction"] < 1 for r in rows]
     merits = np.array(merits)
     extra = {"chi2_values": merits.tolist(), "target_failures": per_target_fail.tolist()} if keep_values else {}
-    return {**extra, "n_trials": int(n_trials), "passes": int(passes), "yield": passes / float(n_trials),
-            "nominal_passes": nominal_pass,
-            "nominal_chi2": float(nominal_eval.get_chi_2()),
-            "chi2_median": float(np.median(merits)), "chi2_p90": float(np.percentile(merits, 90)),
-            "target_failure_rate": [round(float(x) / n_trials, 4) for x in per_target_fail],
-            "thickness_error": thickness_error, "index_error": index_error, "seed": seed}
+    out = {**extra, "n_trials": int(n_trials), "passes": int(passes), "yield": passes / float(n_trials),
+           "nominal_passes": nominal_pass,
+           "nominal_chi2": float(nominal_eval.get_chi_2()),
+           "chi2_median": float(np.median(merits)), "chi2_p90": float(np.percentile(merits, 90)),
+           "target_failure_rate": [round(float(x) / n_trials, 4) for x in per_target_fail],
+           "thickness_error": thickness_error, "index_error": index_error, "seed": seed}
+    if warnings:
+        out["warnings"] = warnings
+    return out
 
 
 def _scaled_material(material, factor):
@@ -1979,7 +2059,7 @@ def worst_margin(optimizer, specs):
 
 def sensitivity(design, target_specs, relative_step=0.01):
     """Merit and worst-margin change when each layer thickness is changed by +/- relative_step
-    (the worse of the two directions)."""
+    (the worse of the two directions). A graded layer is scaled as a whole (every step)."""
     nominal = design_from_filter(build_filter(design))
     targets = build_targets(target_specs, pad=True)
     material_warnings(design, target_wavelengths(target_specs))  # refuses unphysical indices
@@ -1990,17 +2070,23 @@ def sensitivity(design, target_specs, relative_step=0.01):
         if key == "back_layers" and not nominal.get("consider_backside"):
             continue  # the back face does not enter the calculation
         for i, layer in enumerate(nominal.get(key) or []):
-            if layer.get("graded"):
-                continue
             chi2s, margins = [], []
             for sign in (1, -1):
                 layers = [dict(l) for l in nominal[key]]
-                layers[i]["thickness"] = layer["thickness"] * (1 + sign * relative_step)
+                factor = 1 + sign * relative_step
+                if layer.get("graded"):
+                    steps = [d * factor for d in layer["graded"]["step_thicknesses"]]
+                    layers[i] = dict(layer, thickness=sum(steps), graded=dict(layer["graded"], step_thicknesses=steps))
+                else:
+                    layers[i]["thickness"] = layer["thickness"] * factor
                 o = _evaluator(build_filter(dict(nominal, **{key: layers})), targets)
                 chi2s.append(o.get_chi_2())
                 margins.append(worst_margin(o, target_specs))
-            rows.append({"side": side, "#": i + 1, "material": layer["material"], "thickness_nm": layer["thickness"],
-                         "delta_chi2": sig(max(chi2s) - base), "delta_worst_margin": sig(min(margins) - base_margin)})
+            row = {"side": side, "#": i + 1, "material": layer["material"], "thickness_nm": layer["thickness"],
+                   "delta_chi2": sig(max(chi2s) - base), "delta_worst_margin": sig(min(margins) - base_margin)}
+            if layer.get("graded"):
+                row.update(graded=True, n_steps=len(layer["graded"]["step_thicknesses"]))
+            rows.append(row)
     out = {"base_chi2": float(base), "base_worst_margin": sig(base_margin), "relative_step": relative_step,
            "layers": rows}
     # Rank by the merit, or by the margin when no layer changes the merit (targets met with room to spare).

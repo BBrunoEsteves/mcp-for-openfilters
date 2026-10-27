@@ -55,6 +55,17 @@ From a rugate / graded-layer test (2026-10-26):
   substrate and the medium; where the mixture cannot reach their index, a warning gives the mismatch left
   and its reflectance.
 
+From a second rugate test (2026-10-27):
+
+- Fix: `compute_electric_field` sampled graded layers only at their step boundaries (OpenFilters' own
+  behaviour), so inside thick steps |E|^2 was drawn as a straight line and its peak could be missed. Every
+  layer is now sampled every 1 nm; graded layers also report their own peak (`graded_layer_peaks`).
+- `tolerance_analysis` supports graded layers: each one is scaled as a whole (all steps by one drawn factor,
+  a deposition-rate error). A warning says that `index_error` does not perturb mixtures.
+- `tolerance_analysis`, tolerance batches and campaigns with a yield stage check the design and the error
+  model before creating a job (a graded design used to fail in every task).
+- `layer_sensitivity` includes graded layers (scaled as a whole) instead of skipping them silently.
+
 Earlier in 0.1.3:
 
 - `remove_material` tool.

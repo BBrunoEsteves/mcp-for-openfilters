@@ -400,6 +400,8 @@ def finalize_tolerance(manager, job):
                "chi2_median": float(np.median(chi2)), "chi2_p90": float(np.percentile(chi2, 90)),
                "target_failure_rate": [round(x / trials, 4) for x in failures],
                "thickness_error": res["thickness_error"], "index_error": res["index_error"]}
+    if res.get("warnings"):
+        summary["warnings"] = res["warnings"]
     _finish_table(manager, job, manager.rows(job["id"]), summary=summary)
 
 

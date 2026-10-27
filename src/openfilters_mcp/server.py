@@ -621,7 +621,8 @@ async def compute_color(design: Design, angles: list[float] = [0.0], mode: str =
 async def compute_electric_field(design: Design, wavelength: float, angle: float = 0.0,
                                  polarization: str = "s", plot: bool = True):
     """Standing-wave |E|^2 inside the coating (relative to the incident wave), e.g. for laser-damage
-    analysis. Returns the peak value and position and its value at each interface."""
+    analysis, sampled every 1 nm inside every layer (graded layers too). Returns the peak value and
+    position, its value at each interface and, for graded layers, the peak inside each one."""
     r = await compute("electric_field", design=design, wavelength=wavelength, angle=angle,
                       polarization=polarization)
     values = r["E_squared"]
@@ -632,6 +633,9 @@ async def compute_electric_field(design: Design, wavelength: float, angle: float
         boundary_values.append(round(values[j], 5))
     out = {"peak_E_squared": round(values[i_max], 5), "peak_position_nm_from_substrate": r["position_nm"][i_max],
            "E_squared_at_layer_tops": boundary_values, "note": r["note"]}
+    if r.get("graded_layer_peaks"):
+        out["graded_layer_peaks"] = [{"layer": p["layer"], "E_squared": round(p["E_squared"], 5),
+                                      "position_nm": round(p["position_nm"], 2)} for p in r["graded_layer_peaks"]]
     if r.get("warnings"):
         out["warnings"] = r["warnings"]
     if plot:
@@ -733,6 +737,7 @@ async def layer_sensitivity(design: Design, targets: Targets, relative_step: flo
     worst_margin is the smallest distance to a limit over all target points in units of each point's
     tolerance (positive = met; e.g. 0.5 with tolerance 0.001 means 0.0005 inside the limit). It ranks layers
     of a design that meets its inequality targets with room to spare, where the merit stays 0.
+    A graded layer is scaled as a whole (every step by the same factor: a deposition-rate error).
     most_sensitive lists the top layers."""
     return await compute("sensitivity", design=design, target_specs=targets, relative_step=relative_step)
 
@@ -877,7 +882,9 @@ async def run_batch(operation: str,
     task_list = [{"op": operation, "params": params, "args": args} for params, args in cases]
     # Fail fast on the first case rather than after thousands of tasks.
     first = dict(task_list[0]["args"])
-    if "design" in first:
+    if operation == "tolerance":
+        await compute("check_tolerance", **first)
+    elif "design" in first:
         await compute("describe", design=first["design"])
     job_id = manager().submit("batch", task_list, meta={"operation": operation}, label=label or f"batch {operation}")
     return {"job_id": job_id, "tasks": len(task_list), "workers": manager().workers,
@@ -934,6 +941,10 @@ async def run_optimization_campaign(targets: Targets,
         if m not in engine.METHODS:
             raise ToolError(f"unknown method {m}")
     await compute("describe", design=designs[0])
+    if tolerance:
+        if not isinstance(tolerance, dict):
+            raise ToolError('tolerance is {"n_trials": 200, "thickness_error": {...}, "index_error": {...}, "seed": 0}')
+        checked(engine.tolerance_errors, tolerance.get("thickness_error"), tolerance.get("index_error"))
     task_list = [{"op": "optimize", "params": {"start": i, "method": m},
                   "args": {"design": d, "target_specs": targets, "method": m, "options": options}}
                  for i, d in enumerate(designs) for m in methods]
@@ -960,11 +971,14 @@ async def tolerance_analysis(design: Design, targets: Targets, n_trials: int = 5
                              seed: int = 0, wait_seconds: float = 40.0, ctx: Context = None) -> dict:
     """Monte Carlo yield: random thickness (and optional index) errors; a trial passes when every target
     is met. Runs in parallel; returns yield with 95 % interval, merit statistics and the failure rate
-    of each target. Both faces of a two-sided design are perturbed."""
-    checked(engine.build_targets, targets)
+    of each target. Both faces of a two-sided design are perturbed. A graded layer is scaled as a whole
+    (all its steps by one factor: a deposition-rate error); index_error does not perturb mixtures."""
     n_trials = int(n_trials)
     if not 1 <= n_trials <= 1000000:
         raise ToolError("n_trials must be between 1 and 1e6")
+    # Refuse a bad design or error model now, not in every task of a job (report 2, N3).
+    await compute("check_tolerance", design=design, target_specs=targets, thickness_error=thickness_error,
+                  index_error=index_error)
     chunks = max(1, min(manager().workers * 2, n_trials // 10 or 1))
     sizes = [n_trials // chunks + (1 if i < n_trials % chunks else 0) for i in range(chunks)]
     task_list = [{"op": "tolerance", "params": {"chunk": i},
