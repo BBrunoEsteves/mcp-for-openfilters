@@ -10,6 +10,7 @@ worker processes and be serialized to disk. Conventions:
   substrate), as in OpenFilters.
 """
 
+import json
 import math
 import os
 import time
@@ -288,7 +289,7 @@ def build_filter(design, wavelengths=None, materials=None):
                 formula = design[formula_key]
                 if isinstance(formula, str):
                     raise EngineError(f"{formula_key} must be {{\"formula\": \"(HL)^8 H\", \"materials\": {{\"H\": \"TiO2\", \"L\": \"SiO2\"}}}}")
-                symbols, fixed = _formula_symbols(formula["materials"], formula_key)
+                symbols, fixed = _formula_symbols(formula["materials"], formula_key, f.get_center_wavelength())
                 f.set_stack_formula(formula["formula"], symbols, side)
                 f.apply_stack_formula(side)
                 for position in range(f.get_nb_layers(side)):
@@ -307,7 +308,129 @@ def build_filter(design, wavelengths=None, materials=None):
     return f
 
 
-def _formula_symbols(materials, formula_key):
+def resolve_design_files(obj):
+    """Replace every {"design_file": path} in a tool's arguments by the design stored in that JSON file
+    (load_project and describe_design write long designs to files, so they need not pass through the
+    conversation). A relative path is looked up in the outputs folder."""
+    if isinstance(obj, dict):
+        if set(obj) == {"design_file"}:
+            path = str(obj["design_file"])
+            if not os.path.isabs(path):
+                path = os.path.join(settings.home(), "outputs", path)
+            try:
+                with open(path, encoding="utf-8") as infile:
+                    design = json.load(infile)
+            except (OSError, ValueError) as error:
+                raise EngineError(f"cannot read design_file {path}: {error}") from error
+            if not isinstance(design, dict):
+                raise EngineError(f"design_file {path} does not hold a design object")
+            return design
+        return {key: resolve_design_files(value) for key, value in obj.items()}
+    if isinstance(obj, list):
+        return [resolve_design_files(value) for value in obj]
+    return obj
+
+
+def _check_mixture_index(name, index, center_wavelength, where):
+    """OpenFilters cannot evaluate a mixture beyond its data: the compiled core crashed the calculation
+    process and the pure-Python one raised "Extrapolation not allowed". Refuse it here, clearly."""
+    material = _material(name)
+    if not material.is_mixture():
+        return
+    low, high = sorted(material.get_index_range(center_wavelength))
+    if not low - 1e-9 <= index <= high + 1e-9:
+        raise EngineError(f"{where}: index {index:g} is outside the range of the mixture {name} at the center "
+                          f"wavelength {center_wavelength:g} nm [{low:.4f}, {high:.4f}]. Use an index inside it or "
+                          "another material (list_materials gives each mixture's range).")
+
+
+GRADED_KEYS = {"steps", "step_thicknesses", "indices_at_cw"}
+
+
+def mixture_steps(name, wavelength):
+    """The index of each composition step k of a mixture at a wavelength (k = 0, 1, ...)."""
+    material = _material(name)
+    if not material.is_mixture():
+        raise EngineError(f"{name} is not a mixture: graded layers need a mixture material (list_materials shows "
+                          "kind \"mixture\")")
+    return [float(n) for n in material.get_deposition_steps(float(wavelength))]
+
+
+def is_mixture(name):
+    return _material(name).is_mixture()
+
+
+def mixture_table(name, wavelengths):
+    """A mixture's composition steps: the index of each step k at each wavelength, and its range."""
+    columns = [mixture_steps(name, w) for w in wavelengths]
+    return {"material": name, "kind": "mixture", "n_steps": len(columns[0]),
+            "columns": ["step"] + [f"n@{w:g}" for w in wavelengths],
+            "rows": [[k] + [round(column[k], 5) for column in columns] for k in range(len(columns[0]))],
+            "note": "graded layers give these step numbers (\"steps\") or indices (\"indices_at_cw\", rounded to the "
+                    "nearest step at the center wavelength); a homogeneous layer of a mixture takes any \"index\" "
+                    "within the range at the center wavelength"}
+
+
+def graded_steps_count(design):
+    return sum(len(layer["graded"].get("step_thicknesses") or [])
+               for key in ("layers", "back_layers") for layer in design.get(key) or []
+               if isinstance(layer, dict) and isinstance(layer.get("graded"), dict))
+
+
+def summarize_graded(design):
+    """The design with each graded layer's arrays replaced by graded_summary (for reading, not reuse)."""
+    cw = float(design.get("center_wavelength", 550.0))
+    out = dict(design)
+    for key in ("layers", "back_layers"):
+        if design.get(key):
+            out[key] = [{k: v for k, v in layer.items() if k != "graded"} | graded_summary(
+                            layer["graded"]["indices_at_cw"], layer["graded"]["step_thicknesses"], cw)
+                        if isinstance(layer.get("graded"), dict) and "indices_at_cw" in layer["graded"] else layer
+                        for layer in design[key]]
+    return out
+
+
+def graded_steps(material, graded, center_wavelength, where):
+    """Steps and step thicknesses of a graded layer, validated. Steps are the mixture's composition steps
+    (integers, see mixture_steps); alternatively "indices_at_cw" are rounded to the nearest step."""
+    if not isinstance(graded, dict) or "step_thicknesses" not in graded or not ("steps" in graded or "indices_at_cw" in graded):
+        raise EngineError(f"{where} needs {{\"step_thicknesses\": [...], \"steps\": [...]}} or "
+                          "{\"step_thicknesses\": [...], \"indices_at_cw\": [...]} (steps: the mixture's composition "
+                          "steps; get_material_index lists them)")
+    _check_keys(graded, GRADED_KEYS, where)
+    table = mixture_steps(material, center_wavelength)
+    try:
+        thicknesses = [float(t) for t in graded["step_thicknesses"]]
+    except (TypeError, ValueError) as error:
+        raise EngineError(f"{where}: step_thicknesses must be numbers (nm)") from error
+    if not thicknesses or not all(math.isfinite(t) and t >= 0 for t in thicknesses) or not sum(thicknesses):
+        raise EngineError(f"{where}: step_thicknesses must be a non-empty list of thicknesses >= 0 nm")
+    if "steps" in graded:
+        steps = graded["steps"]
+        if not all(isinstance(k, (int, float)) and float(k).is_integer() for k in steps):
+            raise EngineError(f"{where}: steps must be integers (the mixture's composition steps)")
+        steps = [int(k) for k in steps]
+        bad = [k for k in steps if not 0 <= k < len(table)]
+        if bad:
+            raise EngineError(f"{where}: step {bad[0]} is outside {material}'s steps 0-{len(table) - 1} (n = "
+                              f"{table[0]:.4f}-{table[-1]:.4f} at {center_wavelength:g} nm)")
+    else:
+        steps = [_nearest_step(table, float(n), material, center_wavelength, where) for n in graded["indices_at_cw"]]
+    if len(steps) != len(thicknesses):
+        raise EngineError(f"{where}: {len(steps)} steps but {len(thicknesses)} step_thicknesses")
+    return steps, thicknesses
+
+
+def _nearest_step(table, n, material, center_wavelength, where):
+    """The step whose index is nearest n; refused beyond the ends of the steps (by more than half a step)."""
+    half = abs(table[1] - table[0]) / 2 if len(table) > 1 else 0.0
+    if not min(table) - half - 1e-9 <= n <= max(table) + half + 1e-9:
+        raise EngineError(f"{where}: index {n:g} is outside the range of the mixture {material} at the center "
+                          f"wavelength {center_wavelength:g} nm [{min(table):.4f}, {max(table):.4f}]")
+    return min(range(len(table)), key=lambda j: abs(table[j] - n))
+
+
+def _formula_symbols(materials, formula_key, center_wavelength):
     """OpenFilters' {symbol: (material, index_for_mixtures)} from a formula's materials, and the
     materials of the symbols marked fixed. A symbol is a name, [name, index], or
     {"material": name, "index": n, "fixed": true}."""
@@ -322,6 +445,8 @@ def _formula_symbols(materials, formula_key):
         else:
             pair = tuple(value) if isinstance(value, (list, tuple)) else (value, None)
             free.add(pair[0])
+        if pair[1] is not None:
+            _check_mixture_index(pair[0], float(pair[1]), center_wavelength, f"{formula_key} symbol {sym}")
         symbols[sym] = pair
     if fixed & free:
         name = sorted(fixed & free)[0]
@@ -341,11 +466,15 @@ def _add_layer(f, layer, side, i):
     index = layer.get("index")
     position = f.get_nb_layers(side)
     if layer.get("graded"):
-        graded = layer["graded"]
-        if not isinstance(graded, dict) or "steps" not in graded or "step_thicknesses" not in graded:
-            raise EngineError(f"graded layer {i + 1} needs {{\"steps\": [...], \"step_thicknesses\": [...]}} (as returned by describe_design or load_project)")
-        f.add_graded_layer_from_steps(material, [int(x) for x in graded["steps"]],
-                                      [float(t) for t in graded["step_thicknesses"]], side=side)
+        steps, thicknesses = graded_steps(material, layer["graded"], f.get_center_wavelength(), f"graded layer {i + 1}")
+        if layer.get("thickness") is not None:
+            # thickness is optional for a graded layer (the sum of its steps); a different value is a mistake.
+            total = sum(thicknesses)
+            if abs(float(layer["thickness"]) - total) > max(0.01, 1e-4 * total):
+                raise EngineError(f"graded layer {i + 1}: thickness {float(layer['thickness']):g} nm differs from the sum "
+                                  f"of its step_thicknesses ({total:.4f} nm); omit thickness (it is that sum) or fix it")
+        f.add_graded_layer_from_steps(material, steps, thicknesses, side=side)
+        _apply_layer_flags(f, layer, position, side)
         return
     def number(key):
         # JSON carries NaN as null; anything that is not a finite number is refused here.
@@ -360,6 +489,7 @@ def _add_layer(f, layer, side, i):
 
     if index is not None:
         index = number("index")
+        _check_mixture_index(material, index, f.get_center_wavelength(), f"layer {i + 1}")
     if "qwot" in layer:
         mat = _material(material)
         n = index if index is not None else mat.get_index(f.get_center_wavelength())
@@ -371,6 +501,10 @@ def _add_layer(f, layer, side, i):
     if thickness < 0:
         raise EngineError(f"layer {i + 1} has a negative thickness")
     f.add_layer(material, thickness, side=side, index=index)
+    _apply_layer_flags(f, layer, position, side)
+
+
+def _apply_layer_flags(f, layer, position, side):
     for flag, setter in _LAYER_FLAGS:
         if flag in layer:
             getattr(f, "set_" + setter)(position, bool(layer[flag]), side)
@@ -395,17 +529,22 @@ _DEFAULT_WAVELENGTH_RANGE = (300.0, 1000.0, 1.0)
 _DEFAULT_STEP_SPACING = 0.01
 
 
-def _default_layer_flags(side, mixture):
-    """The flags optical_filter.add_layer gives a new layer."""
-    front = side == FRONT
+def _default_layer_flags(side, mixture, graded=False):
+    """The flags optical_filter.add_layer gives a new layer (all off for a graded layer: OpenFilters'
+    add_graded_layer leaves it out of every optimization unless told otherwise)."""
+    front = side == FRONT and not graded
     return {"refine_thickness": front, "refine_index": front and mixture, "preserve_ot": False,
             "add_needles": front, "add_steps": front and mixture}
 
 
+def name_of(material):
+    """A material's name, whether OpenFilters gives the object or the name."""
+    return material.get_name() if hasattr(material, "get_name") else str(material)
+
+
 def design_from_filter(f):
     """Inverse of build_filter (graded layers are reported, not rebuilt)."""
-    def name(material):
-        return material.get_name() if hasattr(material, "get_name") else str(material)
+    name = name_of
 
     design = {
         "substrate": name(f.get_substrate()),
@@ -439,7 +578,7 @@ def design_from_filter(f):
             elif mixture:
                 layer["index"] = float(f.get_layer_index(i, side))
             # Only flags that differ from what a new layer gets, to keep designs short.
-            defaults = _default_layer_flags(side, mixture)
+            defaults = _default_layer_flags(side, mixture, f.is_graded(i, side))
             for flag, getter in _LAYER_FLAGS:
                 value = bool(getattr(f, "get_" + getter)(i, side))
                 if value != defaults[flag]:
@@ -450,9 +589,22 @@ def design_from_filter(f):
     return design
 
 
+def graded_summary(indices, thicknesses, center_wavelength):
+    """A graded layer in a few numbers: steps, index range, first/last index (for matching to the
+    substrate and the medium) and optical thickness, all at the center wavelength."""
+    indices, thicknesses = [float(n) for n in indices], [float(d) for d in thicknesses]
+    optical = sum(n * d for n, d in zip(indices, thicknesses))
+    return {"graded": True, "n_steps": len(indices), "n_min@cw": round(min(indices), 4),
+            "n_max@cw": round(max(indices), 4), "n_first@cw": round(indices[0], 4), "n_last@cw": round(indices[-1], 4),
+            "optical_thickness_nm": round(optical, 3), "qwot@cw": round(4 * optical / center_wavelength, 4)}
+
+
 def describe(design):
+    """Layer table, totals and the normalized design. "index_profile" lists [thickness, n at the center
+    wavelength] for every front layer, graded layers step by step (for plots; the server drops it)."""
     f = build_filter(design)
     cw = f.get_center_wavelength()
+    profile = []
 
     def side_rows(side):
         rows = []
@@ -460,17 +612,30 @@ def describe(design):
             thickness = float(f.get_layer_thickness(i, side))
             material = f.get_layer_material_name(i, side)
             row = {"#": i + 1, "material": material, "thickness_nm": round(thickness, 3)}
-            if not f.is_graded(i, side):
+            if f.is_graded(i, side):
+                step_thicknesses, _ = f.get_layer_step_profile(i, side)
+                indices = f.get_layer_index(i, side)
+                row.update(graded_summary(indices, step_thicknesses, cw))
+                segments = [[float(d), float(n)] for d, n in zip(step_thicknesses, indices)]
+            else:
                 n = float(f.get_layer_index(i, side)) if _material(material).is_mixture()                     else _material(material).get_index(cw)
                 row["n@cw"] = round(n, 4)
                 row["qwot@cw"] = round(4 * n * thickness / cw, 4)
+                segments = [[thickness, n]]
+            if side == FRONT:
+                profile.extend(segments)
             rows.append(row)
         return rows
 
     rows, back = side_rows(FRONT), side_rows(BACK)
+    def real_index(name):
+        return round(float(material_N(name, [cw])[0].real), 4)
+
     out = {"layers": rows, "nb_layers": len(rows), "total_thickness_nm": round(float(f.get_total_thickness(FRONT)), 3),
            "center_wavelength": cw, "materials": sorted({r["material"] for r in rows + back}),
-           "consider_backside": bool(f.get_consider_backside())}
+           "consider_backside": bool(f.get_consider_backside()),
+           "substrate_n@cw": real_index(name_of(f.get_substrate())),
+           "incident_medium_n@cw": real_index(name_of(f.get_medium(FRONT))), "index_profile": profile}
     if back:
         out.update(back_layers=back, nb_back_layers=len(back),
                    back_total_thickness_nm=round(float(f.get_total_thickness(BACK)), 3))
@@ -550,7 +715,25 @@ def material_warnings(design, wavelengths):
             raise EngineError(f"{name} gives an unphysical index (n = {z.real:.4g}) at {w:g} nm: its model is not valid "
                               "there. Use a material with data for this range (search_refractiveindex and "
                               "import_refractiveindex_material).")
-    return warnings + _invisible_layers(design, (lo + hi) / 2)
+    return warnings + _invisible_layers(design, (lo + hi) / 2) + _graded_rounding(design)
+
+
+def _graded_rounding(design):
+    """Graded layers given by indices_at_cw are rounded to the mixture's steps: say by how much."""
+    warnings = []
+    cw = float(design.get("center_wavelength", 550.0))
+    for key in ("layers", "back_layers"):
+        for i, layer in enumerate(design.get(key) or []):
+            graded = layer.get("graded") if isinstance(layer, dict) else None
+            if not isinstance(graded, dict) or "steps" in graded or "indices_at_cw" not in graded:
+                continue
+            table = mixture_steps(layer["material"], cw)
+            worst = max(abs(table[_nearest_step(table, float(n), layer["material"], cw, "")] - float(n))
+                        for n in graded["indices_at_cw"])
+            if worst > 1e-6:
+                warnings.append(f"{key} {i + 1}: indices_at_cw rounded to {layer['material']}'s composition steps "
+                                f"(about {abs(table[1] - table[0]):.4g} apart at {cw:g} nm); largest change {worst:.3g}")
+    return warnings
 
 
 def _invisible_layers(design, wavelength):

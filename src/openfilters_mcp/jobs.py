@@ -142,6 +142,7 @@ class JobManager:
             raise engine.EngineError("nothing to run")
         if len(task_list) > MAX_TASKS:
             raise engine.EngineError(f"too many tasks ({len(task_list)}; max {MAX_TASKS})")
+        task_list, meta = engine.resolve_design_files(task_list), engine.resolve_design_files(meta)
         stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         job_id = f"{stamp}-{kind}-{uuid.uuid4().hex[:6]}"
         folder = os.path.join(settings.jobs_dir(), job_id)

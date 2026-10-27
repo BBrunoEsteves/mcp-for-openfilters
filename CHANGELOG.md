@@ -34,6 +34,20 @@ From a field test (tunable Fabry-Perot filter with an ITO heater, 2026-10-26):
   next to a free one of the same material (OpenFilters merges them).
 - Fix: a formula symbol written `[mixture, index]` crashed the material check.
 
+From a rugate / graded-layer test (2026-10-26):
+
+- Fix: a mixture index outside the mixture's range (e.g. 1.4 on IdealMixture, 1.5-2.4) crashed the calculation
+  process ("please retry"); it is now refused with the range, by every tool including describe_design. Graded
+  layers are checked too (steps in range, matching lengths, thicknesses).
+- Graded layers accept "indices_at_cw" instead of "steps" (rounded to the nearest composition step, with a
+  warning); their "thickness" is optional and must equal the sum of the steps.
+- describe_design summarizes graded layers (steps, index range, first and last index, optical thickness, QWOT)
+  and its index profile plot draws them step by step, with the substrate and the incident medium.
+- load_project summarizes long graded layers and writes each such design whole to a file (OpenFilters' Rugate
+  example went from 331 403 characters to under 20 000); any tool takes {"design_file": path} as a design.
+- get_material_index lists a mixture's composition steps (the index of each step).
+- Spectrum plots name the quantity on the y axis, always show a legend and use the design's description as title.
+
 Earlier in 0.1.3:
 
 - `remove_material` tool.

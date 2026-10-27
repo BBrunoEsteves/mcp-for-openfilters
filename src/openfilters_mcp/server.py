@@ -11,13 +11,14 @@ import csv
 import datetime
 import functools
 import inspect
+import json
 import multiprocessing
 import os
 import random
 import time
 from typing import Annotated, Any
 
-from pydantic import Field
+from pydantic import BeforeValidator, Field
 
 from mcp.server.mcpserver import Context, Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
@@ -44,6 +45,12 @@ Instead of layers, a stack formula:
   "formula": {"formula": "(HL)^8 H", "materials": {"H": "TiO2", "L": "SiO2"}}  (letters = quarter waves).
 A formula symbol can be fixed too: "materials": {"H": "TiO2", "L": "SiO2", "I": {"material": "ITO", "fixed": true}}
 (every layer of that material stays fixed, so a fixed material must not also be used by a free symbol).
+Mixtures (kind "mixture" in list_materials, e.g. IdealMixture, n 1.5-2.4) have a fixed index range at
+center_wavelength: a homogeneous layer gives "index" inside it. A graded (rugate, inhomogeneous) layer of a
+mixture: {"material": "IdealMixture", "graded": {"steps": [k, ...], "step_thicknesses": [nm, ...]}}, k being the
+composition steps of the mixture (get_material_index lists the n of each step; IdealMixture: n = 1.5 + 0.01 k), or
+"indices_at_cw": [n, ...] instead of steps (rounded to the nearest step). Its thickness is the sum of the steps.
+Designs with many graded steps are written to files: pass {"design_file": path} as the design to any tool.
 Optional design fields kept in .ofp projects: "description", "needle_materials" (names), "step_spacing",
 "wavelength_range" ({"from", "to", "step"}: what the OpenFilters GUI analyses).
 
@@ -112,6 +119,7 @@ def manager():
 async def compute(op, **args):
     """Run an engine operation in the interactive worker pool."""
     try:
+        args = engine.resolve_design_files(args)
         return await asyncio.wrap_future(interactive_pool().submit(tasks.run, op, args))
     except engine.EngineError as error:
         raise ToolError(str(error)) from error
@@ -217,16 +225,29 @@ async def _dispersive_plots(designs, targets, title):
     return pngs
 
 
+def _design_from_file(value):
+    """A design given as {"design_file": path} (written by load_project / describe_design)."""
+    try:
+        return engine.resolve_design_files(value)
+    except engine.EngineError as error:
+        raise ValueError(str(error)) from error
+
+
 # The formats are spelled out here too, not only in the server instructions: some apps do not
 # show those instructions to the model, but every app passes on parameter descriptions.
-Design = Annotated[dict[str, Any], Field(description=(
+Design = Annotated[dict[str, Any], BeforeValidator(_design_from_file), Field(description=(
     'Design: {"substrate": "BK7", "incident_medium": "void", "center_wavelength": 550, "substrate_thickness_mm": 1, '
     '"layers": '
     '[{"material": "TiO2", "thickness": 58.6}, {"material": "SiO2", "qwot": 1}]} with layers listed FROM THE '
     'SUBSTRATE OUTWARD (thickness in nm, or qwot = quarter waves at center_wavelength), or instead of layers '
     '"formula": {"formula": "(HL)^8 H", "materials": {"H": "TiO2", "L": "SiO2"}}. A layer that optimizations must '
     'not change gets "fixed": true; in a formula, a symbol {"material": "ITO", "fixed": true}. A part coated on both '
-    'faces is ONE design: add "back_layers" and "consider_backside": true.'))]
+    'faces is ONE design: add "back_layers" and "consider_backside": true. A graded (rugate) layer of a mixture: '
+    '{"material": "IdealMixture", "graded": {"steps": [k, ...], "step_thicknesses": [nm, ...]}}, k being the '
+    'composition steps of the mixture (get_material_index lists the n of each step), or "indices_at_cw": [n, ...] '
+    'instead of steps (rounded to the nearest step); a homogeneous mixture layer gives "index" within the range of '
+    'the mixture at center_wavelength. A long design can be passed as {"design_file": path} (load_project and describe_design '
+    'write them).'))]
 Targets = Annotated[list[dict[str, Any]], Field(description=(
     'Targets, each {"kind": "R"|"T"|"A"|"R_phase"|"T_phase"|"R_GD"|"T_GD"|"R_GDD"|"T_GDD", "angle": 0, '
     '"polarization": "unpolarized"|"s"|"p", then either "wavelength": 1064 or "from": 400, "to": 700, "step": 5, '
@@ -290,7 +311,20 @@ async def list_materials(name_filter: str | None = None) -> dict:
 
 @mcp.tool(title="Material optical constants", annotations=READ)
 async def get_material_index(name: str, wavelengths: Wavelengths = None, plot: bool = False):
-    """Tabulate n and k of a regular material over wavelengths (default 300-2000 nm, 50 nm steps)."""
+    """Tabulate n and k of a regular material over wavelengths (default 300-2000 nm, 50 nm steps).
+    For a mixture (kind "mixture" in list_materials): its composition steps, the index of each step k at
+    each wavelength (default 550 nm; up to 10 wavelengths), as used by graded layers."""
+    if await compute("is_mixture", name=name):
+        wvls = [550.0] if wavelengths is None else engine._wavelength_list(wavelengths)
+        if len(wvls) > 10:
+            raise ToolError("a mixture's steps are listed at up to 10 wavelengths")
+        out = await compute("mixture_table", name=name, wavelengths=wvls)
+        if plot:
+            png = plotting.curves([r[0] for r in out["rows"]],
+                                  {c: [r[i + 1] for r in out["rows"]] for i, c in enumerate(out["columns"][1:])},
+                                  f"{name} composition steps", "Step", "n")
+            return with_plots(out, png, f"steps_{name}")
+        return out
     wvls = engine._wavelength_list(wavelengths, default=(300.0, 2000.0, 50.0)) if wavelengths is not None \
         else engine._wavelength_list(None, default=(300.0, 2000.0, 50.0))
     warnings = await compute("material_warnings", design={"substrate": name, "layers": []}, wavelengths=wvls)
@@ -402,19 +436,54 @@ def _read_table_file(path):
 
 @mcp.tool(title="Describe a design", annotations=READ)
 async def describe_design(design: Design, plot_index_profile: bool = False):
-    """Validate a design and list its layers (thickness, index and QWOT at the center wavelength),
-    total thickness and the normalized design JSON (e.g. a formula expanded into layers; omitted for
-    formulas of more than 20 layers, which can be passed as they are). Two-sided
-    designs also list back_layers (with a warning if consider_backside is false)."""
+    """Validate a design and list its layers (thickness, index and QWOT at the center wavelength; graded
+    layers: number of steps, index range, first and last index, optical thickness), total thickness, the
+    substrate and incident medium indices, and the normalized design JSON (e.g. a formula expanded into
+    layers; omitted for formulas of more than 20 layers, which can be passed as they are; written to a
+    design_file when graded layers have many steps). Two-sided designs also list back_layers (with a
+    warning if consider_backside is false). plot_index_profile draws n at the center wavelength versus
+    depth, graded layers step by step, with the substrate and the incident medium at the ends."""
     out = await compute("describe", design=design)
+    profile = out.pop("index_profile")
+    warnings = await compute("material_warnings", design=design, wavelengths=[out["center_wavelength"]])
+    if warnings:
+        out["warnings"] = warnings
     if (design.get("formula") or design.get("back_formula")) and out["nb_layers"] + out.get("nb_back_layers", 0) > 20:
         # Hundreds of near-identical entries repeating the layer table (scenario S4.9).
         del out["design"]
         out["design_note"] = ("normalized design JSON omitted for this long stack: pass the formula itself to "
                               "every tool; the layers above give each layer's thickness")
+    elif engine.graded_steps_count(out["design"]) > GRADED_INLINE_STEPS:
+        steps = engine.graded_steps_count(out["design"])
+        path = _write_design(out["design"], "design")
+        out["design"] = {"design_file": path}
+        out["design_note"] = (f"the normalized design has {steps} graded steps, so it is in design_file: pass "
+                              f'{{"design_file": "{path}"}} as the design to any tool')
     if plot_index_profile:
-        return with_plots(out, plotting.index_profile(out["layers"]), "index_profile")
+        title = design.get("description") or design.get("name") or "Index profile"
+        png = plotting.index_profile(profile, out["substrate_n@cw"], out["incident_medium_n@cw"],
+                                     out["center_wavelength"], title[:80])
+        return with_plots(out, png, "index_profile")
     return out
+
+
+def _plot_title(design, kind):
+    """The design's own description or name, else what it is and its center wavelength."""
+    named = design.get("description") or design.get("name")
+    if named:
+        return str(named)[:80]
+    return f"{kind} (center wavelength {float(design.get('center_wavelength', 550)):g} nm)"
+
+
+GRADED_INLINE_STEPS = 50  # more graded steps than this: designs go to a file, not into the conversation
+
+
+def _write_design(design, name):
+    """Write a design to a JSON file in the outputs folder (compact) and return its path."""
+    path = stamp(f"{name}.json")
+    with open(path, "w", encoding="utf-8") as outfile:
+        json.dump(design, outfile, separators=(",", ":"))
+    return path
 
 
 def sig(value, digits=6):
@@ -490,7 +559,7 @@ async def compute_spectrum(design: Design,
                 writer.writerow([w] + [s["values"][i] for s in result["series"]])
         out["csv"] = path
     if plot:
-        return with_plots(out, plotting.spectra(result), "spectrum")
+        return with_plots(out, plotting.spectra(result, _plot_title(design, "Spectrum")), "spectrum")
     return out
 
 
@@ -971,17 +1040,30 @@ def _project_path(path):
 
 
 @mcp.tool(title="Load an OpenFilters project", annotations=READ)
-async def load_project(path: str) -> dict:
+async def load_project(path: str, full_graded_arrays: bool = False) -> dict:
     """Read an OpenFilters .ofp project: returns its designs (as design JSON) and targets.
     A relative path or bare name (e.g. "my_ar") is looked up in the data folder's projects directory,
     where save_project writes; give the full path for projects elsewhere.
     OpenFilters' example projects load as "examples/<name>": examples/AR, examples/Beamsplitter,
-    examples/Color, examples/Edge, examples/Fourier, examples/Ramp, examples/Rugate."""
+    examples/Color, examples/Edge, examples/Fourier, examples/Ramp, examples/Rugate.
+    A design whose graded layers have many steps (rugate filters: thousands) is summarized (steps, index
+    range, optical thickness per graded layer) and written whole to a design_file: pass
+    {"design_file": path} as the design to any tool. full_graded_arrays=true returns the arrays instead."""
     path = _project_path(path)
     if not os.path.isfile(path):
         raise ToolError(f"no project at {path} (OpenFilters' examples load as examples/<name>: "
                         f"{', '.join(_example_names())})")
-    return await compute("load_project", path=path)
+    out = await compute("load_project", path=path)
+    if not full_graded_arrays:
+        stem = os.path.splitext(os.path.basename(path))[0]
+        for i, design in enumerate(out["designs"]):
+            if engine.graded_steps_count(design) > GRADED_INLINE_STEPS:
+                file = _write_design(design, f"{stem}_design{i + 1}")
+                out["designs"][i] = {**engine.summarize_graded(design), "design_file": file}
+        if any("design_file" in d for d in out["designs"]):
+            out["note"] = ("graded layers are summarized; each such design is whole in its design_file: pass "
+                           '{"design_file": path} as the design to any tool')
+    return out
 
 
 @mcp.tool(title="Save an OpenFilters project", annotations=DESTRUCTIVE)

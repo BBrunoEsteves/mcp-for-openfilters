@@ -45,7 +45,7 @@ def _photometric_axis(ax, values):
 
 
 def _png(fig, ax, n_series, legend_title=None):
-    if n_series >= 2 or legend_title:
+    if n_series >= 1 or legend_title:
         legend = ax.legend(fontsize=8, frameon=False, labelcolor=INK_2, title=legend_title, title_fontsize=7)
         if legend_title:
             legend.get_title().set_color(INK_2)
@@ -58,13 +58,19 @@ def _png(fig, ax, n_series, legend_title=None):
 
 def spectra(result, title="Spectrum"):
     """One axis per unit family: photometric quantities share an axis; other
-    quantities get their own figure (never a dual axis)."""
+    quantities get their own figure (never a dual axis). The axis names what is drawn
+    (e.g. "Reflectance" for R alone, "R, T" for both) and every curve is in the legend."""
     groups = {}
     for s in result["series"]:
         groups.setdefault(UNITS[s["quantity"]] if s["quantity"] not in "RTA" else "R/T/A", []).append(s)
     images = []
     for ylabel, series in groups.items():
-        fig, ax = _figure(title, "Wavelength (nm)", ylabel)
+        if ylabel == "R/T/A":
+            quantities = list(dict.fromkeys(s["quantity"] for s in series))
+            ylabel_shown = UNITS[quantities[0]] if len(quantities) == 1 else ", ".join(quantities)
+        else:
+            ylabel_shown = ylabel
+        fig, ax = _figure(title, "Wavelength (nm)", ylabel_shown)
         # Colour by quantity and angle, line style by polarization: s and p at 7 angles fit in 7 colours,
         # and coincident curves (s and p at 0°) stay visible.
         colours = list(dict.fromkeys((s["quantity"], s["angle"]) for s in series))[:MAX_SERIES]
@@ -91,19 +97,24 @@ def curves(x, ys, title, xlabel, ylabel, boundaries=None):
     return _png(fig, ax, min(len(ys), MAX_SERIES))
 
 
-def index_profile(design_rows, title="Index profile"):
-    """Step plot of n at the center wavelength versus depth from the substrate."""
-    fig, ax = _figure(title, "Distance from substrate (nm)", "n at center wavelength")
-    depth = 0.0
-    xs, ns = [], []
-    for row in design_rows:
-        if "n@cw" not in row:
-            continue
-        xs += [depth, depth + row["thickness_nm"]]
-        ns += [row["n@cw"], row["n@cw"]]
-        depth += row["thickness_nm"]
-    ax.plot(xs, ns, color=SERIES[0], linewidth=1.8)
-    return _png(fig, ax, 1)
+def index_profile(segments, substrate_n, medium_n, center_wavelength, title="Index profile"):
+    """Step plot of n at the center wavelength versus distance from the substrate. segments:
+    [[thickness, n], ...] for every homogeneous layer and every step of a graded layer; the substrate
+    and the incident medium are drawn as short dashed stretches at both ends."""
+    fig, ax = _figure(title, "Distance from substrate (nm)", f"n at {center_wavelength:g} nm")
+    total = sum(d for d, _ in segments)
+    edge = max(total * 0.06, 1.0)
+    xs, ns, depth = [], [], 0.0
+    for d, n in segments:
+        xs += [depth, depth + d]
+        ns += [n, n]
+        depth += d
+    ax.plot([-edge, 0], [substrate_n] * 2, color=INK_2, linewidth=1.4, linestyle="--", label="substrate")
+    ax.plot(xs, ns, color=SERIES[0], linewidth=1.6, label="coating")
+    ax.plot([total, total + edge], [medium_n] * 2, color=SERIES[1], linewidth=1.4, linestyle="--",
+            label="incident medium")
+    ax.set_xlim(-edge, total + edge)
+    return _png(fig, ax, 3)
 
 
 def design_vs_targets(wavelengths, curves, targets, title, ylabel="R / T / A", photometric=True):
