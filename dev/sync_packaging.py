@@ -45,6 +45,7 @@ def manifests(version=__version__):
         ".claude-plugin/marketplace.json": {
             "name": "openfilters",
             "owner": AUTHOR,
+            "metadata": {"description": "OpenFilters thin-film optical coating design for Claude."},
             "plugins": [{"name": "openfilters", "source": "./claude-plugin", "description": DESCRIPTION}],
         },
         "claude-plugin/.claude-plugin/plugin.json": {

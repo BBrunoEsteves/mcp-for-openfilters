@@ -3,6 +3,9 @@
   "owner": {
     "name": "Bruno Esteves"
   },
+  "metadata": {
+    "description": "OpenFilters thin-film optical coating design for Claude."
+  },
   "plugins": [
     {
       "name": "openfilters",

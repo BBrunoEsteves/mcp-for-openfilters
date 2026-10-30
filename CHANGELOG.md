@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.3 — 2026-10-24
+## 0.1.3 — unreleased
 
 From a field test (tunable Fabry-Perot filter with an ITO heater, 2026-10-26):
 

@@ -16,15 +16,31 @@ calculation engine built in. Nothing else to install besides Python.
 - Your own material with the same name as a built-in one (e.g. `TiO2`) was ignored in favour of the built-in
   data.
 - Installs from source (computers without a ready-made package) silently used the slow calculation core.
+- Optimizations ran a slow solver even with the compiled core installed (now about 3x faster).
+- Group delay and GDD were reported in s and s^2 under fs labels, and GD/GDD targets never worked; everything
+  is now in fs and fs^2, as in the OpenFilters GUI.
+- A mixture index outside the mixture's range crashed the calculation process; it is now refused with the range.
+- Saving a project with characters outside Latin-1 (e.g. "λ") failed on Windows.
+- The electric field inside graded layers was only sampled at step boundaries (peaks could be missed).
 
 **New:**
 
+- Thermal model: `thermal_sensitivity` and `thermal_sweep` give a peak's shift with temperature
+  (dn/dT, expansion, Poisson ratio), kelvin per FWHM and the dn/dT that makes a design athermal.
+- Graded (rugate, inhomogeneous) layers: generated profiles (rugate with apodization and several notches,
+  quintic and linear ramps, custom profiles) with index matching to the substrate and the medium; supported by
+  plots, the electric field, tolerance analysis and layer sensitivity.
+- Layers kept fixed in every optimization (`"fixed": true`, e.g. an electrode).
+- Tabulated materials used beyond their data: choose "hold", "openfilters" or "refuse" (`table_extrapolation`);
+  long jobs ask first.
 - Materials from the refractiveindex.info database: search it and import any entry, on demand.
 - `remove_material` deletes one of your own materials.
 - The needle method keeps improving where OpenFilters' own needle search stops early.
 - Ready-made workflows (antireflection, mirror, edge filter, band-pass, manufacturing review) in the "+"
   menu of Claude Desktop and as `/` commands in Claude Code; OpenFilters example projects to attach.
 - Progress updates during long optimizations and yield analyses.
+- Peak width (FWHM) and threshold ranges in spectra; a `margin` option for inequality targets, and warnings
+  when a design meets its targets on the grid but not between grid points.
 
 ## Install
 

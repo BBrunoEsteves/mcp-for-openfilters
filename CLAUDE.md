@@ -79,7 +79,11 @@ variable PUBLISH_PYPI is "true". A clean `uv pip install` of the sdist with no c
 Pending, in order: email Larouche/Martinu (draft in email_draft_larouche_martinu.md, gitignored); make the repo
 public; PyPI trusted publisher (project openfilters-mcp, workflow ci.yml, environment pypi) then set
 PUBLISH_PYPI; README install via uvx; MCP Registry (mcp-publisher, server.json); pack the .mcpb (needs the PyPI
-package) and submit to Claude's directory; plugin validate (`claude plugin validate ./claude-plugin`).
+package) and submit to Claude's directory; README plugin install line (`/plugin install openfilters --marketplace BBrunoEsteves/openfilters-mcp`) once public.
+Plugin + marketplace validated 2026-10-30 (`claude plugin validate .`; the CLI is bundled in
+%LOCALAPPDATA%\Claude-Data\claude_*\claude-code\*\*\claude.exe, not on PATH).
+Reinstalling the editable package while Claude runs the server fails (openfilters-mcp.exe locked) and leaves a
+~penfilters dist-info without the __editable__ .pth: quit every Claude app first (pip metadata still says 0.1.1).
 Added 2026-10-23 (unreleased): refractiveindex.info search/import (refractiveindex.py; CC0 database read from
 GitHub, catalogue cached 30 days in <data>/cache; formulas 1-9 as in the database's nkexplorer.py; tools annotated
 open-world), textbook validation tests (tests/test_textbook.py), prompts and resources (server.py), progress
