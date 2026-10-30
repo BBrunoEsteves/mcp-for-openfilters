@@ -126,6 +126,10 @@
       "description": "Tolerance (yield) analysis"
     },
     {
+      "name": "simulate_random_errors",
+      "description": "Simulate random errors"
+    },
+    {
       "name": "job_status",
       "description": "Job status"
     },

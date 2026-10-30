@@ -56,6 +56,14 @@ do not depend on your material library.
   transmission (about **0.36 %**).
 - [ ] **B5. Colour.** *"What colour is the B2 mirror in reflection at 0° and 45°?"*
   Pass if: L\*a\*b\* and hex values at both angles, with a visible shift.
+- [ ] **B6. Polarization angle and tilt.** *"For the B2 mirror at 45° and 500 nm, give R for s, p, and for
+  light polarized at 30° (the custom polarization of OpenFilters' dialogs)."*
+  Pass if: R(30°) = 0.25 Rs + 0.75 Rp (about **98.85 %**), computed in one `compute_spectrum` call with a numeric
+  polarization (not by Claude mixing s and p itself).
+- [ ] **B7. Spectroscopic monitoring.** *"For the B2 mirror, give the spectroscopic transmission monitoring over
+  500–600 nm (2 nm steps), without the substrate backside."*
+  Pass if: 51 wavelengths; the selected wavelength is **550 nm** and its last layer-end value is about **0.363 %**;
+  a map plot and a CSV of the spectrum after each layer.
 
 ### C. Targets and evaluation (the strict rule)
 
@@ -95,6 +103,10 @@ do not depend on your material library.
   Pass if: five rows; the minimum is at **1.0** (R = 1.260 %).
 - [ ] **E3. Yield.** *"Monte Carlo yield of the D2 design for its targets, 1 % thickness errors, 1000 trials."*
   Pass if: a yield with a 95 % interval and the failure rate per target.
+- [ ] **E4. Random errors (Preproduction).** *"Simulate random errors on the B1 layer: ±5 nm absolute, uniform,
+  200 tests, R at 550 nm."*
+  Pass if: `simulate_random_errors` (no targets needed); worst deviation from the design just under
+  **0.0192 %** (R at 99.64 ± 5 nm); a statistics CSV.
 
 ### F. Materials from refractiveindex.info
 

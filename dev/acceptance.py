@@ -15,6 +15,7 @@ Usage:
 
 import argparse
 import asyncio
+import cmath
 import json
 import math
 import os
@@ -155,6 +156,34 @@ async def run(c, k, offline):
     end = list(mon["signal_at_layer_ends"].values())[0][-1]
     k.check("compute_monitoring_curves: final signal = transmission of the finished stack",
             abs(end - (1 - R_MIRROR)) < 1e-4, f"{end} vs {1 - R_MIRROR:.6g}")
+    spectro, _ = await c.ok("compute_monitoring_curves", {
+        "design": dict(mon_design, wavelength_range={"from": 500, "to": 600, "step": 2}), "wavelengths": "spectroscopic",
+        "mode": "transmission", "plot": False})
+    end = spectro["signal_at_layer_ends"]["550"][-1]
+    k.check("compute_monitoring_curves spectroscopic: design range, center wavelength selected, final T exact",
+            spectro["n_wavelengths"] == 51 and spectro["selected_wavelength"] == W0 and abs(end - (1 - R_MIRROR)) < 1e-4,
+            f"{spectro['n_wavelengths']} wavelengths, selected {spectro['selected_wavelength']}, T {end}")
+
+    # --- polarization angle (the dialogs' fourth choice): R = sin^2 psi Rs + cos^2 psi Rp ---
+    pol, _ = await c.ok("compute_spectrum", {"design": MIRROR, "quantities": ["R"], "wavelengths": [500],
+                                             "angles": [45], "polarizations": ["s", "p", 30], "plot": False})
+    rs, rp, r30 = (s["mean"] for s in pol["series"])
+    k.check("compute_spectrum: polarization angle 30 deg = 0.25 Rs + 0.75 Rp",
+            abs(r30 - (0.25 * rs + 0.75 * rp)) < 1e-7, f"{r30} vs {0.25 * rs + 0.75 * rp:.8g}")
+
+    # --- Preproduction > Simulate random errors: worst case of a quarter-wave AR layer +/- 5 nm ---
+    d_ar = W0 / (4 * NA)
+    worst_R = 0.0
+    for d in (d_ar - 5, d_ar + 5):
+        r1, r2 = (1 - NA) / (1 + NA), (NA - NS) / (NA + NS)
+        e = cmath.exp(-2j * 2 * cmath.pi * NA * d / W0)
+        worst_R = max(worst_R, abs((r1 + r2 * e) / (1 + r1 * r2 * e)) ** 2)
+    errs, _ = await c.ok("simulate_random_errors", {"design": AR, "quantities": ["R"], "wavelengths": [W0],
+                                                     "thickness_error": {"type": "absolute", "value": 5},
+                                                     "nb_tests": 200, "plot": False})
+    worst = errs["results"][0]["worst_deviation_from_design"]
+    k.check("simulate_random_errors: worst deviation within the analytic +/- 5 nm bound and close to it",
+            0.8 * (worst_R - R_AR) < worst <= (worst_R - R_AR) * (1 + 1e-6), f"{worst:.4g} vs bound {worst_R - R_AR:.4g}")
 
     # --- thermal: with constant indices, uniform expansion scales the whole spectrum ---
     fp = {"substrate": "AT_S", "center_wavelength": W0,
@@ -347,7 +376,7 @@ async def main():
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     tools = {t.name for t in (await session.list_tools()).tools}
-                    k.check("tools: all 27 tools offered", len(tools) == 27, f"{len(tools)} tools")
+                    k.check("tools: all 28 tools offered", len(tools) == 28, f"{len(tools)} tools")
                     await run(Client(session), k, args.offline)
     except Exception as error:  # report, then show the summary
         k.check("acceptance run completed", False, f"{type(error).__name__}: {error}")

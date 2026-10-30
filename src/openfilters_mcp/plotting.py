@@ -157,3 +157,72 @@ def design_vs_targets(wavelengths, curves, targets, title, ylabel="R / T / A", p
     if any(c[3] for c in curves):
         note += "\ndashed: starting design"
     return _png(fig, ax, len(curves), legend_title=note)
+
+
+def _draw_targets(ax, targets):
+    """Targets as grey bars / markers (▲ ≥, ▼ ≤), as in design_vs_targets."""
+    for target in targets:
+        marker = {">=": "^", "larger": "^", "min": "^", ">": "^",
+                  "<=": "v", "smaller": "v", "max": "v", "<": "v"}.get(str(target.get("inequality", "")).lower(), "o")
+        if "wavelength" in target:
+            ax.plot([target["wavelength"]], [target["value"]], marker=marker, color=INK, markersize=8, linestyle="none")
+        elif "points" in target:
+            pts = target["points"]
+            ax.plot([p[0] for p in pts], [p[1] for p in pts], color=INK, linewidth=2.5, alpha=0.5)
+        elif "from" in target:
+            ax.plot([target["from"], target["to"]], [target["value"]] * 2, color=INK, linewidth=2.5, alpha=0.5)
+
+
+def random_errors(wavelengths, series, show, targets=(), title="Random errors"):
+    """One figure per quantity, drawing what OpenFilters' random error dialog shows: every test, the
+    mean, mean +/- k standard deviations, the worst case (minimum and maximum over the tests), the
+    design and its targets. show: {"all_results", "mean", "std_devs" (k or None), "worst_case", "design",
+    "targets"}."""
+    images = []
+    for s in series:
+        q = s["quantity"]
+        fig, ax = _figure(f"{title}: {q}", "Wavelength (nm)", UNITS[q])
+        drawn = 0
+        if show.get("all_results"):
+            for i, values in enumerate(s["tests"]):
+                ax.plot(wavelengths, values, color=GRID, linewidth=0.6, label="tests" if i == 0 else None)
+            drawn += 1
+        if show.get("worst_case"):
+            ax.fill_between(wavelengths, s["min"], s["max"], color=SERIES[1], alpha=0.18, linewidth=0,
+                            label="worst case (min-max)")
+            drawn += 1
+        k = show.get("std_devs")
+        if k:
+            ax.plot(wavelengths, s["mean"] + k * s["std_dev"], color=SERIES[2], linewidth=1.2, linestyle="--",
+                    label=f"mean ± {k:g} σ")
+            ax.plot(wavelengths, s["mean"] - k * s["std_dev"], color=SERIES[2], linewidth=1.2, linestyle="--")
+            drawn += 1
+        if show.get("mean"):
+            ax.plot(wavelengths, s["mean"], color=SERIES[2], linewidth=1.6, label="mean")
+            drawn += 1
+        if show.get("design", True):
+            ax.plot(wavelengths, s["design"], color=SERIES[0], linewidth=1.8, label="design")
+            drawn += 1
+        shown_targets = [t for t in targets if t.get("kind") == q] if show.get("targets") else []
+        _draw_targets(ax, shown_targets)
+        if q in ("R", "T", "A"):
+            values = [s["design"], s["min"], s["max"]] + ([s["mean"] + k * s["std_dev"]] if k else [])
+            values += [np.asarray([t["value"] for t in shown_targets if "value" in t], dtype=float)]
+            _photometric_axis(ax, np.concatenate([np.asarray(v, dtype=float) for v in values]))
+        images.append(_png(fig, ax, drawn, legend_title="grey: targets (▲ ≥, ▼ ≤)" if shown_targets else None))
+    return images
+
+
+def monitoring_map(deposited, wavelengths, matrix, boundaries, title, label="Signal"):
+    """Spectroscopic (broadband) monitoring: the signal at every wavelength (y) versus deposited
+    thickness (x), with the layer ends marked."""
+    fig, ax = _figure(title, "Deposited thickness (nm)", "Wavelength (nm)")
+    ax.grid(False)
+    mesh = ax.pcolormesh(np.asarray(deposited), np.asarray(wavelengths), np.asarray(matrix), shading="auto",
+                         cmap="viridis", vmin=0.0, vmax=max(1e-9, float(np.nanmax(matrix))), rasterized=True)
+    for b in boundaries:
+        ax.axvline(b, color="white", linewidth=0.5, alpha=0.6)
+    bar = fig.colorbar(mesh, ax=ax)
+    bar.set_label(label, color=INK_2, fontsize=9)
+    bar.ax.tick_params(colors=INK_2, labelsize=8)
+    return _png(fig, ax, 0)

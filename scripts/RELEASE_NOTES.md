@@ -22,9 +22,13 @@ calculation engine built in. Nothing else to install besides Python.
 - A mixture index outside the mixture's range crashed the calculation process; it is now refused with the range.
 - Saving a project with characters outside Latin-1 (e.g. "λ") failed on Windows.
 - The electric field inside graded layers was only sampled at step boundaries (peaks could be missed).
+- A polarization angle (e.g. 30°, the fourth choice of OpenFilters' dialogs) was refused by every tool.
 
 **New:**
 
+- `simulate_random_errors`: OpenFilters' Preproduction > Simulate random errors (mean, standard deviation and
+  worst case of the curves for random thickness errors, no targets needed).
+- Spectroscopic (broadband) optical monitoring, and monitoring from the substrate side.
 - Thermal model: `thermal_sensitivity` and `thermal_sweep` give a peak's shift with temperature
   (dn/dT, expansion, Poisson ratio), kelvin per FWHM and the dn/dT that makes a design athermal.
 - Graded (rugate, inhomogeneous) layers: generated profiles (rugate with apodization and several notches,

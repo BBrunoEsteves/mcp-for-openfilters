@@ -54,6 +54,12 @@ async def main(home):
             show("compute_monitoring_curves", await call("compute_monitoring_curves", {
                 "design": {"substrate": "BK7", "layers": [["TiO2", 60], ["SiO2", 95], ["TiO2", 60]]},
                 "wavelengths": [550, 633]}), 300)
+            show("compute_monitoring_curves (spectroscopic)", await call("compute_monitoring_curves", {
+                "design": {"substrate": "BK7", "wavelength_range": {"from": 450, "to": 700, "step": 5},
+                           "layers": [["TiO2", 60], ["SiO2", 95], ["TiO2", 60]]}, "wavelengths": "spectroscopic"}), 300)
+            show("simulate_random_errors", await call("simulate_random_errors", {
+                "design": MIRROR, "quantities": ["R", "color"], "wavelengths": {"from": 900, "to": 1200, "step": 2},
+                "polarization": 30, "nb_tests": 100, "show": {"std_devs": 3}}), 500)
             bandpass = {"substrate": "FusedSilica", "center_wavelength": 532,
                         "formula": {"formula": "(HL)^5 HH (LH)^5", "materials": {"H": "TiO2", "L": "SiO2"}}}
             heat = {"materials": {"TiO2": {"dn_dT": -1e-4, "cte": 5e-6, "poisson": 0.27},

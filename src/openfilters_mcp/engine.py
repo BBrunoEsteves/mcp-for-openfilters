@@ -13,13 +13,18 @@ worker processes and be serialized to disk. Conventions:
 import json
 import math
 import os
+import random
+import re
+import threading
 import time
 
 import numpy as np
 
 from openfilters_core import color as of_color
 from openfilters_core import materials as of_materials
+from openfilters_core import data_holder as of_data_holder
 from openfilters_core import optical_filter
+from openfilters_core import preproduction as of_preproduction
 from openfilters_core import project as of_project
 from openfilters_core import stack as of_stack
 from openfilters_core import targets as of_targets
@@ -279,14 +284,28 @@ def _wavelength_list(spec, default=(380.0, 1100.0, 1.0)):
 
 
 def polarization_value(polarization):
+    """s, p, unpolarized, or the polarization angle psi in degrees, as in OpenFilters' dialogs:
+    R = sin^2(psi) Rs + cos^2(psi) Rp (0 = p, 90 = s, 45 = unpolarized). A number may come as text
+    ("30", "30deg", "30°"), which is also how polarization_name reports it."""
+    message = ("polarization must be s, p, unpolarized, or a polarization angle in degrees between 0 and 90 "
+               "(0 = p, 90 = s, 45 = unpolarized)")
+    if isinstance(polarization, bool):
+        raise EngineError(message)
     if isinstance(polarization, (int, float)):
-        return float(polarization)
-    key = str(polarization).strip().lower()
-    table = {"s": S, "te": S, "p": P, "tm": P, "unpolarized": UNPOLARIZED, "u": UNPOLARIZED,
-             "avg": UNPOLARIZED, "average": UNPOLARIZED, "mean": UNPOLARIZED}
-    if key not in table:
-        raise EngineError("polarization must be s, p, unpolarized, or a mixing angle in degrees (0 = p, 90 = s)")
-    return table[key]
+        value = float(polarization)
+    else:
+        key = str(polarization).strip().lower()
+        table = {"s": S, "te": S, "p": P, "tm": P, "unpolarized": UNPOLARIZED, "u": UNPOLARIZED,
+                 "avg": UNPOLARIZED, "average": UNPOLARIZED, "mean": UNPOLARIZED}
+        if key in table:
+            return table[key]
+        try:
+            value = float(re.sub(r"\s*(deg(rees?)?|°)$", "", key))
+        except ValueError:
+            raise EngineError(message) from None
+    if not 0.0 <= value <= 90.0:  # OpenFilters' own range (targets.py refuses others)
+        raise EngineError(message)
+    return value
 
 
 def polarization_name(value):
@@ -1123,25 +1142,45 @@ def _with_warnings(result, warnings):
     return result
 
 
-def monitoring(design, wavelengths, angle=0.0, polarization="unpolarized", mode="reflection"):
+MONITORING_INLINE_WAVELENGTHS = 20  # more wavelengths (spectroscopic monitoring): a matrix, not a dict
+
+
+def monitoring(design, wavelengths, angle=0.0, polarization="unpolarized", mode="reflection", direction="normal"):
     """Monitoring signal versus deposited thickness at each monitoring
-    wavelength (as used for optical monitoring during deposition)."""
-    wvls = [float(w) for w in wavelengths]
+    wavelength (as used for optical monitoring during deposition).
+
+    wavelengths: a list, a range {"from", "to", "step"}, or "spectroscopic": every wavelength of the
+    design's wavelength_range, as OpenFilters' "spectroscopic" option (broadband monitoring).
+    direction "reverse": light from the substrate side (OpenFilters' reverse-direction monitoring)."""
+    if isinstance(wavelengths, str):
+        if wavelengths.strip().lower() != "spectroscopic":
+            raise EngineError('wavelengths must be a list, {"from", "to", "step"} or "spectroscopic"')
+        wvls = [float(w) for w in build_filter(design).get_wavelengths()]
+    else:
+        wvls = _wavelength_list(wavelengths)
     warnings = material_warnings(design, wvls)
     f = build_filter(design)
-    if mode == "reflection":
-        thickness, signal = f.reflection_monitoring(wvls, float(angle), polarization_value(polarization))
-    elif mode == "transmission":
-        thickness, signal = f.transmission_monitoring(wvls, float(angle), polarization_value(polarization))
-    else:
+    if mode not in ("reflection", "transmission"):
         raise EngineError("mode must be reflection or transmission")
+    direction = str(direction).lower()
+    if direction not in ("normal", "reverse"):
+        raise EngineError('direction must be "normal" or "reverse" (light from the substrate side)')
+    angle = float(angle)
+    if not 0 <= angle < 90:
+        raise EngineError("angle must be in [0, 90)")
+    method = getattr(f, f"{mode}_monitoring" + ("_reverse" if direction == "reverse" else ""))
+    thickness, signal = method(wvls, angle, polarization_value(polarization))
     # thickness[layer][point]; signal[wavelength][layer][point].
     deposited = [float(x) for layer_thickness in thickness for x in layer_thickness]
     boundaries = [float(layer_thickness[-1]) for layer_thickness in thickness]
-    curves = {f"{w:g}": [float(v) for layer_signal in signal[i] for v in layer_signal]
-              for i, w in enumerate(wvls)}
-    return _with_warnings({"deposited_thickness_nm": deposited, "signal": curves, "layer_boundaries_nm": boundaries,
-                           "includes_backside": bool(f.get_consider_backside_on_monitoring())}, warnings)
+    matrix = np.array([[v for layer_signal in signal[i] for v in layer_signal] for i in range(len(wvls))], dtype=float)
+    out = {"deposited_thickness_nm": deposited, "wavelengths": wvls, "signal_map": matrix,
+           "layer_boundaries_nm": boundaries, "direction": direction,
+           "center_wavelength": float(f.get_center_wavelength()),
+           "includes_backside": bool(f.get_consider_backside_on_monitoring())}
+    if len(wvls) <= MONITORING_INLINE_WAVELENGTHS:
+        out["signal"] = {f"{w:g}": matrix[i].tolist() for i, w in enumerate(wvls)}
+    return _with_warnings(out, warnings)
 
 
 # ---------------------------------------------------------------------------
@@ -2157,6 +2196,128 @@ def tolerance(design, target_specs, n_trials=200, thickness_error=None, index_er
     if warnings:
         out["warnings"] = warnings
     return out
+
+
+RANDOM_ERROR_TYPES = {
+    "R": of_data_holder.REFLECTION, "T": of_data_holder.TRANSMISSION, "A": of_data_holder.ABSORPTION,
+    "R_phase": of_data_holder.REFLECTION_PHASE, "T_phase": of_data_holder.TRANSMISSION_PHASE,
+    "R_GD": of_data_holder.REFLECTION_GD, "T_GD": of_data_holder.TRANSMISSION_GD,
+    "R_GDD": of_data_holder.REFLECTION_GDD, "T_GDD": of_data_holder.TRANSMISSION_GDD,
+    "color": of_data_holder.COLOR,
+}
+RANDOM_ERRORS_TIME_LIMIT = 50.0  # s: clients time out tool calls at about 60 s
+
+
+def random_errors(design, quantities=("R", "T"), wavelengths=None, angle=0.0, polarization="s",
+                  thickness_error=None, nb_tests=100, illuminant="CIE-D65", observer="CIE-1931", seed=0,
+                  time_limit=RANDOM_ERRORS_TIME_LIMIT):
+    """OpenFilters' Preproduction > Simulate random errors, run by OpenFilters' own class: every front layer
+    thickness is drawn around its design value (relative: error = fraction x thickness; absolute: nm),
+    uniform in +/- error or normal with sigma = error, clipped at 0; a graded layer shifts every step by
+    one drawn error / number of steps. Returns the design curve and, per wavelength, the mean, standard
+    deviation, minimum and maximum over the tests and every test; colour as Lab with the standard
+    deviation and the worst case in Delta E 2000."""
+    quantities = list(dict.fromkeys(quantities))
+    unknown = [q for q in quantities if q not in RANDOM_ERROR_TYPES]
+    if unknown or not quantities:
+        raise EngineError(f"quantities must be among {', '.join(RANDOM_ERROR_TYPES)}")
+    pol = polarization_value(polarization)
+    if pol not in (S, P) and any(q not in ("R", "T", "A", "color") for q in quantities):
+        raise EngineError("phase, GD and GDD need s or p polarization (as in OpenFilters)")
+    angle = float(angle)
+    if not 0 <= angle < 90:
+        raise EngineError("angle must be in [0, 90)")
+    nb_tests = int(nb_tests)
+    if not 2 <= nb_tests <= 100000:
+        raise EngineError("nb_tests must be between 2 and 100000")
+    error = dict(thickness_error or {"type": "relative", "value": 0.01})
+    _check_keys(error, {"type", "value", "distribution"}, "thickness_error")
+    kind, dist = error.get("type", "relative"), error.get("distribution", "uniform")
+    if kind not in ("relative", "absolute"):
+        raise EngineError('thickness_error type must be "relative" (value a fraction, 0.01 = 1 %) or "absolute" (nm)')
+    if dist not in ("uniform", "normal"):
+        raise EngineError('thickness_error distribution must be "uniform" or "normal"')
+    try:
+        size = float(error.get("value", 0.01))
+    except (TypeError, ValueError):
+        size = math.nan
+    if not math.isfinite(size) or size < 0:
+        raise EngineError("thickness_error value must be a finite number >= 0")
+    if "color" in quantities:
+        if illuminant not in of_color.get_illuminant_names():
+            raise EngineError(f"illuminant must be one of {', '.join(of_color.get_illuminant_names())}")
+        if observer not in of_color.get_observer_names():
+            raise EngineError(f"observer must be one of {', '.join(of_color.get_observer_names())}")
+
+    wvls = _wavelength_list(wavelengths)
+    grid, pad = wvls, 0  # GD/GDD: one extra step at each end, as in spectra()
+    if any(q in TIME_UNITS for q in quantities) and len(wvls) >= 3:
+        steps = np.diff(wvls)
+        if steps[0] > 0 and np.allclose(steps, steps[0], rtol=1e-6) and wvls[0] - steps[0] > 0:
+            grid, pad = [wvls[0] - float(steps[0])] + list(wvls) + [wvls[-1] + float(steps[0])], 1
+    warnings = material_warnings(design, wvls + ([380.0, 780.0] if "color" in quantities else []))
+    f = build_filter(design, grid)
+    if f.get_nb_layers(FRONT) == 0:
+        raise EngineError("the design has no front layers to perturb")
+    if design.get("back_layers") and design.get("consider_backside"):
+        warnings.append("as in OpenFilters, only the front layers are perturbed; the back layers keep their "
+                        "design thicknesses (tolerance_analysis perturbs both faces)")
+
+    analyser = of_preproduction.random_errors(f)
+    analyser.set_data_types([RANDOM_ERROR_TYPES[q] for q in quantities])
+    analyser.set_angle(angle)
+    analyser.set_polarization(pol)
+    analyser.set_illuminant(illuminant)
+    analyser.set_observer(observer)
+    if kind == "relative":
+        analyser.set_thickness_error_type(of_preproduction.RELATIVE_THICKNESS)
+        analyser.set_relative_thickness_error(size)
+    else:
+        analyser.set_thickness_error_type(of_preproduction.PHYSICAL_THICKNESS)
+        analyser.set_physical_thickness_error(size)
+    analyser.set_distribution(of_preproduction.UNIFORM if dist == "uniform" else of_preproduction.NORMAL)
+    analyser.set_nb_tests(nb_tests)
+    random.seed(seed)  # OpenFilters draws from the random module
+    timer = threading.Timer(float(time_limit), analyser.stop)
+    started = time.time()
+    timer.start()
+    try:
+        analyser.simulate()
+    finally:
+        timer.cancel()
+    if not analyser.get_mean():
+        done = max(int(round(analyser.get_progress() * (nb_tests + 1))) - 1, 0)
+        raise EngineError(f"stopped after {time.time() - started:.0f} s with {done} of {nb_tests} tests done; "
+                          f"use fewer tests (about {max(done * 9 // 10, 2)}) or fewer wavelengths")
+
+    keep = slice(pad, pad + len(wvls))
+    expected, mean, std = analyser.get_expected_result(), analyser.get_mean(), analyser.get_std_dev()
+    lows, highs = analyser.get_min_max()
+    results = analyser.get_results()
+    out = {"wavelengths": list(wvls), "angle": angle, "polarization": polarization_name(pol),
+           "thickness_error": {"type": kind, "value": size, "distribution": dist}, "nb_tests": nb_tests,
+           "seed": seed, "series": [], "seconds": round(time.time() - started, 2)}
+    for i, q in enumerate(quantities):
+        if q == "color":
+            item = {"quantity": "color", "illuminant": illuminant, "observer": observer}
+            for j, side in enumerate(("R", "T")):
+                design_Lab = list(expected[i][j].Lab())
+                worst_Lab = list(highs[i][j].Lab())
+                item[side] = {"design_Lab": design_Lab, "mean_Lab": list(mean[i][j].Lab()),
+                              "std_dev_delta_E2000": float(std[i][j]), "worst_Lab": worst_Lab,
+                              "worst_delta_E2000": float(of_color.Delta_E_2000(worst_Lab, design_Lab)),
+                              "delta_E2000_tests": [float(of_color.Delta_E_2000(list(r[j].Lab()), design_Lab))
+                                                    for r in results[i]]}
+            out["series"].append(item)
+            continue
+        scale = TIME_UNITS.get(q, 1.0)
+
+        def column(values):
+            return np.asarray([values[k] for k in range(len(grid))], dtype=float)[keep] * scale
+        out["series"].append({"quantity": q, "design": column(expected[i]), "mean": column(mean[i]),
+                              "std_dev": column(std[i]), "min": column(lows[i]), "max": column(highs[i]),
+                              "tests": [column(r) for r in results[i]]})
+    return _with_warnings(out, warnings)
 
 
 def _scaled_material(material, factor):

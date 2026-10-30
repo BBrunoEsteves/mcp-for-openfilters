@@ -2,6 +2,23 @@
 
 ## 0.1.3 — unreleased
 
+Checked against OpenFilters' GUI dialogs (2026-10-30):
+
+- Fix: no tool accepted a polarization angle (the fourth choice of OpenFilters' dialogs, e.g. 30°): numbers were
+  refused by the tool schemas and numeric text by the engine, and a target read back from a project ("30deg")
+  could not be used again. Every tool and target now takes "s", "p", "unpolarized" or an angle in degrees
+  (0 = p, 90 = s; R = sin² ψ Rs + cos² ψ Rp). Polarization and tilt were checked against an independent
+  transfer-matrix code (s, p, any ψ, 0-85°, absorbing metal, total internal reflection, backside, reverse).
+- New tool `simulate_random_errors`: OpenFilters' Preproduction > Simulate random errors (its only entry), run
+  by OpenFilters' own code: mean, standard deviation, ±k σ and worst case of R, T, A, phase, GD, GDD and colour
+  (ΔE 2000) for random thickness errors (relative or nm, uniform or normal), without targets; plots with the
+  dialog's Show choices, statistics CSV and optional CSV of every test.
+- `compute_monitoring_curves`: OpenFilters' "spectroscopic" option (every wavelength of the design's wavelength
+  range, or any range): map of the signal versus thickness and wavelength, the curve at the center wavelength,
+  and the spectrum after each layer (CSV); `direction: "reverse"` (monitoring from the substrate side).
+- Documentation: in reverse direction the angle is measured in the substrate (or the exit medium with the
+  backside), as in OpenFilters.
+
 From a field test (tunable Fabry-Perot filter with an ITO heater, 2026-10-26):
 
 - Thermal model (new tools `thermal_sensitivity`, `thermal_sweep`): the peak of R or T nearest a wavelength,

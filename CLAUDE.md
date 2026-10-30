@@ -30,7 +30,7 @@ runs in parallel worker processes, results go to disk, tools return compact summ
 - Tests: `.venv/Scripts/python -m pytest tests -q`
 - End-to-end: `.venv/Scripts/python dev/e2e_client.py`
 - Acceptance (every tool/prompt/resource vs known answers, via the installed exe, temp data folder):
-  `.venv/Scripts/python dev/acceptance.py` (46 checks); manual chat tests: `docs/TEST_PLAN.md`. Run both before a release.
+  `.venv/Scripts/python dev/acceptance.py` (49 checks); manual chat tests: `docs/TEST_PLAN.md`. Run both before a release.
 - Scenario tests for a Claude chat (4 batches, reference values from the engine): `docs/SCENARIO_TESTS.md`.
 - After a version bump or a tool change: `.venv/Scripts/python dev/sync_packaging.py`
 - Fast C++ core without a local compiler: `.venv/Scripts/python dev/fetch_compiled.py` (downloads what GitHub Actions
@@ -46,7 +46,7 @@ DESTRUCTIVE in server.py; required by Claude's directory, checked by tests/test_
 ## Status (2026-10-22)
 
 Done: Python 3 port validated (analytic + independent TMM, < 1e-9; needle derivatives vs finite differences),
-all optimizers working, 27 MCP tools + 5 prompts + 9 resources working end to end, 247 tests + 46 acceptance checks. Private GitHub repo
+all optimizers working, 28 MCP tools + 5 prompts + 9 resources working end to end, 276 tests + 49 acceptance checks. Private GitHub repo
 BBrunoEsteves/openfilters-mcp; CI compiles the C++ core and tests on Windows/macOS/Linux and builds wheels
 (cp310-cp314, runtime DLLs bundled). Compiled core is 15-30x faster than pure Python.
 Registered locally (user scope) in Claude Code and Claude Desktop, pointing at .venv/Scripts/openfilters-mcp.exe;
@@ -217,6 +217,17 @@ design_from_filter keeps it (optimizer results, saved designs in memory; NOT sto
 gui_extrapolation_notes). material_warnings give the n,k used and the other mode's; TABLE_REACH refusal only when
 unset. check_long_job / require_extrapolation_choice refuse optimize/campaign/tolerance/batch before any job when a
 table material is outside its data and the mode is unset (Claude asks the user). Thermal follows the mode.
+GUI dialog check 2026-10-30 (tests/test_preproduction.py): polarization angle psi (dialogs' 4th choice) was
+unreachable (schemas str-only, engine parsed only real numbers, "30deg" read-back unparseable) -> Polarization type
+(str | float), polarization_value parses "30"/"30deg", range 0-90 as OpenFilters' targets.py. Physics verified vs
+reference_tmm: s/p/psi, 0-85 deg, Ag, TIR, backside, reverse (reverse angle is IN THE SUBSTRATE, or exit medium with
+backside: OpenFilters' analyse(angle, N_substrate)). Preproduction menu = only "Simulate random errors" ->
+simulate_random_errors wraps openfilters_core.preproduction.random_errors (front layers only, graded steps shifted
+by error/n_steps, random module seeded, threading.Timer -> analyser.stop at 50 s); tests re-draw the thicknesses
+and compare with reference_tmm exactly. Monitoring: "spectroscopic" = f.get_wavelengths() (design wavelength_range),
+signal_map matrix (dict only up to 20 wavelengths), selected wavelength = center if on grid else middle (GUI rule),
+direction reverse = *_monitoring_reverse. Not exposed (GUI Analysis menu): ellipsometry (+ monitoring), admittance
+and circle diagrams, colour trajectory.
 Docs say the connector is developed and tested only with Claude (README, RELEASE_NOTES, .mcpb long_description).
 NEXT: release prep (see Pending) and outside testers; tag v0.1.3 after 2026-11-01. For each finding: verify it (reproduce; for OpenFilters behaviour check
 third_party/openfilters_original and the pure-Python core before blaming OpenFilters), fix with a regression test,

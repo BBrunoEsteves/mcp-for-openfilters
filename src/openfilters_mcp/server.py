@@ -31,6 +31,8 @@ OpenFilters thin-film optical coating design (Larouche & Martinu, Polytechnique 
 
 Conventions: wavelengths and thicknesses in nm; angles in degrees; R, T, A are fractions 0-1;
 phase in degrees, GD in fs, GDD in fs^2; complex index N = n - ik (k >= 0 absorbs).
+Polarization: "s", "p", "unpolarized", or a polarization angle psi in degrees (0-90) as in OpenFilters'
+dialogs: R = sin^2(psi) Rs + cos^2(psi) Rp (0 = p, 90 = s, 45 = unpolarized).
 
 A design is a JSON object:
   {"substrate": "FusedSilica", "incident_medium": "void", "exit_medium": "void",
@@ -85,10 +87,10 @@ faces, optimize each face as its own one-sided design, then combine them into on
 
 A target is a JSON object (used by evaluate/optimize/tolerance):
   {"kind": "R"|"T"|"A"|"R_phase"|"T_phase"|"R_GD"|"T_GD"|"R_GDD"|"T_GDD"|"R_color"|"T_color",
-   "angle": 0, "polarization": "unpolarized"|"s"|"p",
+   "angle": 0, "polarization": "unpolarized"|"s"|"p"|angle in degrees (0 = p, 90 = s),
    single wavelength:  "wavelength": 1064, "value": 0.995, "tolerance": 0.001,
    or a band:          "from": 400, "to": 700, "step": 5, "value": 0.9 (or "points": [[wl, value, tol], ...]),
-   "inequality": "equal" | ">=" | "<=",  "direction": "normal"|"reverse"}
+   "inequality": "equal" | ">=" | "<=",  "direction": "normal"|"reverse" (reverse: light from the substrate side, angle measured there)}
 Use ">=" / "<=" for specifications like "R > 99 %": such a target is met only where it holds (its tolerance,
 default 0.01, only weights the merit; a convergence allowance of 1e-4 x tolerance applies, e.g. 1e-6 for R
 with the default tolerance); an "equal" target is met within its tolerance. Phase/GD/GDD targets need
@@ -101,7 +103,9 @@ public data from refractiveindex.info; prefer thin-film entries for coatings and
 check that the entry's data cover the wavelengths needed, see table_extrapolation above).
 
 Workflow: list_materials -> describe_design / compute_spectrum -> evaluate_design -> optimize_design
-(refine = thickness refinement, needle = adds layers, step = graded index) -> tolerance_analysis.
+(refine = thickness refinement, needle = adds layers, step = graded index) -> tolerance_analysis (yield
+against the targets) or simulate_random_errors (OpenFilters' Preproduction: spread of the curves, no targets).
+Optical monitoring: compute_monitoring_curves at chosen wavelengths, or "spectroscopic" (broadband).
 For high blocking use the "OD" quantity (optical density, -log10 T) rather than T.
 Temperature (tunable or athermal filters): thermal_sensitivity gives how a peak moves per index and thickness
 change of each material, and with dn/dT, expansion and Poisson ratios, d(lambda)/dT; thermal_sweep follows
@@ -274,7 +278,7 @@ Design = Annotated[dict[str, Any], BeforeValidator(_design_from_file), Field(des
     'write them).'))]
 Targets = Annotated[list[dict[str, Any]], Field(description=(
     'Targets, each {"kind": "R"|"T"|"A"|"R_phase"|"T_phase"|"R_GD"|"T_GD"|"R_GDD"|"T_GDD", "angle": 0, '
-    '"polarization": "unpolarized"|"s"|"p", then either "wavelength": 1064 or "from": 400, "to": 700, "step": 5, '
+    '"polarization": "unpolarized"|"s"|"p" or an angle psi in degrees (0 = p, 90 = s), then either "wavelength": 1064 or "from": 400, "to": 700, "step": 5, '
     'and "value": 0.99 (R/T/A as fractions), "inequality": ">="|"<="|"equal", optional "tolerance" (weight in the '
     'merit, default 0.01). Colour: {"kind": "R_color"|"T_color", "color_space": "Lab", "values": [L, a, b], '
     '"tolerances": [1, 1, 1], "angle": 0}. An inequality is met only where it holds (within 1e-4 x tolerance).'))]
@@ -286,6 +290,9 @@ JOB = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_h
 DESTRUCTIVE = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=True, open_world_hint=False)
 WEB_READ = ToolAnnotations(read_only_hint=True, open_world_hint=True)
 WEB_WRITE = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=True, open_world_hint=True)
+Polarization = Annotated[str | float, Field(description=(
+    '"s", "p", "unpolarized", or a polarization angle psi in degrees from 0 to 90 (as in the OpenFilters dialogs: '
+    'R = sin^2(psi) Rs + cos^2(psi) Rp; 0 = p, 90 = s, 45 = unpolarized)'))]
 Wavelengths = Annotated[dict[str, float] | list[float] | None,
                         Field(description='{"from": 380, "to": 1100, "step": 1} or an explicit list of wavelengths (nm).')]
 
@@ -544,7 +551,7 @@ async def compute_spectrum(design: Design,
                            quantities: list[str] = ["R", "T"],
                            wavelengths: Wavelengths = None,
                            angles: list[float] = [0.0],
-                           polarizations: list[str] = ["unpolarized"],
+                           polarizations: list[str | float] = ["unpolarized"],
                            reverse: bool = False,
                            sample_points: int = 25,
                            threshold: Annotated[dict[str, Any] | None, Field(description=(
@@ -560,7 +567,8 @@ async def compute_spectrum(design: Design,
     T_GD, R_GDD, T_GDD) versus wavelength for one design at one or more
     angles and polarizations. Returns, per series, min/max/mean and `sample_points` evenly spaced
     samples (set sample_points=0 for statistics only); full data go to a CSV when save_csv=true.
-    reverse=true illuminates from the substrate side (R, T, A, OD only). Quantity "OD" is optical density
+    reverse=true illuminates from the substrate side (R, T, A, OD only; the angle is then measured in the
+    substrate, or in the exit medium when consider_backside is true, as in OpenFilters). Quantity "OD" is optical density
     (-log10 T), best for blocking specs; summary values have 8 significant figures. GD (fs) and GDD (fs^2) are
     numerical derivatives over the wavelengths requested: use steps of 5 nm or less. Two-sided designs
     (back_layers + consider_backside: true) are computed with both faces."""
@@ -590,7 +598,7 @@ async def compute_spectrum(design: Design,
 @mcp.tool(title="Angle scan", annotations=READ)
 async def compute_angle_scan(design: Design, wavelength: float, quantities: list[str] = ["R", "T"],
                              angles: Annotated[dict[str, float], Field(description='{"from": 0, "to": 85, "step": 1}')] = {"from": 0, "to": 85, "step": 1},
-                             polarizations: list[str] = ["s", "p", "unpolarized"], sample_points: int = 25,
+                             polarizations: list[str | float] = ["s", "p", "unpolarized"], sample_points: int = 25,
                              threshold: Annotated[dict[str, Any] | None, Field(description=(
                                  'as in compute_spectrum, over angle'))] = None, plot: bool = True):
     """R/T/A (or phase) versus angle of incidence at a single wavelength. Per curve: min/max with the angle
@@ -617,7 +625,7 @@ async def compute_angle_scan(design: Design, wavelength: float, quantities: list
 
 @mcp.tool(title="Coating color", annotations=READ)
 async def compute_color(design: Design, angles: list[float] = [0.0], mode: str = "reflection",
-                        polarization: str = "unpolarized", illuminant: str = "CIE-D65",
+                        polarization: Polarization = "unpolarized", illuminant: str = "CIE-D65",
                         observer: str = "CIE-1931") -> dict:
     """Color of the coating in reflection or transmission: XYZ, xy, L*a*b*, LCh, sRGB and hex, at each
     angle (use several angles to see the color shift)."""
@@ -627,7 +635,7 @@ async def compute_color(design: Design, angles: list[float] = [0.0], mode: str =
 
 @mcp.tool(title="Electric field in the coating", annotations=READ)
 async def compute_electric_field(design: Design, wavelength: float, angle: float = 0.0,
-                                 polarization: str = "s", plot: bool = True):
+                                 polarization: Polarization = "s", plot: bool = True):
     """Standing-wave |E|^2 inside the coating (relative to the incident wave), e.g. for laser-damage
     analysis, sampled every 1 nm inside every layer (graded layers too). Returns the peak value and
     position, its value at each interface and, for graded layers, the peak inside each one."""
@@ -654,28 +662,71 @@ async def compute_electric_field(design: Design, wavelength: float, angle: float
 
 
 @mcp.tool(title="Optical monitoring curves", annotations=READ)
-async def compute_monitoring_curves(design: Design, wavelengths: list[float], angle: float = 0.0,
-                                    polarization: str = "unpolarized", mode: str = "transmission",
-                                    plot: bool = True):
-    """Optical monitoring signal (R or T at fixed wavelengths) versus deposited thickness, as seen
-    during deposition. Returns the signal at the end of each layer (turning-point/level-cut planning).
-    The substrate backside is included unless the design sets "consider_backside_on_monitoring": false."""
+async def compute_monitoring_curves(design: Design,
+                                    wavelengths: Annotated[list[float] | dict[str, float] | str, Field(description=(
+                                        'Monitoring wavelengths: a list (e.g. [550]), a range {"from": 400, "to": 800, '
+                                        '"step": 2}, or "spectroscopic" = every wavelength of the design\'s '
+                                        'wavelength_range (OpenFilters\' spectroscopic option: broadband monitoring)'))],
+                                    angle: float = 0.0, polarization: Polarization = "unpolarized",
+                                    mode: str = "transmission", direction: str = "normal",
+                                    save_map: bool = False, plot: bool = True):
+    """Optical monitoring signal (R or T) versus deposited thickness, as seen during deposition. Returns
+    the signal at the end of each layer (turning-point/level-cut planning). With many wavelengths
+    (spectroscopic monitoring) it returns the layer-end signals of the selected wavelength (the center
+    wavelength if it is on the grid, else the middle one, as OpenFilters selects), a CSV of the spectrum
+    at every layer end, a map of signal versus thickness and wavelength (save_map: the full map as CSV),
+    and the curve at the selected wavelength. direction "reverse": light from the substrate side (angle
+    measured in the substrate). The substrate backside is included unless the design sets
+    "consider_backside_on_monitoring": false."""
+    import numpy as np
     r = await compute("monitoring", design=design, wavelengths=wavelengths, angle=angle,
-                      polarization=polarization, mode=mode)
-    ends = {}
-    for w, values in r["signal"].items():
-        ends[w] = []
-        for b in r["layer_boundaries_nm"]:
-            j = min(range(len(r["deposited_thickness_nm"])), key=lambda k: abs(r["deposited_thickness_nm"][k] - b))
-            ends[w].append(sig(values[j]))  # high reflectors end near T = 1e-6
-    out = {"mode": mode, "signal_at_layer_ends": ends, "layer_boundaries_nm": [round(b, 3) for b in r["layer_boundaries_nm"]],
+                      polarization=polarization, mode=mode, direction=direction)
+    deposited, wvls, matrix = np.asarray(r["deposited_thickness_nm"]), r["wavelengths"], np.asarray(r["signal_map"])
+    end_index = [int(np.argmin(np.abs(deposited - b))) for b in r["layer_boundaries_nm"]]
+    out = {"mode": mode, "direction": r["direction"], "layer_boundaries_nm": [round(b, 3) for b in r["layer_boundaries_nm"]],
            "includes_backside": r["includes_backside"]}
+    spectroscopic = "signal" not in r
+    if spectroscopic:
+        cw = r["center_wavelength"]
+        selected = wvls.index(cw) if cw in wvls else len(wvls) // 2
+        w_sel = wvls[selected]
+        out.update(n_wavelengths=len(wvls), wavelength_range_nm=[wvls[0], wvls[-1]], selected_wavelength=w_sel,
+                   signal_at_layer_ends={f"{w_sel:g}": [sig(matrix[selected][j]) for j in end_index]})
+        ends = matrix[:, end_index]
+        out["layer_end_spectra"] = [{"layer": k + 1, "min": sig(ends[:, k].min()), "at_nm_min": wvls[int(ends[:, k].argmin())],
+                                     "max": sig(ends[:, k].max()), "at_nm_max": wvls[int(ends[:, k].argmax())],
+                                     "mean": sig(ends[:, k].mean())} for k in range(len(end_index))]
+        path = stamp("monitoring_layer_end_spectra.csv")
+        with open(path, "w", newline="", encoding="utf-8") as outfile:
+            writer = csv.writer(outfile)
+            writer.writerow(["wavelength_nm"] + [f"after_layer_{k + 1}" for k in range(len(end_index))])
+            for i, w in enumerate(wvls):
+                writer.writerow([w] + [float(v) for v in ends[i]])
+        out["layer_end_spectra_csv"] = path
+    else:
+        out["signal_at_layer_ends"] = {f"{w:g}": [sig(matrix[i][j]) for j in end_index]  # T can end near 1e-6
+                                       for i, w in enumerate(wvls)}
+    if save_map:
+        path = stamp("monitoring_map.csv")
+        with open(path, "w", newline="", encoding="utf-8") as outfile:
+            writer = csv.writer(outfile)
+            writer.writerow(["deposited_thickness_nm"] + [f"{w:g}" for w in wvls])
+            for j, x in enumerate(deposited):
+                writer.writerow([float(x)] + [float(v) for v in matrix[:, j]])
+        out["map_csv"] = path
     if r.get("warnings"):
         out["warnings"] = r["warnings"]
     if plot:
-        png = plotting.curves(r["deposited_thickness_nm"], r["signal"], f"{mode.title()} monitoring",
-                              "Deposited thickness (nm)", "Signal", r["layer_boundaries_nm"])
-        return with_plots(out, png, "monitoring")
+        title = f"{mode.title()} monitoring" + (" (reverse)" if r["direction"] == "reverse" else "")
+        if spectroscopic:
+            pngs = [plotting.monitoring_map(deposited, wvls, matrix, r["layer_boundaries_nm"], f"{title}, spectroscopic",
+                                            "R" if mode == "reflection" else "T"),
+                    plotting.curves(deposited, {f"{w_sel:g} nm": matrix[selected]}, f"{title} at {w_sel:g} nm",
+                                    "Deposited thickness (nm)", "Signal", r["layer_boundaries_nm"])]
+        else:
+            pngs = plotting.curves(deposited, r["signal"], title, "Deposited thickness (nm)", "Signal",
+                                   r["layer_boundaries_nm"])
+        return with_plots(out, pngs, "monitoring")
     return out
 
 
@@ -695,7 +746,7 @@ PeakWindow = Annotated[dict[str, float] | None, Field(description=(
 @mcp.tool(title="Thermal sensitivity of a peak", annotations=READ)
 async def thermal_sensitivity(design: Design, near: float | None = None, quantity: str = "T",
                               thermal: Thermal | None = None, window: PeakWindow = None, angle: float = 0.0,
-                              polarization: str = "unpolarized") -> dict:
+                              polarization: Polarization = "unpolarized") -> dict:
     """How the peak of R or T nearest `near` (default the center wavelength; e.g. a band-pass line) moves
     when each material's index or thickness changes: d(lambda)/dn in nm per refractive-index unit and
     d(lambda)/d(strain) in nm per unit relative thickness change, for all layers of that material
@@ -710,7 +761,7 @@ async def thermal_sensitivity(design: Design, near: float | None = None, quantit
 @mcp.tool(title="Thermal tuning sweep", annotations=READ)
 async def thermal_sweep(design: Design, delta_T: list[float], thermal: Thermal, near: float | None = None,
                         quantity: str = "T", window: PeakWindow = None, angle: float = 0.0,
-                        polarization: str = "unpolarized", plot: bool = True):
+                        polarization: Polarization = "unpolarized", plot: bool = True):
     """The peak of R or T nearest `near` at each temperature change delta_T (K, relative to the temperature the
     design's materials and thicknesses describe), with every material's dn/dT, dk/dT and thickness strain
     applied together: half-maximum centre, peak wavelength and value, FWHM; a linear fit gives
@@ -1003,6 +1054,92 @@ async def tolerance_analysis(design: Design, targets: Targets, n_trials: int = 5
     out = await _wait(job_id, wait_seconds, ctx)
     if out.get("status") == "done":
         return {"job_id": job_id, **out.get("summary", {})}
+    return out
+
+
+@mcp.tool(title="Simulate random errors", annotations=READ)
+async def simulate_random_errors(design: Design, quantities: list[str] = ["R", "T"],
+                                 wavelengths: Wavelengths = None, angle: float = 0.0,
+                                 polarization: Polarization = "s",
+                                 thickness_error: Annotated[dict[str, Any] | None, Field(description=(
+                                     '{"type": "relative" (value a fraction, 0.01 = 1 %) | "absolute" (value in nm), '
+                                     '"value": 0.01, "distribution": "uniform" (within +/- value) | "normal" (sigma = '
+                                     'value)}; default 1 %, uniform, as in OpenFilters'))] = None,
+                                 nb_tests: int = 100, illuminant: str = "CIE-D65", observer: str = "CIE-1931",
+                                 show: Annotated[dict[str, Any] | None, Field(description=(
+                                     'What the plots draw, as the dialog\'s Show boxes: {"all_results": false, '
+                                     '"mean": false, "std_devs": null (e.g. 3 for mean +/- 3 sigma), "worst_case": '
+                                     'true, "design": true, "targets": false}'))] = None,
+                                 targets: Targets | None = None, seed: int = 0, sample_points: int = 25,
+                                 save_all_results: bool = False, plot: bool = True):
+    """OpenFilters' Preproduction > Simulate random errors: the spread of R, T, A, phase, GD, GDD (and colour)
+    curves when every layer thickness is off by a random error, without targets (tolerance_analysis gives the
+    yield against targets instead). Runs OpenFilters' own analysis: front layers only, graded layers shifted
+    step by step, nb_tests designs. Per quantity: the largest standard deviation and the worst deviation from
+    the design (where they occur) and samples of design/mean/std_dev/min/max; colour (quantity "color"):
+    design, mean and worst Lab with the spread in Delta E 2000. Statistics are saved to a CSV (every test too
+    with save_all_results). Phase, GD and GDD need s or p polarization. Runs within about 50 s: reduce
+    nb_tests or the wavelengths if it stops."""
+    show = {"all_results": False, "mean": False, "std_devs": None, "worst_case": True, "design": True,
+            "targets": False, **(show or {})}
+    r = await compute("random_errors", design=design, quantities=quantities, wavelengths=wavelengths, angle=angle,
+                      polarization=polarization, thickness_error=thickness_error, nb_tests=nb_tests,
+                      illuminant=illuminant, observer=observer, seed=seed)
+    import numpy as np
+    wvls = np.asarray(r["wavelengths"])
+    out = {key: r[key] for key in ("angle", "polarization", "thickness_error", "nb_tests", "seed", "seconds")}
+    out["wavelength_range_nm"] = [float(wvls[0]), float(wvls[-1])]
+    out["note"] = "only the front layers are perturbed (OpenFilters' random error analysis)"
+    if r.get("warnings"):
+        out["warnings"] = r["warnings"]
+    out["results"], curves = [], []
+    for s in r["series"]:
+        if s["quantity"] == "color":
+            item = {"quantity": "color", "illuminant": s["illuminant"], "observer": s["observer"]}
+            for side in ("R", "T"):
+                c = s[side]
+                dE = np.asarray(c["delta_E2000_tests"])
+                item[side] = {"design_Lab": [sig(v) for v in c["design_Lab"]], "mean_Lab": [sig(v) for v in c["mean_Lab"]],
+                              "std_dev_delta_E2000": sig(c["std_dev_delta_E2000"]),
+                              "worst_Lab": [sig(v) for v in c["worst_Lab"]], "worst_delta_E2000": sig(c["worst_delta_E2000"]),
+                              "delta_E2000_median": sig(np.median(dE)), "delta_E2000_p95": sig(np.percentile(dE, 95))}
+            out["results"].append(item)
+            continue
+        curves.append(s)
+        deviation = np.max(np.abs(np.asarray(s["tests"]) - s["design"]), axis=0)
+        i_std, i_dev = int(np.argmax(s["std_dev"])), int(np.argmax(deviation))
+        idx = np.unique(np.linspace(0, len(wvls) - 1, min(sample_points, len(wvls))).round().astype(int)) \
+            if sample_points else []
+        out["results"].append({
+            "quantity": s["quantity"],
+            "max_std_dev": sig(s["std_dev"][i_std]), "at_nm_max_std_dev": float(wvls[i_std]),
+            "worst_deviation_from_design": sig(deviation[i_dev]), "at_nm_worst_deviation": float(wvls[i_dev]),
+            "mean_std_dev": sig(np.mean(s["std_dev"])),
+            "samples_columns": ["wavelength_nm", "design", "mean", "std_dev", "min", "max"],
+            "samples": [[float(wvls[i]), sig(s["design"][i]), sig(s["mean"][i]), sig(s["std_dev"][i]),
+                         sig(s["min"][i]), sig(s["max"][i])] for i in idx]})
+    if curves:
+        path = stamp("random_errors_statistics.csv")
+        with open(path, "w", newline="", encoding="utf-8") as outfile:
+            writer = csv.writer(outfile)
+            writer.writerow(["wavelength_nm"] + [f"{s['quantity']}_{col}" for s in curves
+                                                 for col in ("design", "mean", "std_dev", "min", "max")])
+            for i, w in enumerate(wvls):
+                writer.writerow([float(w)] + [float(s[col][i]) for s in curves
+                                              for col in ("design", "mean", "std_dev", "min", "max")])
+        out["statistics_csv"] = path
+        if save_all_results:
+            path = stamp("random_errors_all_results.csv")
+            with open(path, "w", newline="", encoding="utf-8") as outfile:
+                writer = csv.writer(outfile)
+                writer.writerow(["wavelength_nm"] + [f"{s['quantity']}_test{j + 1}" for s in curves
+                                                     for j in range(len(s["tests"]))])
+                for i, w in enumerate(wvls):
+                    writer.writerow([float(w)] + [float(t[i]) for s in curves for t in s["tests"]])
+            out["all_results_csv"] = path
+    if plot and curves:
+        pngs = plotting.random_errors(wvls, curves, show, targets or [], _plot_title(design, "Random errors"))
+        return with_plots(out, pngs, "random_errors")
     return out
 
 
