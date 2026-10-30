@@ -262,4 +262,4 @@ def test_b9_spectrum_plot_names_the_quantity(monkeypatch):
     plotting.spectra(result, "C5")
     result = engine.spectra(mixture_pair(1.5), ["R", "T"], [1000, 1064])
     plotting.spectra(result, "C5")
-    assert labels == [("C5", "Reflectance"), ("C5", "R, T")]
+    assert labels == [("C5", "Reflectance"), ("C5", "Reflectance / Transmittance")]

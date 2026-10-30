@@ -1001,7 +1001,11 @@ def target_wavelengths(target_specs):
 
 def spectra(design, quantities=("R", "T"), wavelengths=None, angles=(0.0,), polarizations=("unpolarized",),
             reverse=False):
-    """Return {"wavelengths": [...], "series": [{"quantity","angle","polarization","values"}]}."""
+    """Return {"wavelengths": [...], "series": [{"quantity","angle","polarization","values"}]}.
+    Without wavelengths: the design's wavelength_range if it has one (what the OpenFilters GUI analyses,
+    e.g. a loaded project), else 380-1100 nm."""
+    if wavelengths is None and design.get("wavelength_range"):
+        wavelengths = design["wavelength_range"]
     wvls = _wavelength_list(wavelengths)
     # OpenFilters takes GD/GDD at the first and last wavelength from the neighbouring point (no one-sided
     # derivative), so a uniform grid gets one extra step at each end, computed and then dropped.
@@ -2231,7 +2235,11 @@ def random_errors(design, quantities=("R", "T"), wavelengths=None, angle=0.0, po
     if not 2 <= nb_tests <= 100000:
         raise EngineError("nb_tests must be between 2 and 100000")
     error = dict(thickness_error or {"type": "relative", "value": 0.01})
-    _check_keys(error, {"type", "value", "distribution"}, "thickness_error")
+    _check_keys(error, {"type", "value", "sigma", "distribution"}, "thickness_error")
+    if "sigma" in error:  # tolerance_analysis' name for it; the same +/- range for a uniform draw
+        if "value" in error and error["value"] != error["sigma"]:
+            raise EngineError('thickness_error: give "value" or "sigma", not both')
+        error["value"] = error.pop("sigma")
     kind, dist = error.get("type", "relative"), error.get("distribution", "uniform")
     if kind not in ("relative", "absolute"):
         raise EngineError('thickness_error type must be "relative" (value a fraction, 0.01 = 1 %) or "absolute" (nm)')
@@ -2249,7 +2257,8 @@ def random_errors(design, quantities=("R", "T"), wavelengths=None, angle=0.0, po
         if observer not in of_color.get_observer_names():
             raise EngineError(f"observer must be one of {', '.join(of_color.get_observer_names())}")
 
-    wvls = _wavelength_list(wavelengths)
+    # The GUI analyses the filter's own wavelengths: the design's wavelength_range, else OpenFilters' default.
+    wvls = [float(w) for w in build_filter(design).get_wavelengths()] if wavelengths is None         else _wavelength_list(wavelengths)
     grid, pad = wvls, 0  # GD/GDD: one extra step at each end, as in spectra()
     if any(q in TIME_UNITS for q in quantities) and len(wvls) >= 3:
         steps = np.diff(wvls)

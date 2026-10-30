@@ -2,6 +2,19 @@
 
 ## 0.1.3 — unreleased
 
+From a scenario run through the live tools (2026-10-30):
+
+- Plots name what they show: target plots (optimize, evaluate, campaigns) said "R / T / A" on the y axis, and
+  monitoring and angle-scan plots "Signal" / "Value"; they now say Reflectance, Transmittance, ... Titles give
+  the angle of incidence and the polarization in words ("30° incidence, polarization angle 30°", not "30°, 30").
+- Fix: `job_status` could fail with "Permission denied: job.json" on Windows while a job was running (the file
+  was being rewritten); job files are now read and replaced with a short retry.
+- `compute_spectrum` and `simulate_random_errors` without wavelengths use the design's `wavelength_range` (e.g. from
+  a project) instead of 380-1100 nm; random errors otherwise use OpenFilters' default range, as its dialog.
+- `run_batch` refuses spectrum metrics for a quantity, angle or polarization the batch does not compute before
+  starting (every task used to fail).
+- `simulate_random_errors` accepts `"sigma"` (as tolerance_analysis) for the error size.
+
 Checked against OpenFilters' GUI dialogs (2026-10-30):
 
 - Fix: no tool accepted a polarization angle (the fourth choice of OpenFilters' dialogs, e.g. 30°): numbers were

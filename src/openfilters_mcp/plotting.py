@@ -17,6 +17,23 @@ UNITS = {"R": "Reflectance", "T": "Transmittance", "A": "Absorptance", "OD": "Op
          "T_phase": "Phase (deg)", "R_GD": "GD (fs)", "T_GD": "GD (fs)", "R_GDD": "GDD (fs²)", "T_GDD": "GDD (fs²)"}
 
 
+def quantity_label(quantities):
+    """Axis label naming what is drawn: "Reflectance", "Reflectance / Transmittance", "GD (fs)"; never
+    the generic "R / T / A"."""
+    return " / ".join(dict.fromkeys(UNITS.get(q, q) for q in quantities))
+
+
+def polarization_label(name, short=False):
+    """"s-polarized", "unpolarized", "polarization angle 30°" (short: s, p, unpolarized, ψ 30°) from the
+    engine's polarization names ("s", "p", "unpolarized", "30deg")."""
+    if name in ("s", "p"):
+        return name if short else f"{name}-polarized"
+    if name == "unpolarized":
+        return name
+    angle = str(name).replace("deg", "°")
+    return f"ψ {angle}" if short else f"polarization angle {angle}"
+
+
 def _figure(title, xlabel, ylabel):
     fig, ax = plt.subplots(figsize=(7.5, 4.2), dpi=110)
     fig.patch.set_facecolor(SURFACE)
@@ -66,8 +83,7 @@ def spectra(result, title="Spectrum"):
     images = []
     for ylabel, series in groups.items():
         if ylabel == "R/T/A":
-            quantities = list(dict.fromkeys(s["quantity"] for s in series))
-            ylabel_shown = UNITS[quantities[0]] if len(quantities) == 1 else ", ".join(quantities)
+            ylabel_shown = quantity_label(s["quantity"] for s in series)
         else:
             ylabel_shown = ylabel
         fig, ax = _figure(title, "Wavelength (nm)", ylabel_shown)
@@ -76,7 +92,7 @@ def spectra(result, title="Spectrum"):
         colours = list(dict.fromkeys((s["quantity"], s["angle"]) for s in series))[:MAX_SERIES]
         drawn = [s for s in series if (s["quantity"], s["angle"]) in colours]
         for s in drawn:
-            label = f"{s['quantity']} {s['angle']:g}° {s['polarization']}"
+            label = f"{s['quantity']} {s['angle']:g}° {polarization_label(s['polarization'], short=True)}"
             style = {"unpolarized": "-", "s": "--", "p": "-."}.get(s["polarization"], ":")
             ax.plot(result["wavelengths"], s["values"], color=SERIES[colours.index((s["quantity"], s["angle"]))],
                     linewidth=1.8, linestyle=style, label=label)
@@ -117,11 +133,11 @@ def index_profile(segments, substrate_n, medium_n, center_wavelength, title="Ind
     return _png(fig, ax, 3)
 
 
-def design_vs_targets(wavelengths, curves, targets, title, ylabel="R / T / A", photometric=True):
+def design_vs_targets(wavelengths, curves, targets, title, ylabel=None, photometric=True):
     """Spectra of one or more designs with their targets drawn on top. curves: [(label, quantity, values,
     is_reference)]; targets: target dicts of the plotted quantities. photometric=False for phase, GD
-    and GDD (axis scaled to the data instead of 0-1)."""
-    fig, ax = _figure(title, "Wavelength (nm)", ylabel)
+    and GDD (axis scaled to the data instead of 0-1). ylabel: default names the plotted quantities."""
+    fig, ax = _figure(title, "Wavelength (nm)", ylabel or quantity_label(c[1] for c in curves))
     quantities, designs = [], []
     for label, quantity, values, reference in curves:
         if quantity not in quantities:
@@ -181,7 +197,7 @@ def random_errors(wavelengths, series, show, targets=(), title="Random errors"):
     images = []
     for s in series:
         q = s["quantity"]
-        fig, ax = _figure(f"{title}: {q}", "Wavelength (nm)", UNITS[q])
+        fig, ax = _figure(f"{title}\n{UNITS[q]} ({q}), random thickness errors", "Wavelength (nm)", UNITS[q])
         drawn = 0
         if show.get("all_results"):
             for i, values in enumerate(s["tests"]):

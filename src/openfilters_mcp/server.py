@@ -192,6 +192,16 @@ def with_plots(out, pngs, name):
     return [out] + [Image(data=png, format="png") for png in pngs]
 
 
+def _target_view(target, default_polarization):
+    """(angle, polarization name) of a target, so 30, "30" and "30deg" share one figure titled "30deg"."""
+    pol = target.get("polarization", default_polarization)
+    try:
+        pol = engine.polarization_name(engine.polarization_value(pol))
+    except engine.EngineError:
+        pol = str(pol)
+    return float(target.get("angle", 0.0)), pol
+
+
 async def targets_plot(designs, targets, title, name):
     """Plot designs (list of (label, design, is_reference)) against the R/T/A
     targets: one figure per (angle, polarization) used by the targets.
@@ -207,7 +217,7 @@ async def targets_plot(designs, targets, title, name):
     wavelengths = {"from": max(lo - margin, 200.0), "to": hi + margin, "step": max((hi - lo + 2 * margin) / 2000, 0.05)}
     combos = []
     for t in photometric:
-        key = (float(t.get("angle", 0.0)), str(t.get("polarization", "unpolarized")))
+        key = _target_view(t, "unpolarized")
         if key not in combos:
             combos.append(key)
     quantities = sorted({t["kind"] for t in photometric}, key="RTA".index)
@@ -220,8 +230,8 @@ async def targets_plot(designs, targets, title, name):
             wvls = r["wavelengths"]
             for s in r["series"]:
                 curves.append((f"{s['quantity']} {label}", s["quantity"], s["values"], reference))
-        shown = [t for t in photometric if (float(t.get("angle", 0.0)), str(t.get("polarization", "unpolarized"))) == (angle, pol)]
-        photometric_pngs.append(plotting.design_vs_targets(wvls, curves, shown, f"{title} — {angle:g}°, {pol}"))
+        shown = [t for t in photometric if _target_view(t, "unpolarized") == (angle, pol)]
+        photometric_pngs.append(plotting.design_vs_targets(wvls, curves, shown, f"{title} — {angle:g}° incidence, {plotting.polarization_label(pol)}"))
     return photometric_pngs + pngs
 
 
@@ -236,15 +246,15 @@ async def _dispersive_plots(designs, targets, title):
         hi = max(t.get("to", t.get("wavelength", 0)) for t in chosen)
         pad = max(0.05 * (hi - lo), 5.0)
         wavelengths = {"from": lo - pad, "to": hi + pad, "step": min(1.0, (hi - lo + 2 * pad) / 200)}
-        for angle, pol in sorted({(float(t.get("angle", 0.0)), str(t.get("polarization", "s"))) for t in chosen})[:2]:
+        for angle, pol in sorted({_target_view(t, "s") for t in chosen})[:2]:
             curves, wvls = [], None
             for label, design, reference in designs:
                 r = await compute("spectra", design=design, quantities=[kind], wavelengths=wavelengths,
                                   angles=[angle], polarizations=[pol])
                 wvls = r["wavelengths"]
                 curves += [(f"{kind} {label}", kind, s["values"], reference) for s in r["series"]]
-            shown = [t for t in chosen if (float(t.get("angle", 0.0)), str(t.get("polarization", "s"))) == (angle, pol)]
-            pngs.append(plotting.design_vs_targets(wvls, curves, shown, f"{title} — {kind}, {angle:g}°, {pol}",
+            shown = [t for t in chosen if _target_view(t, "s") == (angle, pol)]
+            pngs.append(plotting.design_vs_targets(wvls, curves, shown, f"{title} — {kind}, {angle:g}° incidence, {plotting.polarization_label(pol)}",
                                                    ylabel=plotting.UNITS.get(kind, kind), photometric=False))
     return pngs
 
@@ -294,7 +304,10 @@ Polarization = Annotated[str | float, Field(description=(
     '"s", "p", "unpolarized", or a polarization angle psi in degrees from 0 to 90 (as in the OpenFilters dialogs: '
     'R = sin^2(psi) Rs + cos^2(psi) Rp; 0 = p, 90 = s, 45 = unpolarized)'))]
 Wavelengths = Annotated[dict[str, float] | list[float] | None,
-                        Field(description='{"from": 380, "to": 1100, "step": 1} or an explicit list of wavelengths (nm).')]
+                        Field(description=(
+                            '{"from": 380, "to": 1100, "step": 1} or an explicit list of wavelengths (nm). Default: the '
+                            "design's wavelength_range if it has one (e.g. from a project), else 380-1100 nm "
+                            "(simulate_random_errors: OpenFilters' default 300-1000 nm, as its dialog)"))]
 
 
 # ---------------------------------------------------------------------------
@@ -618,7 +631,8 @@ async def compute_angle_scan(design: Design, wavelength: float, quantities: list
     if result.get("warnings"):
         out["warnings"] = result["warnings"]
     if plot:
-        png = plotting.curves(angle_list, curves, f"Angle scan at {wavelength:g} nm", "Angle of incidence (deg)", "Value")
+        png = plotting.curves(angle_list, curves, f"Angle scan at {wavelength:g} nm", "Angle of incidence (deg)",
+                              plotting.quantity_label(quantities))
         return with_plots(out, png, "angle_scan")
     return out
 
@@ -717,15 +731,17 @@ async def compute_monitoring_curves(design: Design,
     if r.get("warnings"):
         out["warnings"] = r["warnings"]
     if plot:
-        title = f"{mode.title()} monitoring" + (" (reverse)" if r["direction"] == "reverse" else "")
+        title = (f"{mode.title()} monitoring" + (" (reverse)" if r["direction"] == "reverse" else "") +
+                 f", {float(angle):g}° incidence, {plotting.polarization_label(engine.polarization_name(engine.polarization_value(polarization)))}")
+        signal = plotting.UNITS["R" if mode == "reflection" else "T"]
         if spectroscopic:
             pngs = [plotting.monitoring_map(deposited, wvls, matrix, r["layer_boundaries_nm"], f"{title}, spectroscopic",
-                                            "R" if mode == "reflection" else "T"),
+                                            signal),
                     plotting.curves(deposited, {f"{w_sel:g} nm": matrix[selected]}, f"{title} at {w_sel:g} nm",
-                                    "Deposited thickness (nm)", "Signal", r["layer_boundaries_nm"])]
+                                    "Deposited thickness (nm)", signal, r["layer_boundaries_nm"])]
         else:
-            pngs = plotting.curves(deposited, r["signal"], title, "Deposited thickness (nm)", "Signal",
-                                   r["layer_boundaries_nm"])
+            pngs = plotting.curves(deposited, {f"{w} nm": v for w, v in r["signal"].items()}, title,
+                                   "Deposited thickness (nm)", signal, r["layer_boundaries_nm"])
         return with_plots(out, pngs, "monitoring")
     return out
 
@@ -944,6 +960,9 @@ async def run_batch(operation: str,
     first = dict(task_list[0]["args"])
     if operation == "tolerance":
         await compute("check_tolerance", **first)
+    if operation == "spectrum":
+        for _, args in cases[:200]:
+            checked(tasks.check_spectrum_metrics, args)
     elif "design" in first:
         await compute("describe", design=first["design"])
     for _, args in cases[:200]:
@@ -1063,8 +1082,8 @@ async def simulate_random_errors(design: Design, quantities: list[str] = ["R", "
                                  polarization: Polarization = "s",
                                  thickness_error: Annotated[dict[str, Any] | None, Field(description=(
                                      '{"type": "relative" (value a fraction, 0.01 = 1 %) | "absolute" (value in nm), '
-                                     '"value": 0.01, "distribution": "uniform" (within +/- value) | "normal" (sigma = '
-                                     'value)}; default 1 %, uniform, as in OpenFilters'))] = None,
+                                     '"value": 0.01 ("sigma" is accepted too), "distribution": "uniform" (within +/- value) | "normal" '
+                                     '(sigma = value)}; default 1 %, uniform, as in OpenFilters'))] = None,
                                  nb_tests: int = 100, illuminant: str = "CIE-D65", observer: str = "CIE-1931",
                                  show: Annotated[dict[str, Any] | None, Field(description=(
                                      'What the plots draw, as the dialog\'s Show boxes: {"all_results": false, '
@@ -1138,7 +1157,9 @@ async def simulate_random_errors(design: Design, quantities: list[str] = ["R", "
                     writer.writerow([float(w)] + [float(t[i]) for s in curves for t in s["tests"]])
             out["all_results_csv"] = path
     if plot and curves:
-        pngs = plotting.random_errors(wvls, curves, show, targets or [], _plot_title(design, "Random errors"))
+        title = (f"{_plot_title(design, 'Random errors')} — {r['angle']:g}° incidence, "
+                 f"{plotting.polarization_label(r['polarization'])}")
+        pngs = plotting.random_errors(wvls, curves, show, targets or [], title)
         return with_plots(out, pngs, "random_errors")
     return out
 

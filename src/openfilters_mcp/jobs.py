@@ -23,16 +23,31 @@ from . import engine, settings, tasks
 MAX_TASKS = 100000
 
 
+def _retrying(action, attempts=40, pause=0.025):
+    """On Windows, replacing a file that another thread or process is reading (and reading one that is
+    being replaced) fails with PermissionError for a moment: job_status polled while the job manager
+    rewrote job.json failed with "Permission denied". Retry for up to about a second."""
+    for attempt in range(attempts):
+        try:
+            return action()
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(pause)
+
+
 def _write_json(path, data):
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as outfile:
         json.dump(data, outfile, indent=1, default=tasks._json_default)
-    os.replace(tmp, path)
+    _retrying(lambda: os.replace(tmp, path))
 
 
 def _read_json(path):
-    with open(path, encoding="utf-8") as infile:
-        return json.load(infile)
+    def read():
+        with open(path, encoding="utf-8") as infile:
+            return json.load(infile)
+    return _retrying(read)
 
 
 # ---------------------------------------------------------------------------

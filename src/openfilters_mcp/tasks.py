@@ -67,6 +67,30 @@ def spectrum_metrics(result, metrics):
     return out
 
 
+def check_spectrum_metrics(args):
+    """Refuse metrics that no computed series can match, before a batch runs (they failed every task)."""
+    quantities = args.get("quantities", ("R", "T"))
+    angles = [float(a) for a in args.get("angles", (0.0,))]
+    polarizations = [engine.polarization_name(engine.polarization_value(p))
+                     for p in args.get("polarizations", ("unpolarized",))]
+    for i, m in enumerate(args.get("metrics") or []):
+        name = m.get("name") or f"metric {i + 1}"
+        if m.get("quantity") not in quantities:
+            raise engine.EngineError(f"metric {name}: quantity {m.get('quantity')!r} is not computed "
+                                     f"(quantities: {', '.join(quantities)})")
+        if "angle" in m and not any(abs(float(m["angle"]) - a) < 1e-9 for a in angles):
+            raise engine.EngineError(f"metric {name}: angle {m['angle']} is not computed (angles: "
+                                     f"{', '.join(f'{a:g}' for a in angles)})")
+        if "polarization" in m and engine.polarization_name(engine.polarization_value(m["polarization"]))                 not in polarizations:
+            raise engine.EngineError(f"metric {name}: polarization {m['polarization']!r} is not computed "
+                                     f"(polarizations: {', '.join(polarizations)}); add it to polarizations")
+        if m.get("stat", "mean") not in ("mean", "min", "max", "std", "at", *PEAK_STATS):
+            raise engine.EngineError(f"metric {name}: stat must be one of mean, min, max, std, at, "
+                                     f"{', '.join(PEAK_STATS)}")
+        if m.get("stat") == "at" and "wavelength" not in m:
+            raise engine.EngineError(f"metric {name}: stat \"at\" needs a wavelength")
+
+
 def _spectrum_task(args):
     metrics = args.pop("metrics", None)
     result = engine.spectra(**args)

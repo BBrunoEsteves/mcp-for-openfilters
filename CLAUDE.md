@@ -46,7 +46,7 @@ DESTRUCTIVE in server.py; required by Claude's directory, checked by tests/test_
 ## Status (2026-10-22)
 
 Done: Python 3 port validated (analytic + independent TMM, < 1e-9; needle derivatives vs finite differences),
-all optimizers working, 28 MCP tools + 5 prompts + 9 resources working end to end, 276 tests + 49 acceptance checks. Private GitHub repo
+all optimizers working, 28 MCP tools + 5 prompts + 9 resources working end to end, 281 tests + 49 acceptance checks. Private GitHub repo
 BBrunoEsteves/openfilters-mcp; CI compiles the C++ core and tests on Windows/macOS/Linux and builds wheels
 (cp310-cp314, runtime DLLs bundled). Compiled core is 15-30x faster than pure Python.
 Registered locally (user scope) in Claude Code and Claude Desktop, pointing at .venv/Scripts/openfilters-mcp.exe;
@@ -228,6 +228,11 @@ and compare with reference_tmm exactly. Monitoring: "spectroscopic" = f.get_wave
 signal_map matrix (dict only up to 20 wavelengths), selected wavelength = center if on grid else middle (GUI rule),
 direction reverse = *_monitoring_reverse. Not exposed (GUI Analysis menu): ellipsometry (+ monitoring), admittance
 and circle diagrams, colour trajectory.
+Scenario run 2026-10-30 (live tools; tests/test_bug_hunt.py): target/monitoring/angle-scan plots had generic
+y labels ("R / T / A", "Signal", "Value") and "30°, 30" titles -> plotting.quantity_label / polarization_label
+everywhere (user had asked for this before: check EVERY plot path); job_status PermissionError on job.json
+(Windows replace-vs-read race) -> jobs._retrying; spectra/random_errors default to the design's wavelength_range;
+run_batch pre-checks spectrum metrics (tasks.check_spectrum_metrics); random_errors accepts "sigma".
 Docs say the connector is developed and tested only with Claude (README, RELEASE_NOTES, .mcpb long_description).
 NEXT: release prep (see Pending) and outside testers; tag v0.1.3 after 2026-11-01. For each finding: verify it (reproduce; for OpenFilters behaviour check
 third_party/openfilters_original and the pure-Python core before blaming OpenFilters), fix with a regression test,
