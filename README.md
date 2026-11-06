@@ -52,6 +52,24 @@ OpenFilters example projects are available as resources (`openfilters://guide`, 
 Requires Python ≥ 3.10. OpenFilters itself does **not** need to be installed: its calculation engine is
 built in (the OpenFilters GUI is only useful to open the `.ofp` files).
 
+### Claude Desktop extension (one click)
+
+From the [latest release](https://github.com/BBrunoEsteves/mcp-for-openfilters/releases/latest), download
+`mcp-for-openfilters-<version>.mcpb` and open it (or drag it onto Claude Desktop's Settings → Extensions). Claude
+Desktop runs it with [uv](https://docs.astral.sh/uv/), which fetches the server from PyPI.
+
+### Claude Code plugin
+
+In Claude Code:
+
+```text
+/plugin marketplace add BBrunoEsteves/mcp-for-openfilters
+/plugin install mcp-for-openfilters@mcp-for-openfilters
+```
+
+The plugin runs the server with `uvx` (see [claude-plugin/README.md](claude-plugin/README.md) for what it runs and
+downloads).
+
 ### With uv (one command)
 
 With [uv](https://docs.astral.sh/uv/) installed, the server runs straight from PyPI, with the right package for

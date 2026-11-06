@@ -59,7 +59,7 @@ def manifests(version=__version__):
             "license": "GPL-2.0-or-later",
             "keywords": KEYWORDS,
             "privacyPolicyUrl": f"{REPO}/blob/main/PRIVACY.md",
-            "mcpServers": {"mcp-for-openfilters": {"command": "uvx", "args": [f"mcp-for-openfilters@{version}"]}},
+            "mcpServers": {"mcp-for-openfilters": {"command": "uvx", "args": [f"mcp-for-openfilters=={version}"]}},
         },
         "packaging/mcpb/manifest.json": {
             "manifest_version": "0.4",

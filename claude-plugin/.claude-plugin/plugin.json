@@ -22,7 +22,7 @@
     "mcp-for-openfilters": {
       "command": "uvx",
       "args": [
-        "mcp-for-openfilters@0.2.1"
+        "mcp-for-openfilters==0.2.1"
       ]
     }
   }
