@@ -67,6 +67,7 @@ def manifests(version=__version__):
             "display_name": "MCP for OpenFilters",
             "version": version,
             "description": DESCRIPTION,
+            "icon": "icon.png",  # drawn by dev/make_icon.py
             "long_description": ("Thin-film optical coating design with the calculation engine of OpenFilters "
                                  "(S. Larouche and L. Martinu, Polytechnique Montréal): spectra, color, electric "
                                  "field, monitoring curves, refinement/needle/step optimization, campaigns and "
