@@ -14,6 +14,20 @@ results to disk, including `.ofp` project files that open in the OpenFilters GUI
 
 > Claude orchestrates; the server computes. One tool call can launch a whole campaign.
 
+## Quick start
+
+Pick the one that matches how you use Claude (details under [Installation](#installation)):
+
+| You use | Do this |
+|---|---|
+| **Claude Desktop** | Download `mcp-for-openfilters-<version>.mcpb` from the [latest release](https://github.com/BBrunoEsteves/mcp-for-openfilters/releases/latest) and open it: Claude Desktop installs the extension. |
+| **Claude Code** | `claude mcp add --scope user mcp-for-openfilters -- uvx mcp-for-openfilters` (needs [uv](https://docs.astral.sh/uv/getting-started/installation/)), or the plugin: `/plugin marketplace add BBrunoEsteves/mcp-for-openfilters`, then `/plugin install mcp-for-openfilters@mcp-for-openfilters` |
+| **Any MCP client, or no uv** | Run `uvx mcp-for-openfilters`, `pip install mcp-for-openfilters` ([PyPI](https://pypi.org/project/mcp-for-openfilters/)), or the [installer](https://github.com/BBrunoEsteves/mcp-for-openfilters/releases/latest) from the release page, which also registers it in Claude Desktop and Claude Code. |
+
+Then, in a new chat: *"Run the MCP for OpenFilters server_info tool"*, and try *"Design an antireflection coating
+for BK7 from 430 to 670 nm with TiO2 and SiO2."* It is also listed in the
+[official MCP Registry](https://registry.modelcontextprotocol.io/) as `io.github.BBrunoEsteves/mcp-for-openfilters`.
+
 > **Built and tested with Claude.** The server follows the open MCP standard, but it has so far been
 > developed and tested only with Claude (Claude Desktop and Claude Code). Other MCP clients may work,
 > but they are untested: tool descriptions, plots and long-running jobs may behave differently there.
