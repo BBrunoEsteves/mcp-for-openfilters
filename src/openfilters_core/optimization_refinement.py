@@ -641,8 +641,8 @@ class optimization_refinement(optimization.optimization):
                                                                 # When the backside is not considered, the derivative of
                                                                 # the reflection and the transmission of the sample are
                                                                 # simply those of the front side.
-                                                                self.dR[i_target][i_parameter] = self.dR_front[i_target]
-                                                                self.dT[i_target][i_parameter] = self.dT_front[i_target]
+                                                                self.dR[i_target][i_parameter] = self.dR_front[i_target][i_parameter]
+                                                                self.dT[i_target][i_parameter] = self.dT_front[i_target][i_parameter]
                                                 else:
                                                         self.dR_front_reverse[i_target][i_parameter] = abeles.dR(self.wvls_[i_target])
                                                         self.dT_front_reverse[i_target][i_parameter] = abeles.dT(self.wvls_[i_target])
@@ -653,8 +653,8 @@ class optimization_refinement(optimization.optimization):
                                                                 # When the backside is not considered, the derivative of
                                                                 # the reflection and the transmission of the sample are
                                                                 # simply those of the front side.
-                                                                self.dR[i_target][i_parameter] = self.dR_front_reverse[i_target]
-                                                                self.dT[i_target][i_parameter] = self.dT_front_reverse[i_target]
+                                                                self.dR[i_target][i_parameter] = self.dR_front_reverse[i_target][i_parameter]
+                                                                self.dT[i_target][i_parameter] = self.dT_front_reverse[i_target][i_parameter]
                                                 self.dA[i_target][i_parameter] = abeles.dA(self.wvls_[i_target])
                                         
                                         if kind in targets.COLOR_TARGETS:
@@ -1636,8 +1636,8 @@ class optimization_refinement(optimization.optimization):
                                                                 # When the backside is not considered, the derivative of
                                                                 # the reflection and the transmission of the sample are
                                                                 # simply those of the front side.
-                                                                self.dR[i_target].append(self.dR_front[i_target])
-                                                                self.dT[i_target].append(self.dT_front[i_target])
+                                                                self.dR[i_target].append(self.dR_front[i_target][i_parameter])
+                                                                self.dT[i_target].append(self.dT_front[i_target][i_parameter])
                                                 else:
                                                         self.dR_front[i_target].append(None)
                                                         self.dT_front[i_target].append(None)
@@ -1650,8 +1650,8 @@ class optimization_refinement(optimization.optimization):
                                                                 # When the backside is not considered, the derivative of
                                                                 # the reflection and the transmission of the sample are
                                                                 # simply those of the front side.
-                                                                self.dR[i_target].append(self.dR_front_reverse[i_target])
-                                                                self.dT[i_target].append(self.dT_front_reverse[i_target])
+                                                                self.dR[i_target].append(self.dR_front_reverse[i_target][i_parameter])
+                                                                self.dT[i_target].append(self.dT_front_reverse[i_target][i_parameter])
                                                 self.dA[i_target].append(abeles.dA(self.wvls_[i_target]))
                                         
                                         if kind in targets.COLOR_TARGETS:

@@ -31,3 +31,8 @@ Source chain:
      heap memory entered the QR solve and occasionally made every thickness NaN,
      depending on what had run before in the process. The arrays now start at 0.0,
      as in the pure-Python solver (Levenberg_Marquardt.py), which never failed.
+   - **bug fix in OpenFilters' optimization** (optimization_refinement.py): for absorptance
+     (A) targets without the backside, the sample's dR and dT were set to the whole list of
+     per-parameter derivatives instead of one parameter's (8 lines, where the derivatives are
+     set up and in add_parameters), so every optimization with an A target failed ("first
+     argument must be dR"). They are now indexed by parameter, as in the R and T branches.

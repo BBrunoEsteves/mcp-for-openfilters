@@ -32,6 +32,10 @@ chat's own permission guard):
   thicknesses than target points (e.g. a single-wavelength V-coat target and three or more layers), leftover memory
   entered the solve and about 4 % of such runs ended with every thickness NaN, depending on what had run before.
   The arrays now start at zero, as in OpenFilters' pure-Python solver, which never failed (see PROVENANCE.md).
+- Fix (OpenFilters' optimizer): every optimization with an absorptance (A) target failed ("first argument must be
+  dR"): without the backside, OpenFilters set the sample's derivatives to the whole per-parameter list. In
+  campaigns the error was caught and the start returned unoptimized. Now indexed per parameter; A targets
+  optimize (checked against a brute-force scan of the reachable absorptance).
 - Fix: needles that stayed at 0 nm made OpenFilters' needle method stop "converged" after one iteration with the
   needles unused (a V-coat start: not met, chi2 11.2). Such runs restart with those layers at 1 nm (now met).
 - Fix: "optically invisible layer" warnings described the starting design, not the result (a campaign row named a

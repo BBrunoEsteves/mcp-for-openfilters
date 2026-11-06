@@ -104,8 +104,15 @@ def test_cancelled_campaign_ranks_what_finished():
         assert os.path.exists(status["outputs"]["summary_csv"]) and os.path.exists(status["outputs"]["project"])
         assert out["summary"]["partial"].startswith("the campaign was cancelled")
         assert "yield stage did not run" in out["summary"]["partial"]
+        # Identical starts cut by a 2 s time limit may stop at different designs (CPU speed), so check the rule:
+        # ranked rows are distinct designs, and every other finished row names the ranked design it copies.
+        design = {r["task"]: m.result(job_id, r["task"])["result"]["design"] for r in out["rows"]}
         ranked = [r for r in out["rows"] if "rank" in r]
-        assert len(ranked) == 1 and all(r.get("duplicate_of") == ranked[0]["task"] for r in out["rows"] if "rank" not in r)
+        assert len(out["rows"]) >= 2 and ranked
+        assert not any(jobs.same_design(design[a["task"]], design[b["task"]], a["merit_chi2"], b["merit_chi2"])
+                       for i, a in enumerate(ranked) for b in ranked[i + 1:])
+        ranked_tasks = {r["task"] for r in ranked}
+        assert all(r.get("duplicate_of") in ranked_tasks for r in out["rows"] if "rank" not in r)
     finally:
         m.shutdown()
 
@@ -138,3 +145,18 @@ def test_target_legend_names_what_is_drawn():
     assert plotting._target_note(VCOAT) == "▲ ≥ / ▼ ≤ targets"
     assert plotting._target_note([{"kind": "R", "from": 1, "to": 2, "value": 0.1}]).startswith("grey bars")
     assert plotting._target_note([]) is None
+
+
+@pytest.mark.parametrize("backside", [False, True])
+@pytest.mark.parametrize("method", ["refine", "needle"])
+def test_absorptance_targets_can_be_optimized(backside, method):
+    # Found by the plot-label audit: every optimization with an A target failed in OpenFilters itself
+    # ("first argument must be dR"; pure Python "'list' object has no attribute 'data'"): without the
+    # backside the sample's dR/dT were the per-parameter lists instead of one parameter's derivative.
+    design = {"substrate": "BK7", "consider_backside": backside,
+              "layers": _layers(("Ag", 10), ("SiO2", 50))}
+    result = engine.optimize(design, [{"kind": "A", "wavelength": 550, "value": 0.06, "tolerance": 0.001}], method,
+                             {"time_limit": 20})
+    assert result["stop_reason"] not in ("openfilters_error", "numerical_error")
+    A = engine.spectra(result["design"], ["A"], [550])["series"][0]["values"][0]
+    assert result["all_targets_met"] and abs(A - 0.06) < 1e-3

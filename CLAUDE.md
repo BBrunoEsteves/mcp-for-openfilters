@@ -262,6 +262,9 @@ until then test_compiled_solver_has_no_uninitialized_rows fails locally. Also: _
 left < 1 nm after converged/finished/stalled (falls through to the edge needle if no gain); invisible-layer
 warnings on the result (material_warnings(invisible=False) for the start); _refine_worst clipped to the target
 range; cancelled campaigns finalized partial (jobs._check_cancelled, summary.partial, status note/outputs).
+OPENFILTERS BUG 2 (found by a plot-label audit, 2026-11-06): A targets never optimized (optimization_refinement.py
+dR/dT = dR_front[i_target] list, 8 lines in setup + add_parameters; fixed in the port script MANUAL, PROVENANCE.md;
+pure Python only, no rebuild needed). Plot y labels audited over 59 plots via a matplotlib hook: all specific.
 Not done (judgment): ranking by met-between-grid, absentee-layer equivalence, default margin, yield-CI ties.
 Output schemas deliberately not added (Claude reads the text; plots can't be described; drift would break tools).
 Private-repo CI minutes cost 10x on macOS and 2x on Windows; they reset monthly (next

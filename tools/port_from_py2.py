@@ -70,6 +70,27 @@ def expand_py2_tabs(text):
 # --- targeted manual fixes: (file, old, new) --------------------------------
 
 MANUAL = [
+    # BUG FIX (original OpenFilters): for absorptance targets without the backside, the sample's dR/dT
+    # were the whole per-parameter lists instead of this parameter's derivative, so every optimization
+    # with an A target failed ("first argument must be dR"; pure Python: "'list' object has no
+    # attribute 'data'"). The R and T branches above index by i_parameter; so do these now.
+    ("optimization_refinement.py", "self.dR[i_target].append(self.dR_front[i_target])",
+     "self.dR[i_target].append(self.dR_front[i_target][i_parameter])"),
+    ("optimization_refinement.py", "self.dT[i_target].append(self.dT_front[i_target])",
+     "self.dT[i_target].append(self.dT_front[i_target][i_parameter])"),
+    ("optimization_refinement.py", "self.dR[i_target].append(self.dR_front_reverse[i_target])",
+     "self.dR[i_target].append(self.dR_front_reverse[i_target][i_parameter])"),
+    ("optimization_refinement.py", "self.dT[i_target].append(self.dT_front_reverse[i_target])",
+     "self.dT[i_target].append(self.dT_front_reverse[i_target][i_parameter])"),
+    # The same mistake where the derivatives are first set up (the lines above are add_parameters).
+    ("optimization_refinement.py", "self.dR[i_target][i_parameter] = self.dR_front[i_target]\n",
+     "self.dR[i_target][i_parameter] = self.dR_front[i_target][i_parameter]\n"),
+    ("optimization_refinement.py", "self.dT[i_target][i_parameter] = self.dT_front[i_target]\n",
+     "self.dT[i_target][i_parameter] = self.dT_front[i_target][i_parameter]\n"),
+    ("optimization_refinement.py", "self.dR[i_target][i_parameter] = self.dR_front_reverse[i_target]\n",
+     "self.dR[i_target][i_parameter] = self.dR_front_reverse[i_target][i_parameter]\n"),
+    ("optimization_refinement.py", "self.dT[i_target][i_parameter] = self.dT_front_reverse[i_target]\n",
+     "self.dT[i_target][i_parameter] = self.dT_front_reverse[i_target][i_parameter]\n"),
     ("__init__.py", '"moremath".', '"moremath",'),
     # Py2 "except OSError, WindowsError:" bound the exception to the name
     # WindowsError; the intent is clearly to catch both.
