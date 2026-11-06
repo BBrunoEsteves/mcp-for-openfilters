@@ -9,7 +9,7 @@ import random
 import numpy as np
 import pytest
 
-from openfilters_mcp import engine, server
+from mcp_for_openfilters import engine, server
 from reference_tmm import rt
 
 WVLS = list(np.arange(450.0, 851.0, 10.0))

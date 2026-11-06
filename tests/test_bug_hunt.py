@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 
-from openfilters_mcp import engine, plotting, server
+from mcp_for_openfilters import engine, plotting, server
 
 AR = {"substrate": "BK7", "center_wavelength": 550,
       "layers": [{"material": "TiO2", "thickness": 11.5}, {"material": "SiO2", "thickness": 35.0},
@@ -80,7 +80,7 @@ def test_batch_refuses_metrics_of_series_it_does_not_compute(tmp_path, monkeypat
     no_wavelength = dict(template, metrics=[{"quantity": "R", "stat": "at", "polarization": "30deg"}])
     with pytest.raises(ToolError, match="needs a wavelength"):
         asyncio.run(server.run_batch("spectrum", no_wavelength, {"q": [0.5]}))
-    from openfilters_mcp import tasks
+    from mcp_for_openfilters import tasks
     tasks.check_spectrum_metrics(dict(template, metrics=[{"quantity": "R", "stat": "at", "wavelength": 550,
                                                           "polarization": "30", "angle": 45}]))
 
@@ -89,7 +89,7 @@ def test_job_files_survive_concurrent_read_and_rewrite(tmp_path):
     # e2e: job_status failed with "Permission denied: ...job.json" while the job manager rewrote it
     # (Windows refuses to replace a file being read, and to open one being replaced, for a moment).
     import threading
-    from openfilters_mcp import jobs
+    from mcp_for_openfilters import jobs
     path = str(tmp_path / "job.json")
     jobs._write_json(path, {"n": 0})
     stop, failures = threading.Event(), []

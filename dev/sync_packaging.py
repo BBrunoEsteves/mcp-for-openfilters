@@ -14,10 +14,10 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
-from openfilters_mcp import __version__, server  # noqa: E402
+from mcp_for_openfilters import __version__, server  # noqa: E402
 
-NAME = "io.github.BBrunoEsteves/openfilters-mcp"
-REPO = "https://github.com/BBrunoEsteves/openfilters-mcp"
+NAME = "io.github.BBrunoEsteves/mcp-for-openfilters"
+REPO = "https://github.com/BBrunoEsteves/mcp-for-openfilters"
 DESCRIPTION = "Design, simulate and optimize optical thin-film coatings with the OpenFilters engine."
 AUTHOR = {"name": "Bruno Esteves"}
 KEYWORDS = ["thin film", "optical coating", "optics", "interference filter", "OpenFilters"]
@@ -30,27 +30,27 @@ def tools():
 
 def manifests(version=__version__):
     """Every distribution file, as {relative path: JSON content or text}."""
-    pin = f"openfilters-mcp=={version}"
+    pin = f"mcp-for-openfilters=={version}"
     return {
         "server.json": {
             "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
             "name": NAME,
-            "title": "OpenFilters",
+            "title": "MCP for OpenFilters",
             "description": DESCRIPTION,
             "repository": {"url": REPO, "source": "github"},
             "version": version,
-            "packages": [{"registryType": "pypi", "identifier": "openfilters-mcp", "version": version,
+            "packages": [{"registryType": "pypi", "identifier": "mcp-for-openfilters", "version": version,
                           "transport": {"type": "stdio"}}],
         },
         ".claude-plugin/marketplace.json": {
-            "name": "openfilters",
+            "name": "mcp-for-openfilters",
             "owner": AUTHOR,
-            "metadata": {"description": "OpenFilters thin-film optical coating design for Claude."},
-            "plugins": [{"name": "openfilters", "source": "./claude-plugin", "description": DESCRIPTION}],
+            "metadata": {"description": "Thin-film optical coating design for Claude, built on OpenFilters (unofficial)."},
+            "plugins": [{"name": "mcp-for-openfilters", "source": "./claude-plugin", "description": DESCRIPTION}],
         },
         "claude-plugin/.claude-plugin/plugin.json": {
-            "name": "openfilters",
-            "displayName": "OpenFilters",
+            "name": "mcp-for-openfilters",
+            "displayName": "MCP for OpenFilters",
             "version": version,
             "description": DESCRIPTION,
             "author": AUTHOR,
@@ -59,12 +59,12 @@ def manifests(version=__version__):
             "license": "GPL-2.0-or-later",
             "keywords": KEYWORDS,
             "privacyPolicyUrl": f"{REPO}/blob/main/PRIVACY.md",
-            "mcpServers": {"openfilters": {"command": "uvx", "args": [f"openfilters-mcp@{version}"]}},
+            "mcpServers": {"mcp-for-openfilters": {"command": "uvx", "args": [f"mcp-for-openfilters@{version}"]}},
         },
         "packaging/mcpb/manifest.json": {
             "manifest_version": "0.4",
-            "name": "openfilters-mcp",
-            "display_name": "OpenFilters",
+            "name": "mcp-for-openfilters",
+            "display_name": "MCP for OpenFilters",
             "version": version,
             "description": DESCRIPTION,
             "long_description": ("Thin-film optical coating design with the calculation engine of OpenFilters "
@@ -90,7 +90,7 @@ def manifests(version=__version__):
         "packaging/mcpb/pyproject.toml": (
             "# Claude Desktop installs this with uv; the server comes pre-built from PyPI.\n"
             "[project]\n"
-            'name = "openfilters-mcp-extension"\n'
+            'name = "mcp-for-openfilters-extension"\n'
             f'version = "{version}"\n'
             'requires-python = ">=3.10"\n'
             f'dependencies = ["{pin}"]\n'

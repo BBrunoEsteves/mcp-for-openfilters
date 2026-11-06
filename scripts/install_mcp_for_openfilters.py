@@ -1,22 +1,25 @@
-"""Install OpenFilters MCP for Claude Desktop and Claude Code.
+"""Install MCP for OpenFilters for Claude Desktop and Claude Code.
 
 Usage (Python 3.10 or newer, no other requirement):
 
-    python install_openfilters_mcp.py              # install from the package files next to this script
-    python install_openfilters_mcp.py --uninstall  # remove it again
+    python install_mcp_for_openfilters.py              # install from the package files next to this script
+    python install_mcp_for_openfilters.py --uninstall  # remove it again
 
 Put this script in the same folder as the downloaded package file(s)
-(openfilters_mcp-*.whl from the release page); the one matching this
+(mcp_for_openfilters-*.whl from the release page); the one matching this
 computer is chosen automatically. Alternatively --from-github downloads the
 packages with the GitHub CLI (gh, logged in with access to the repository).
 
 What it does:
   1. creates a private Python environment for the server (your own Python
-     packages are not touched): ~/.openfilters-mcp/venv
+     packages are not touched): ~/.mcp-for-openfilters/venv
   2. installs the package into it
-  3. registers the server as "openfilters" in Claude Desktop (its config file
-     is backed up first) and in Claude Code (if found)
+  3. registers the server as "mcp-for-openfilters" in Claude Desktop (its
+     config file is backed up first) and in Claude Code (if found)
   4. runs a quick self-test
+An installation of the earlier openfilters-mcp (registered as "openfilters",
+environment in ~/.openfilters-mcp) is replaced: its registrations and its
+private environment are removed; the data folder is kept and still used.
 Restart Claude Desktop afterwards (fully quit it, then reopen).
 """
 
@@ -31,9 +34,11 @@ import tempfile
 import time
 import venv
 
-NAME = "openfilters"
-REPO = "BBrunoEsteves/openfilters-mcp"
-HOME = os.path.join(os.path.expanduser("~"), ".openfilters-mcp")
+NAME = "mcp-for-openfilters"
+LEGACY_NAME = "openfilters"  # registration of openfilters-mcp (before 0.2.0)
+LEGACY_HOME = os.path.join(os.path.expanduser("~"), ".openfilters-mcp")
+REPO = "BBrunoEsteves/mcp-for-openfilters"
+HOME = os.path.join(os.path.expanduser("~"), ".mcp-for-openfilters")
 
 
 def say(message):
@@ -45,13 +50,28 @@ def fail(message):
     sys.exit(1)
 
 
+def data_folder():
+    """The data folder the server will use (as settings.default_home)."""
+    chosen = os.environ.get("MCP_FOR_OPENFILTERS_HOME") or os.environ.get("OPENFILTERS_MCP_HOME")
+    if chosen:
+        return chosen
+    user = os.path.expanduser("~")
+    path, legacy = os.path.join(user, "MCP-for-OpenFilters"), os.path.join(user, "OpenFilters-MCP")
+    return legacy if not os.path.exists(path) and os.path.isdir(legacy) else path
+
+
+def is_legacy_entry(entry):
+    """A Claude Desktop entry written for openfilters-mcp (not some other server called "openfilters")."""
+    return isinstance(entry, dict) and "openfilters-mcp" in str(entry.get("command", ""))
+
+
 def venv_python(venv_dir):
     return os.path.join(venv_dir, "Scripts", "python.exe") if os.name == "nt" else os.path.join(venv_dir, "bin", "python")
 
 
 def server_command(venv_dir):
-    return os.path.join(venv_dir, "Scripts", "openfilters-mcp.exe") if os.name == "nt" \
-        else os.path.join(venv_dir, "bin", "openfilters-mcp")
+    return os.path.join(venv_dir, "Scripts", "mcp-for-openfilters.exe") if os.name == "nt" \
+        else os.path.join(venv_dir, "bin", "mcp-for-openfilters")
 
 
 def desktop_data_dirs():
@@ -101,8 +121,8 @@ def get_packages(args, workdir):
             fail("could not download the release: " + result.stderr.strip())
         return workdir
     folder = os.path.abspath(args.packages)
-    if not glob.glob(os.path.join(folder, "openfilters_mcp-*.whl")):
-        fail(f"no openfilters_mcp-*.whl package found in {folder}.\n"
+    if not glob.glob(os.path.join(folder, "mcp_for_openfilters-*.whl")):
+        fail(f"no mcp_for_openfilters-*.whl package found in {folder}.\n"
              "Download the package for this computer from the release page into the same folder as this "
              "script, or use --from-github.")
     return folder
@@ -123,7 +143,7 @@ def install(args):
         say("Installing the package and its dependencies (about 190 MB; may take a few minutes) ...")
         # --find-links lets pip pick the package matching this Python and system.
         result = subprocess.run([python, "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
-                                 "--only-binary", "openfilters-mcp", "--find-links", packages, "openfilters-mcp"],
+                                 "--only-binary", "mcp-for-openfilters", "--find-links", packages, "mcp-for-openfilters"],
                                 capture_output=True, text=True)
         if result.returncode != 0:
             fail("pip could not install the package:\n" + result.stderr.strip() +
@@ -135,16 +155,17 @@ def install(args):
         register_desktop(command, args.desktop_config)
     if not args.no_claude_code:
         register_claude_code(command)
+    remove_legacy_venv()
     say("\nDone. Fully quit Claude Desktop (system tray / menu bar -> Quit) and reopen it, then start a new chat\n"
-        "and try: \"Run openfilters server_info\".")
-    say("Your materials, projects and results will be in " + os.path.join(os.path.expanduser("~"), "OpenFilters-MCP"))
+        "and try: \"Run the MCP for OpenFilters server_info tool\".")
+    say("Your materials, projects and results will be in " + data_folder())
 
 
 def self_test(venv_dir):
     say("Self-test ...")
     code = ("from openfilters_core import abeles, moremath\n"
             "fast = abeles.get_abeles_dll_import_success() and moremath.get_moremath_dll_import_success()\n"
-            "from openfilters_mcp import engine\n"
+            "from mcp_for_openfilters import engine\n"
             "r = engine.spectra({'substrate': 'BK7', 'layers': [['TiO2', 60], ['SiO2', 95]]}, ['R'], [550])\n"
             "print('fast core' if fast else 'pure Python (slower)', float(r['series'][0]['values'][0]))\n")
     result = subprocess.run([venv_python(venv_dir), "-c", code], capture_output=True, text=True)
@@ -180,7 +201,11 @@ def register_desktop_config(command, path):
         backup = path + time.strftime(".backup-%Y%m%d-%H%M%S")
         shutil.copy2(path, backup)
         say(f"Claude Desktop settings backed up to {backup}")
-    config.setdefault("mcpServers", {})[NAME] = {"command": command, "args": []}
+    servers = config.setdefault("mcpServers", {})
+    servers[NAME] = {"command": command, "args": []}
+    if is_legacy_entry(servers.get(LEGACY_NAME)):
+        del servers[LEGACY_NAME]
+        say(f"Removed the old \"{LEGACY_NAME}\" (openfilters-mcp) registration from Claude Desktop.")
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as outfile:
         json.dump(config, outfile, indent=2)
@@ -195,6 +220,7 @@ def register_claude_code(command):
             f"  claude mcp add --scope user {NAME} -- \"{command}\"")
         return
     subprocess.run([cli, "mcp", "remove", "--scope", "user", NAME], capture_output=True, text=True)
+    remove_legacy_claude_code(cli)
     result = subprocess.run([cli, "mcp", "add", "--scope", "user", NAME, "--", command], capture_output=True, text=True)
     if result.returncode == 0:
         say("Registered in Claude Code.")
@@ -203,27 +229,53 @@ def register_claude_code(command):
             f"  claude mcp add --scope user {NAME} -- \"{command}\"")
 
 
+def remove_legacy_claude_code(cli):
+    """Remove the "openfilters" registration of openfilters-mcp from Claude Code, if that is what it is."""
+    found = subprocess.run([cli, "mcp", "get", LEGACY_NAME], capture_output=True, text=True)
+    if found.returncode == 0 and "openfilters-mcp" in found.stdout:
+        subprocess.run([cli, "mcp", "remove", "--scope", "user", LEGACY_NAME], capture_output=True, text=True)
+        say(f"Removed the old \"{LEGACY_NAME}\" (openfilters-mcp) registration from Claude Code.")
+
+
+def remove_legacy_venv():
+    """Delete the private environment of openfilters-mcp (created by its installer, nothing else in it)."""
+    venv_dir = os.path.join(LEGACY_HOME, "venv")
+    if os.path.isfile(os.path.join(venv_dir, "pyvenv.cfg")):
+        shutil.rmtree(venv_dir, ignore_errors=True)
+        say(f"Deleted the old openfilters-mcp environment ({venv_dir}).")
+        try:
+            os.rmdir(LEGACY_HOME)
+        except OSError:
+            pass
+
+
 def uninstall(args):
     for path in [] if args.no_desktop else desktop_config_paths(args.desktop_config):
         if not os.path.exists(path):
             continue
         with open(path, encoding="utf-8") as infile:
             config = json.load(infile)
-        if NAME in config.get("mcpServers", {}):
+        servers = config.get("mcpServers", {})
+        names = [name for name in servers
+                 if name == NAME or name == LEGACY_NAME and is_legacy_entry(servers[name])]
+        if names:
             shutil.copy2(path, path + time.strftime(".backup-%Y%m%d-%H%M%S"))
-            del config["mcpServers"][NAME]
+            for name in names:
+                del servers[name]
             with open(path, "w", encoding="utf-8") as outfile:
                 json.dump(config, outfile, indent=2)
             say(f"Removed from Claude Desktop ({path}).")
     cli = find_claude_cli()
     if cli and not args.no_claude_code:
         subprocess.run([cli, "mcp", "remove", "--scope", "user", NAME], capture_output=True, text=True)
+        remove_legacy_claude_code(cli)
         say("Removed from Claude Code.")
     venv_dir = os.path.abspath(args.venv)
     if os.path.exists(venv_dir):
         shutil.rmtree(venv_dir)
         say(f"Deleted {venv_dir}.")
-    say("Your data folder (~/OpenFilters-MCP: materials, projects, results) was kept.")
+    remove_legacy_venv()
+    say(f"Your data folder ({data_folder()}: materials, projects, results) was kept.")
 
 
 def main():

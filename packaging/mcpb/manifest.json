@@ -1,8 +1,8 @@
 {
   "manifest_version": "0.4",
-  "name": "openfilters-mcp",
-  "display_name": "OpenFilters",
-  "version": "0.1.3",
+  "name": "mcp-for-openfilters",
+  "display_name": "MCP for OpenFilters",
+  "version": "0.2.0",
   "description": "Design, simulate and optimize optical thin-film coatings with the OpenFilters engine.",
   "long_description": "Thin-film optical coating design with the calculation engine of OpenFilters (S. Larouche and L. Martinu, Polytechnique Montréal): spectra, color, electric field, monitoring curves, refinement/needle/step optimization, campaigns and Monte Carlo yield, with .ofp projects that open in the OpenFilters GUI. Unofficial: not affiliated with or endorsed by the OpenFilters authors. Developed and tested with Claude (Claude Desktop and Claude Code); other MCP clients are untested.",
   "author": {
@@ -10,11 +10,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/BBrunoEsteves/openfilters-mcp"
+    "url": "https://github.com/BBrunoEsteves/mcp-for-openfilters"
   },
-  "homepage": "https://github.com/BBrunoEsteves/openfilters-mcp",
-  "documentation": "https://github.com/BBrunoEsteves/openfilters-mcp#readme",
-  "support": "https://github.com/BBrunoEsteves/openfilters-mcp/issues",
+  "homepage": "https://github.com/BBrunoEsteves/mcp-for-openfilters",
+  "documentation": "https://github.com/BBrunoEsteves/mcp-for-openfilters#readme",
+  "support": "https://github.com/BBrunoEsteves/mcp-for-openfilters/issues",
   "license": "GPL-2.0-or-later",
   "keywords": [
     "thin film",
@@ -24,7 +24,7 @@
     "OpenFilters"
   ],
   "privacy_policies": [
-    "https://github.com/BBrunoEsteves/openfilters-mcp/blob/main/PRIVACY.md"
+    "https://github.com/BBrunoEsteves/mcp-for-openfilters/blob/main/PRIVACY.md"
   ],
   "server": {
     "type": "uv",

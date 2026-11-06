@@ -10,7 +10,7 @@ import math
 import numpy as np
 import pytest
 
-from openfilters_mcp import engine
+from mcp_for_openfilters import engine
 
 NS, NH, NL, NA = 1.52, 2.35, 1.46, 1.38  # substrate, high, low, MgF2-like
 W0 = 550.0
@@ -18,7 +18,7 @@ W0 = 550.0
 
 @pytest.fixture(autouse=True)
 def materials(tmp_path, monkeypatch):
-    monkeypatch.setenv("OPENFILTERS_MCP_HOME", str(tmp_path))
+    monkeypatch.setenv("MCP_FOR_OPENFILTERS_HOME", str(tmp_path))
     engine.catalog(reload=True)
     for name, n in (("S", NS), ("H", NH), ("L", NL), ("A", NA), ("V", NA * math.sqrt(NS))):
         engine.add_material(name, "constant", n=n)

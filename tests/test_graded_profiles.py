@@ -9,7 +9,7 @@ IdealMixture's 1.5-2.4).
 import numpy as np
 import pytest
 
-from openfilters_mcp import engine
+from mcp_for_openfilters import engine
 
 BASE = {"substrate": "FusedSilica", "incident_medium": "void", "center_wavelength": 1064}
 C3_SIDE_LOBE = 0.53
@@ -18,7 +18,7 @@ AIR_FLOOR = 0.04  # air / n = 1.5 interface left unmatched (IdealMixture stops a
 
 @pytest.fixture(autouse=True)
 def data_home(tmp_path, monkeypatch):
-    monkeypatch.setenv("OPENFILTERS_MCP_HOME", str(tmp_path))
+    monkeypatch.setenv("MCP_FOR_OPENFILTERS_HOME", str(tmp_path))
     engine.catalog(reload=True)
 
 

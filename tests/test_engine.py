@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from openfilters_mcp import engine
+from mcp_for_openfilters import engine
 from reference_tmm import rt
 
 MIRROR = {"substrate": "FusedSilica", "center_wavelength": 1064,
@@ -14,7 +14,7 @@ TARGETS = [{"kind": "R", "from": 1000, "to": 1130, "step": 5, "value": 0.995, "t
 
 @pytest.fixture(autouse=True)
 def data_home(tmp_path, monkeypatch):
-    monkeypatch.setenv("OPENFILTERS_MCP_HOME", str(tmp_path))
+    monkeypatch.setenv("MCP_FOR_OPENFILTERS_HOME", str(tmp_path))
     engine.catalog(reload=True)
 
 
@@ -261,7 +261,7 @@ def test_catalog_sees_materials_written_by_other_processes():
     """Regression: each worker kept the catalog it loaded first, so materials
     added (or overwritten) by another process were missing or stale."""
     import os
-    from openfilters_mcp import settings
+    from mcp_for_openfilters import settings
     engine.catalog()  # cached in this process
     path = os.path.join(settings.materials_dir(), "ExternalMat.mat")
     with open(path, "w", encoding="latin-1") as f:  # written behind the cache's back

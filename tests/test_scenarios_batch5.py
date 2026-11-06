@@ -6,7 +6,7 @@ Batch 4 failures are covered by test_scenarios_batch4.py; these are the new find
 
 import pytest
 
-from openfilters_mcp import engine, jobs
+from mcp_for_openfilters import engine, jobs
 
 DISPERSIVE = {"substrate": "FusedSilica", "center_wavelength": 800,
               "formula": {"formula": "(HL)^10 H", "materials": {"H": "TiO2", "L": "SiO2"}}}
@@ -14,7 +14,7 @@ DISPERSIVE = {"substrate": "FusedSilica", "center_wavelength": 800,
 
 @pytest.fixture(autouse=True)
 def data_home(tmp_path, monkeypatch):
-    monkeypatch.setenv("OPENFILTERS_MCP_HOME", str(tmp_path))
+    monkeypatch.setenv("MCP_FOR_OPENFILTERS_HOME", str(tmp_path))
     engine.catalog(reload=True)
 
 

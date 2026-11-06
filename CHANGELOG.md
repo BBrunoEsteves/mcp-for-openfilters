@@ -1,6 +1,15 @@
 # Changelog
 
-## 0.1.3 — unreleased
+## 0.2.0 — unreleased
+
+Renamed to **MCP for OpenFilters** (package and command `mcp-for-openfilters`, module `mcp_for_openfilters`,
+registration `mcp-for-openfilters`), so that the connector is not mistaken for part of OpenFilters itself.
+Environment variables are now `MCP_FOR_OPENFILTERS_HOME` / `_WORKERS` and the default data folder
+`~/MCP-for-OpenFilters`; the old variables and an existing `~/OpenFilters-MCP` folder still work. The installer
+removes the old `openfilters` registration (only one that points to openfilters-mcp) and its environment.
+0.1.3 was never released; its changes follow.
+
+## 0.1.3 — not released (included in 0.2.0)
 
 From a scenario run through the live tools (2026-10-30):
 

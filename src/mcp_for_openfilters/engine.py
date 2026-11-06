@@ -29,7 +29,7 @@ from openfilters_core import project as of_project
 from openfilters_core import stack as of_stack
 from openfilters_core import targets as of_targets
 from openfilters_core import version as of_version
-from openfilters_mcp import __version__
+from mcp_for_openfilters import __version__
 from openfilters_core.definitions import BACK, FRONT, P, S, UNPOLARIZED
 from openfilters_core.optimization_needles import optimization_needles
 from openfilters_core.optimization_refinement import THICKNESS, optimization_refinement
@@ -1954,7 +1954,7 @@ def _fixed_layer_merges(layers):
 def optimization_description(method, initial_chi2, chi2, all_pass, min_thickness, stop):
     """One line saying how a design was made, stored as the filter description in .ofp projects
     (the format has no fields for the optimizer settings)."""
-    text = (f"Optimized with OpenFilters MCP {__version__} on {time.strftime('%Y-%m-%d')}: {method} method, "
+    text = (f"Optimized with MCP for OpenFilters {__version__} on {time.strftime('%Y-%m-%d')}: {method} method, "
             f"merit chi2 {initial_chi2:.6g} -> {chi2:.6g}, all targets met: {'yes' if all_pass else 'no'}")
     if min_thickness:
         text += (f", minimum layer thickness {min_thickness:g} nm enforced by the connector "

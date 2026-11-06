@@ -7,6 +7,12 @@ calculation engine built in. Nothing else to install besides Python.
 
 ## Changes in this version
 
+**New name: MCP for OpenFilters** (was *openfilters-mcp*), so that it is not mistaken for part of OpenFilters
+itself; it remains an unofficial connector built on the OpenFilters calculation engine. The package and command
+are now `mcp-for-openfilters` and the server is registered as `mcp-for-openfilters`. Upgrading: fully quit
+Claude Desktop and Claude Code, then run the new installer; it removes the old `openfilters` registration and
+environment. Your data folder (`~/OpenFilters-MCP`) is kept and still used.
+
 **Fixes (please update):**
 
 - Optimizations could return broken designs (every thickness "NaN") that were reported as meeting all targets
@@ -53,22 +59,23 @@ calculation engine built in. Nothing else to install besides Python.
    - **macOS:** `brew install python` (or from python.org; Apple's built-in `python3` 3.9 is too old)
    - **Linux (Debian/Ubuntu):** `sudo apt install python3 python3-venv`
 2. Download into one folder:
-   - `install_openfilters_mcp.py`
+   - `install_mcp_for_openfilters.py`
    - the package for your computer. File names say which: `cp312` = Python 3.12;
      `win_amd64` = Windows, `macosx_11_0_arm64` = Mac with Apple Silicon, `manylinux` = Linux.
      If unsure, download all `.whl` files: the right one is picked automatically.
 3. In a terminal, in that folder, run:
-   - **Windows:** `py install_openfilters_mcp.py`
-   - **macOS/Linux:** `python3 install_openfilters_mcp.py`
+   - **Windows:** `py install_mcp_for_openfilters.py`
+   - **macOS/Linux:** `python3 install_mcp_for_openfilters.py`
 
    The installer creates a private Python environment, installs the
    package, registers it in Claude Desktop and Claude Code, and runs a self-test.
-4. Fully quit Claude Desktop and reopen it. In a new chat: *"Run openfilters server_info."*
+4. Fully quit Claude Desktop and reopen it. In a new chat: *"Run the MCP for OpenFilters server_info tool."*
 
 To update an existing installation, fully quit Claude Desktop and Claude Code first (the installer
 replaces the environment the running server uses), then run the installer again.
 
-To remove it: `py install_openfilters_mcp.py --uninstall` (`python3` on macOS/Linux) (your data folder is kept).
+To remove it: `py install_mcp_for_openfilters.py --uninstall` (`python3` on macOS/Linux) (your data folder is kept).
 
-Your materials, projects and results are stored in `~/OpenFilters-MCP`. `.ofp` project files open in
+Your materials, projects and results are stored in `~/MCP-for-OpenFilters` (or in `~/OpenFilters-MCP` if you
+used an earlier version). `.ofp` project files open in
 the OpenFilters GUI.

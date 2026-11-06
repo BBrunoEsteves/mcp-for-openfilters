@@ -1,13 +1,13 @@
 {
-  "name": "openfilters",
-  "displayName": "OpenFilters",
-  "version": "0.1.3",
+  "name": "mcp-for-openfilters",
+  "displayName": "MCP for OpenFilters",
+  "version": "0.2.0",
   "description": "Design, simulate and optimize optical thin-film coatings with the OpenFilters engine.",
   "author": {
     "name": "Bruno Esteves"
   },
-  "homepage": "https://github.com/BBrunoEsteves/openfilters-mcp",
-  "repository": "https://github.com/BBrunoEsteves/openfilters-mcp",
+  "homepage": "https://github.com/BBrunoEsteves/mcp-for-openfilters",
+  "repository": "https://github.com/BBrunoEsteves/mcp-for-openfilters",
   "license": "GPL-2.0-or-later",
   "keywords": [
     "thin film",
@@ -16,12 +16,12 @@
     "interference filter",
     "OpenFilters"
   ],
-  "privacyPolicyUrl": "https://github.com/BBrunoEsteves/openfilters-mcp/blob/main/PRIVACY.md",
+  "privacyPolicyUrl": "https://github.com/BBrunoEsteves/mcp-for-openfilters/blob/main/PRIVACY.md",
   "mcpServers": {
-    "openfilters": {
+    "mcp-for-openfilters": {
       "command": "uvx",
       "args": [
-        "openfilters-mcp@0.1.3"
+        "mcp-for-openfilters@0.2.0"
       ]
     }
   }

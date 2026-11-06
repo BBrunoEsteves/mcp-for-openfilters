@@ -10,7 +10,7 @@ import os
 import numpy as np
 import pytest
 
-from openfilters_mcp import engine
+from mcp_for_openfilters import engine
 
 RUGATE = os.path.join(os.path.dirname(engine.__file__), "..", "openfilters_core", "examples", "Rugate.ofp")
 BASE = {"substrate": "FusedSilica", "incident_medium": "void", "center_wavelength": 1064}
@@ -20,7 +20,7 @@ CONSTANTS = {"n140": 1.4, "n14431": 1.4431, "n14536": 1.4536, "n15675": 1.5675, 
 
 @pytest.fixture(autouse=True)
 def data_home(tmp_path, monkeypatch):
-    monkeypatch.setenv("OPENFILTERS_MCP_HOME", str(tmp_path))
+    monkeypatch.setenv("MCP_FOR_OPENFILTERS_HOME", str(tmp_path))
     engine.catalog(reload=True)
     for name, n in CONSTANTS.items():
         engine.add_material(name, "constant", n=n)
@@ -29,7 +29,7 @@ def data_home(tmp_path, monkeypatch):
 @pytest.fixture
 def server(data_home):
     # The server's worker processes keep the data folder they started with: start them for this test's.
-    from openfilters_mcp import server
+    from mcp_for_openfilters import server
 
     def shutdown():
         if server._interactive is not None:
@@ -198,7 +198,7 @@ def test_b4_graded_layer_summary():
 
 def test_b3_index_profile_draws_graded_layers(server, monkeypatch):
     import asyncio
-    from openfilters_mcp import plotting
+    from mcp_for_openfilters import plotting
     drawn = {}
     original = plotting.index_profile
 
@@ -254,7 +254,7 @@ def test_f5_mixture_steps():
 
 
 def test_b9_spectrum_plot_names_the_quantity(monkeypatch):
-    from openfilters_mcp import plotting
+    from mcp_for_openfilters import plotting
     labels = []
     original = plotting._figure
     monkeypatch.setattr(plotting, "_figure", lambda title, x, y: labels.append((title, y)) or original(title, x, y))

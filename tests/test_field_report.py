@@ -6,7 +6,7 @@ Item numbers (B1, B2, ...) are those of the report.
 import pytest
 
 from openfilters_core import project as of_project
-from openfilters_mcp import engine
+from mcp_for_openfilters import engine
 
 TIO2_TABLE = [[520, 2.37248, 6e-06], [526, 2.36666, 5e-06], [532, 2.36111, 4e-06], [538, 2.35583, 3e-06],
               [544, 2.35079, 2e-06]]
@@ -14,7 +14,7 @@ TIO2_TABLE = [[520, 2.37248, 6e-06], [526, 2.36666, 5e-06], [532, 2.36111, 4e-06
 
 @pytest.fixture(autouse=True)
 def data_home(tmp_path, monkeypatch):
-    monkeypatch.setenv("OPENFILTERS_MCP_HOME", str(tmp_path))
+    monkeypatch.setenv("MCP_FOR_OPENFILTERS_HOME", str(tmp_path))
     engine.catalog(reload=True)
 
 
@@ -216,7 +216,7 @@ def test_best_design_snapshot_keeps_layer_flags():
 
 def test_b8_batch_peak_metrics():
     # The thermal analysis needed 27 separate compute_spectrum calls: run_batch had no peak metrics.
-    from openfilters_mcp import tasks
+    from mcp_for_openfilters import tasks
     engine.add_material("ITO_t", "table", table=ITO_TABLE)
     design = {"substrate": "FusedSilica", "center_wavelength": 532, "formula": {
         "formula": "(HL)^5 H LL H (LH)^5 I", "materials": {"H": "TiO2", "L": "SiO2", "I": "ITO_t"}}}
@@ -232,7 +232,7 @@ def test_b8_batch_peak_metrics():
 
 
 def test_b8_batch_can_sweep_whole_designs():
-    from openfilters_mcp import server
+    from mcp_for_openfilters import server
     designs = [{"name": "order 1", "substrate": "BK7", "layers": [{"material": "TiO2", "thickness": 60}]},
                {"substrate": "BK7", "layers": [{"material": "SiO2", "thickness": 90}]}]
     cases = server._expand({"design": "$design", "quantities": ["T"]}, {"design": designs}, "grid")
@@ -244,7 +244,7 @@ def test_b8_batch_can_sweep_whole_designs():
 
 def test_n3_removed_layers_are_named_and_reach_job_rows():
     # A heater layer disappeared and the only sign was the layer count (25 -> 24).
-    from openfilters_mcp import jobs
+    from mcp_for_openfilters import jobs
     design = {"substrate": "BK7", "center_wavelength": 550,
               "formula": {"formula": "0.25H 0.25L H L", "materials": {"H": "TiO2", "L": "SiO2"}}}
     targets = [{"kind": "R", "from": 420, "to": 680, "step": 10, "value": 0, "tolerance": 0.01}]
@@ -259,7 +259,7 @@ def test_n3_removed_layers_are_named_and_reach_job_rows():
 
 def test_n1_server_info_reports_the_build():
     import asyncio
-    from openfilters_mcp import server
+    from mcp_for_openfilters import server
     info = asyncio.run(server.server_info())
     assert info["build"] and info["started"]  # a git commit in a checkout, "release" when installed
 

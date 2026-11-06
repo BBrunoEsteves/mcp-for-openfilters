@@ -1,4 +1,4 @@
-"""OpenFilters MCP server.
+"""MCP for OpenFilters server.
 
 Claude orchestrates; the server computes. Short calculations run in a small
 interactive worker pool; campaigns run as background jobs across all cores,
@@ -27,7 +27,8 @@ from mcp.types import ToolAnnotations
 from . import __version__, engine, jobs, plotting, refractiveindex, settings, tasks
 
 INSTRUCTIONS = """\
-OpenFilters thin-film optical coating design (Larouche & Martinu, Polytechnique Montréal).
+MCP for OpenFilters: thin-film optical coating design with the calculation engine of OpenFilters
+(Larouche & Martinu, Polytechnique Montréal; this connector is unofficial, not made by them).
 
 Conventions: wavelengths and thicknesses in nm; angles in degrees; R, T, A are fractions 0-1;
 phase in degrees, GD in fs, GDD in fs^2; complex index N = n - ik (k >= 0 absorbs).
@@ -119,7 +120,7 @@ get_results plot the design(s) against the targets automatically. Results, CSV t
 .ofp projects (openable in the OpenFilters GUI) are written to the data folder shown by server_info.
 """
 
-mcp = MCPServer("OpenFilters", instructions=INSTRUCTIONS, version=__version__)
+mcp = MCPServer("MCP for OpenFilters", instructions=INSTRUCTIONS, version=__version__)
 
 _interactive = None
 _manager = None

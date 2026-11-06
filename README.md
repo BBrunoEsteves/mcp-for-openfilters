@@ -1,5 +1,8 @@
-# OpenFilters MCP
-<!-- mcp-name: io.github.BBrunoEsteves/openfilters-mcp -->
+# MCP for OpenFilters
+<!-- mcp-name: io.github.BBrunoEsteves/mcp-for-openfilters -->
+
+*An unofficial connector built on OpenFilters: not affiliated with or endorsed by the OpenFilters authors or
+Polytechnique Montréal.*
 
 Design, simulate and optimize **optical thin-film coatings** by talking to Claude.
 
@@ -10,9 +13,6 @@ compact summaries; the server does the computing — in parallel on all CPU core
 results to disk, including `.ofp` project files that open in the OpenFilters GUI.
 
 > Claude orchestrates; the server computes. One tool call can launch a whole campaign.
-
-*Unofficial: this project is not affiliated with or endorsed by the OpenFilters authors or Polytechnique
-Montréal.*
 
 > **Built and tested with Claude.** The server follows the open MCP standard, but it has so far been
 > developed and tested only with Claude (Claude Desktop and Claude Code). Other MCP clients may work,
@@ -54,14 +54,14 @@ built in (the OpenFilters GUI is only useful to open the `.ofp` files).
 
 ### With the installer (recommended)
 
-From the [release page](https://github.com/BBrunoEsteves/openfilters-mcp/releases), download
-`install_openfilters_mcp.py` and the package for your computer (or all `.whl` files) into one folder, then:
+From the [release page](https://github.com/BBrunoEsteves/mcp-for-openfilters/releases), download
+`install_mcp_for_openfilters.py` and the package for your computer (or all `.whl` files) into one folder, then:
 
 ```bash
-python install_openfilters_mcp.py
+python install_mcp_for_openfilters.py
 ```
 
-It creates a private environment in `~/.openfilters-mcp`, installs the package, registers the server in
+It creates a private environment in `~/.mcp-for-openfilters`, installs the package, registers the server in
 Claude Desktop (backing up its settings) and Claude Code, and runs a self-test. Then fully quit and reopen
 Claude Desktop. `--uninstall` removes it; `--from-github` downloads the packages with the GitHub CLI.
 
@@ -71,21 +71,29 @@ the compiled fast core included: no compiler needed.
 ### Manually
 
 ```bash
-pip install openfilters_mcp-<version>-<python>-<platform>.whl
-claude mcp add --scope user openfilters -- openfilters-mcp
+pip install mcp_for_openfilters-<version>-<python>-<platform>.whl
+claude mcp add --scope user mcp-for-openfilters -- mcp-for-openfilters
 ```
 
 For Claude Desktop, add to `claude_desktop_config.json` (Settings → Developer → Edit config):
 
 ```json
-{"mcpServers": {"openfilters": {"command": "<full path to openfilters-mcp>"}}}
+{"mcpServers": {"mcp-for-openfilters": {"command": "<full path to mcp-for-openfilters>"}}}
 ```
+
+### Upgrading from openfilters-mcp (before 0.2.0)
+
+The project was called *openfilters-mcp* until version 0.2.0. Fully quit Claude Desktop and Claude Code,
+then run the new installer: it removes the old `openfilters` registration and the old private environment
+(`~/.openfilters-mcp`) and registers `mcp-for-openfilters`. Your data folder `~/OpenFilters-MCP` is kept
+and still used, and the old `OPENFILTERS_MCP_*` environment variables are still read. After a manual
+install, `pip uninstall openfilters-mcp` and replace the `openfilters` entry in your Claude settings.
 
 ### From source (development)
 
 ```bash
-git clone https://github.com/BBrunoEsteves/openfilters-mcp
-cd openfilters-mcp
+git clone https://github.com/BBrunoEsteves/mcp-for-openfilters
+cd mcp-for-openfilters
 python -m venv .venv
 .venv/Scripts/pip install -e ".[dev]"      # .venv/bin/pip on macOS/Linux
 python dev/fetch_compiled.py               # fast C++ core compiled by GitHub Actions (or build it locally)
@@ -95,8 +103,11 @@ python dev/fetch_compiled.py               # fast C++ core compiled by GitHub Ac
 
 | Environment variable | Default | Meaning |
 |---|---|---|
-| `OPENFILTERS_MCP_HOME` | `~/OpenFilters-MCP` | data folder: `materials/`, `jobs/`, `projects/`, `outputs/` |
-| `OPENFILTERS_MCP_WORKERS` | CPU count − 1 | parallel worker processes for jobs |
+| `MCP_FOR_OPENFILTERS_HOME` | `~/MCP-for-OpenFilters` | data folder: `materials/`, `jobs/`, `projects/`, `outputs/` |
+| `MCP_FOR_OPENFILTERS_WORKERS` | CPU count − 1 | parallel worker processes for jobs |
+
+The names used before 0.2.0 (`OPENFILTERS_MCP_HOME`, `OPENFILTERS_MCP_WORKERS`) still work, and an existing
+`~/OpenFilters-MCP` folder is used when `~/MCP-for-OpenFilters` does not exist.
 
 ## Conventions
 

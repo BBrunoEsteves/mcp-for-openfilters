@@ -7,7 +7,7 @@ import math
 
 import pytest
 
-from openfilters_mcp import engine
+from mcp_for_openfilters import engine
 
 AR_TARGETS = [{"kind": "R", "angle": angle, "from": 500, "to": 700, "step": 5, "value": 0.002,
                "inequality": "<=", "tolerance": 0.0001} for angle in (0, 35)]
@@ -15,7 +15,7 @@ AR_TARGETS = [{"kind": "R", "angle": angle, "from": 500, "to": 700, "step": 5, "
 
 @pytest.fixture(autouse=True)
 def data_home(tmp_path, monkeypatch):
-    monkeypatch.setenv("OPENFILTERS_MCP_HOME", str(tmp_path))
+    monkeypatch.setenv("MCP_FOR_OPENFILTERS_HOME", str(tmp_path))
     engine.catalog(reload=True)
     engine.add_material("TiO2", "constant", n=2.0)
 
@@ -83,7 +83,7 @@ def test_needle_survives_openfilters_removing_every_layer():
 
 
 def test_campaign_top_designs_are_distinct():
-    from openfilters_mcp import jobs
+    from mcp_for_openfilters import jobs
 
     def design(*thicknesses):
         return {"layers": [{"material": m, "thickness": t} for m, t in zip(["TiO2", "SiO2"] * 3, thicknesses)]}
@@ -102,7 +102,7 @@ def test_campaign_top_designs_are_distinct():
 
 def test_campaign_ranks_by_yield_when_a_yield_stage_ran():
     # Campaign 2026-10-24: a nominal pass with 0 % yield ranked above a 1e-7 miss with 26.5 %.
-    from openfilters_mcp import jobs
+    from mcp_for_openfilters import jobs
     rows = [{"task": 0, "all_targets_met": True, "merit_chi2": 0.0, "yield": 0.0},
             {"task": 1, "all_targets_met": False, "merit_chi2": 1e-9, "yield": 0.265},
             {"task": 2, "all_targets_met": False, "merit_chi2": 5.0},  # outside the yield stage
@@ -181,7 +181,7 @@ def test_unknown_design_keys_are_refused_with_a_suggestion():
 
 def test_refractiveindex_page_ids_may_contain_spaces(monkeypatch):
     # 495 catalogue pages have spaces ("main/MgF2/nk/Rodriguez-de Marcos") and were refused.
-    from openfilters_mcp import refractiveindex
+    from mcp_for_openfilters import refractiveindex
     fetched = []
     monkeypatch.setattr(refractiveindex, "_fetch", lambda path: fetched.append(path) or "DATA: []")
     refractiveindex.load_page("main/MgF2/nk/Rodriguez-de Marcos")

@@ -6,7 +6,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
-from openfilters_mcp import engine as e  # noqa: E402
+from mcp_for_openfilters import engine as e  # noqa: E402
 
 AR = {"center_wavelength": 550, "formula": {"formula": "0.25H 0.25L H L", "materials": {"H": "TiO2", "L": "SiO2"}},
       "substrate": "BK7"}

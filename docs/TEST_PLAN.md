@@ -1,4 +1,4 @@
-# OpenFilters MCP — test plan
+# MCP for OpenFilters — test plan
 
 Two parts:
 
@@ -16,7 +16,7 @@ Run both before each release and after any change to the server.
 ```
 
 It uses a temporary data folder (your materials, jobs and projects are not touched) and the same
-`openfilters-mcp.exe` that Claude Desktop runs. `--offline` skips the two refractiveindex.info checks.
+`mcp-for-openfilters.exe` that Claude Desktop runs. `--offline` skips the two refractiveindex.info checks.
 Expected: `44 passed, 0 failed`, in about 20 s. The unit tests (`.venv/Scripts/python -m pytest tests -q`)
 cover the engine in more depth.
 
@@ -29,7 +29,7 @@ do not depend on your material library.
 
 ### A. Set-up
 
-- [ ] **A1. Version.** *"Run openfilters server_info."*
+- [ ] **A1. Version.** *"Run the MCP for OpenFilters server_info tool."*
   Pass if: version **0.1.3**; `cpp_core_abeles` and `cpp_core_moremath` are **true**.
 - [ ] **A2. Leftover test material.** *"List my materials named TiO2 with their source and n at 550 nm."*
   Pass if: `TiO2` shows **built-in**, n ≈ 2.4–2.6. If it shows **user** with n = 2.0 (from an earlier test),
@@ -128,7 +128,7 @@ do not depend on your material library.
 
 ### H. Prompts and resources (Claude Desktop menus)
 
-- [ ] **H1.** **+** → Connectors → *Add from openfilters*: the 5 workflows, *Design and target format*,
+- [ ] **H1.** **+** → Connectors → *Add from mcp-for-openfilters*: the 5 workflows, *Design and target format*,
   *Available materials* and **7** separate *OpenFilters example: …* entries are listed.
 - [ ] **H2.** Attach *OpenFilters example: Edge* and ask *"Explain this design and plot its spectrum."*
   Pass if: only the Edge project is attached (not a list of all examples); a spectrum plot path is given.
@@ -153,7 +153,7 @@ do not depend on your material library.
 
 ### K. Claude Code (optional)
 
-- [ ] **K1.** In Claude Code, type `/` and look for `mcp__openfilters__design_mirror` and the other four
+- [ ] **K1.** In Claude Code, type `/` and look for `mcp__mcp-for-openfilters__design_mirror` and the other four
   workflows; run one. Pass if: it runs like H3.
 
 ## Running the plan with a Claude chat
@@ -163,7 +163,7 @@ Do A2 first, use two chats (A–D, then E–J) so a long run does not fill one c
 and paste:
 
 > You are testing the OpenFilters connector. Work through sections A to D of this test plan in order (skip
-> H and K). For each test: run the request exactly as written, using the openfilters tools, then report the
+> H and K). For each test: run the request exactly as written, using the MCP for OpenFilters tools, then report the
 > test ID, PASS or FAIL against its "Pass if" line, and the evidence: the actual values, the tool(s) you
 > called, and for any FAIL the full tool result. Do not fix or retry failures beyond what the request asks;
 > just report them. End with a summary table.
@@ -174,5 +174,5 @@ generous, which is why the evidence matters more than the verdict.
 ## Recording results
 
 Note the version (A1), the date, the Claude app and model, and for each failed check what Claude replied
-(the job folder in `~/OpenFilters-MCP/jobs` helps reproduce optimizer problems). Real failures belong in
+(the job folder in `~/MCP-for-OpenFilters/jobs` helps reproduce optimizer problems). Real failures belong in
 `tests/test_regressions.py` once fixed.

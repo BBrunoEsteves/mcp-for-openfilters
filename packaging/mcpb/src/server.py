@@ -1,6 +1,6 @@
 """Entry point of the Claude Desktop extension: the server itself comes from the
-openfilters-mcp package on PyPI (pre-built with the compiled core)."""
+mcp-for-openfilters package on PyPI (pre-built with the compiled core)."""
 
-from openfilters_mcp.server import main
+from mcp_for_openfilters.server import main
 
 main()

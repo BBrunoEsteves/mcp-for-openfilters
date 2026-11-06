@@ -16,6 +16,6 @@ body:
   - type: input
     attributes:
       label: Versions
-      description: Output of "Run openfilters server_info" (version, compiled core), operating system, Claude app.
+      description: Output of "Run the MCP for OpenFilters server_info tool" (version, compiled core), operating system, Claude app.
     validations:
       required: true

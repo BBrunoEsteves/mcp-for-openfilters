@@ -1,7 +1,7 @@
 """Acceptance test of the whole connector, as Claude uses it.
 
 Starts the server over stdio exactly like Claude Desktop and Claude Code do (by default the
-openfilters-mcp executable next to this Python), calls every tool, prompt and resource, and
+mcp-for-openfilters executable next to this Python), calls every tool, prompt and resource, and
 checks the answers against known values: closed-form results with dispersionless test
 materials, regressions from real sessions, and consistency between tools. Prints PASS/FAIL
 per check and exits with 1 if any check failed.
@@ -29,7 +29,7 @@ from mcp.client.stdio import stdio_client
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "src"))
-from openfilters_mcp import __version__  # noqa: E402
+from mcp_for_openfilters import __version__  # noqa: E402
 
 # Dispersionless test materials, so textbook formulas give exact answers.
 NS, NH, NL, NA = 1.52, 2.35, 1.46, 1.38
@@ -357,17 +357,17 @@ async def run(c, k, offline):
 async def main():
     sys.stdout.reconfigure(errors="replace")  # a non-ASCII character must not crash the report
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    exe = os.path.join(os.path.dirname(sys.executable), "openfilters-mcp" + (".exe" if os.name == "nt" else ""))
+    exe = os.path.join(os.path.dirname(sys.executable), "mcp-for-openfilters" + (".exe" if os.name == "nt" else ""))
     parser.add_argument("--command", default=exe if os.path.isfile(exe) else None,
                         help="server executable (default: the one Claude Desktop runs)")
     parser.add_argument("--home", help="data folder (default: a new temporary folder)")
     parser.add_argument("--offline", action="store_true", help="skip refractiveindex.info checks")
     args = parser.parse_args()
     home = args.home or tempfile.mkdtemp(prefix="openfilters-acceptance-")
-    command, cmd_args = (args.command, []) if args.command else (sys.executable, ["-m", "openfilters_mcp"])
+    command, cmd_args = (args.command, []) if args.command else (sys.executable, ["-m", "mcp_for_openfilters"])
     log_path = os.path.join(tempfile.gettempdir(), "openfilters-acceptance-server.log")
     print(f"server: {command} {' '.join(cmd_args)}\ndata folder: {home}\nserver log: {log_path}\n")
-    params = StdioServerParameters(command=command, args=cmd_args, env=dict(os.environ, OPENFILTERS_MCP_HOME=home))
+    params = StdioServerParameters(command=command, args=cmd_args, env=dict(os.environ, MCP_FOR_OPENFILTERS_HOME=home))
     k = Checks()
     t0 = time.time()
     try:

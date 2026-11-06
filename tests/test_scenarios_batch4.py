@@ -7,7 +7,7 @@ import time
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 
-from openfilters_mcp import engine, jobs, server, settings, tasks
+from mcp_for_openfilters import engine, jobs, server, settings, tasks
 
 BANDPASS = {"substrate": "BK7", "center_wavelength": 532,
             "formula": {"formula": "(HL)^4 HH (LH)^4", "materials": {"H": "TiO2", "L": "SiO2"}}}
@@ -15,7 +15,7 @@ BANDPASS = {"substrate": "BK7", "center_wavelength": 532,
 
 @pytest.fixture(autouse=True)
 def data_home(tmp_path, monkeypatch):
-    monkeypatch.setenv("OPENFILTERS_MCP_HOME", str(tmp_path))
+    monkeypatch.setenv("MCP_FOR_OPENFILTERS_HOME", str(tmp_path))
     engine.catalog(reload=True)
 
 

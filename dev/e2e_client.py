@@ -29,8 +29,8 @@ def show(name, result, limit=600):
 
 
 async def main(home):
-    env = dict(os.environ, OPENFILTERS_MCP_HOME=home, PYTHONPATH=os.path.join(ROOT, "src"))
-    params = StdioServerParameters(command=sys.executable, args=["-m", "openfilters_mcp"], env=env)
+    env = dict(os.environ, MCP_FOR_OPENFILTERS_HOME=home, PYTHONPATH=os.path.join(ROOT, "src"))
+    params = StdioServerParameters(command=sys.executable, args=["-m", "mcp_for_openfilters"], env=env)
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()

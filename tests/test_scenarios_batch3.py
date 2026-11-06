@@ -5,7 +5,7 @@ import asyncio
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 
-from openfilters_mcp import engine, jobs, plotting, server
+from mcp_for_openfilters import engine, jobs, plotting, server
 
 MIRROR = {"substrate": "FusedSilica", "center_wavelength": 1064,
           "formula": {"formula": "(HL)^15 H", "materials": {"H": "TiO2", "L": "SiO2"}}}
@@ -15,7 +15,7 @@ HR_TARGET = [{"kind": "R", "from": 1000, "to": 1130, "step": 5, "value": 0.999, 
 
 @pytest.fixture(autouse=True)
 def data_home(tmp_path, monkeypatch):
-    monkeypatch.setenv("OPENFILTERS_MCP_HOME", str(tmp_path))
+    monkeypatch.setenv("MCP_FOR_OPENFILTERS_HOME", str(tmp_path))
     engine.catalog(reload=True)
 
 

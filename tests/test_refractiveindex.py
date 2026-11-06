@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import yaml
 
-from openfilters_mcp import engine, refractiveindex as rii
+from mcp_for_openfilters import engine, refractiveindex as rii
 
 MALITSON = yaml.safe_load("""
 DATA:
@@ -85,7 +85,7 @@ def test_page_ids_cannot_leave_the_database():
 
 @pytest.mark.skipif(not os.environ.get("OPENFILTERS_TEST_NETWORK"), reason="set OPENFILTERS_TEST_NETWORK=1 to run")
 def test_live_database(tmp_path, monkeypatch):
-    monkeypatch.setenv("OPENFILTERS_MCP_HOME", str(tmp_path))
+    monkeypatch.setenv("MCP_FOR_OPENFILTERS_HOME", str(tmp_path))
     assert any(e["page"] == "main/SiO2/nk/Malitson" for e in rii.search("SiO2", limit=200)["results"])
     rows = rii.to_table(rii.load_page("main/SiO2/nk/Malitson"))
     assert np.interp(587.6, [r[0] for r in rows], [r[1] for r in rows]) == pytest.approx(1.4585, abs=2e-4)

@@ -10,7 +10,7 @@ import os
 
 import pytest
 
-from openfilters_mcp import engine
+from mcp_for_openfilters import engine
 
 # The field report's TiO2 table (520-544 nm): OpenFilters extrapolated it to n = 4.90 at 1550 nm, 2.55 at 400 nm.
 TIO2_TABLE = [[520, 2.37248, 6e-06], [526, 2.36666, 5e-06], [532, 2.36111, 4e-06], [538, 2.35583, 3e-06],
@@ -20,14 +20,14 @@ DESIGN = {"substrate": "FusedSilica", "center_wavelength": 532, "layers": [{"mat
 
 @pytest.fixture(autouse=True)
 def data_home(tmp_path, monkeypatch):
-    monkeypatch.setenv("OPENFILTERS_MCP_HOME", str(tmp_path))
+    monkeypatch.setenv("MCP_FOR_OPENFILTERS_HOME", str(tmp_path))
     engine.catalog(reload=True)
     engine.add_material("tTiO2", "table", table=TIO2_TABLE)
 
 
 @pytest.fixture
 def server(data_home, monkeypatch):
-    from openfilters_mcp import server
+    from mcp_for_openfilters import server
 
     def shutdown():
         if server._interactive is not None:
@@ -118,7 +118,7 @@ def test_long_work_waits_for_a_choice():
 
 
 def test_server_refuses_long_jobs_before_creating_them(server):
-    from openfilters_mcp import settings
+    from mcp_for_openfilters import settings
     targets = [{"kind": "R", "from": 520, "to": 700, "step": 10, "value": 0.1, "inequality": "<="}]
     with pytest.raises(server.ToolError, match="Ask the user"):
         asyncio.run(server.optimize_design(DESIGN, targets, method="refine", wait_seconds=0))

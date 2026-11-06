@@ -11,7 +11,7 @@ import os
 import numpy as np
 import pytest
 
-from openfilters_mcp import engine
+from mcp_for_openfilters import engine
 
 BASE = {"substrate": "FusedSilica", "incident_medium": "void", "center_wavelength": 1064}
 TARGETS = [{"kind": "R", "from": 1000, "to": 1130, "step": 5, "value": 0.99, "inequality": ">="},
@@ -21,14 +21,14 @@ TARGETS = [{"kind": "R", "from": 1000, "to": 1130, "step": 5, "value": 0.99, "in
 
 @pytest.fixture(autouse=True)
 def data_home(tmp_path, monkeypatch):
-    monkeypatch.setenv("OPENFILTERS_MCP_HOME", str(tmp_path))
+    monkeypatch.setenv("MCP_FOR_OPENFILTERS_HOME", str(tmp_path))
     engine.catalog(reload=True)
 
 
 @pytest.fixture
 def server(data_home, monkeypatch):
     # Worker processes keep the data folder they started with: start them (and the job manager) for this test's.
-    from openfilters_mcp import server
+    from mcp_for_openfilters import server
 
     def shutdown():
         if server._interactive is not None:
@@ -158,7 +158,7 @@ def test_n3_bad_error_models_are_refused(kwargs, message):
 
 
 def _jobs(server):
-    from openfilters_mcp import settings
+    from mcp_for_openfilters import settings
     folder = settings.jobs_dir()
     return os.listdir(folder) if os.path.isdir(folder) else []
 

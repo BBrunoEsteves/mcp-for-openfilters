@@ -1,4 +1,4 @@
-# OpenFilters MCP — scenario tests
+# MCP for OpenFilters — scenario tests
 
 Realistic coating tasks for a Claude chat to run on its own and report on. Where a result is known
 (closed forms, or values computed with the connector's engine from built-in materials), it is given as a
@@ -20,7 +20,7 @@ Five batches, one chat each (a batch takes 20–40 minutes):
 2. Attach this file (**+** → *Upload or add files*) and paste:
 
 > You are testing the OpenFilters connector. Run every scenario of **Batch N** of this file in order, using
-> the openfilters tools. For each scenario, report:
+> the MCP for OpenFilters tools. For each scenario, report:
 > - the scenario ID and a verdict: **PASS** (meets every check), **FAIL** (a check fails because of the
 >   connector or its results), **LIMIT** (the request is physically impossible or out of reach and the
 >   connector says so correctly), or **BLOCKED** (you could not run it, e.g. a permission prompt);

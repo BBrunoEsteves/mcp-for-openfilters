@@ -6,7 +6,7 @@ Reference values: section 2.7 of that report, which emulated the model by hand w
 
 import pytest
 
-from openfilters_mcp import engine, thermal
+from mcp_for_openfilters import engine, thermal
 
 # The report's ITO (Annex B, 520-544 nm); ITO sits at a node of the field and barely moves the peak.
 ITO_TABLE = [[520, 1.88396, 0.007682], [526, 1.87719, 0.007843], [532, 1.87045, 0.008011],
@@ -36,7 +36,7 @@ def report_thermal(tio2_dn_dT):
 
 @pytest.fixture(autouse=True)
 def data_home(tmp_path, monkeypatch):
-    monkeypatch.setenv("OPENFILTERS_MCP_HOME", str(tmp_path))
+    monkeypatch.setenv("MCP_FOR_OPENFILTERS_HOME", str(tmp_path))
     engine.catalog(reload=True)
     engine.add_material("tITO_0", "table", table=ITO_TABLE)
 
@@ -109,7 +109,7 @@ def test_perturbations_leave_the_library_alone():
 @pytest.fixture
 def fresh_pool():
     # The server's worker processes keep the data folder they started with: start them for this test's.
-    from openfilters_mcp import server
+    from mcp_for_openfilters import server
 
     def shutdown():
         if server._interactive is not None:

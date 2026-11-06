@@ -1,14 +1,14 @@
 {
-  "name": "openfilters",
+  "name": "mcp-for-openfilters",
   "owner": {
     "name": "Bruno Esteves"
   },
   "metadata": {
-    "description": "OpenFilters thin-film optical coating design for Claude."
+    "description": "Thin-film optical coating design for Claude, built on OpenFilters (unofficial)."
   },
   "plugins": [
     {
-      "name": "openfilters",
+      "name": "mcp-for-openfilters",
       "source": "./claude-plugin",
       "description": "Design, simulate and optimize optical thin-film coatings with the OpenFilters engine."
     }
