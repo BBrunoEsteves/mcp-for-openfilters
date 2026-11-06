@@ -81,7 +81,7 @@ variable PUBLISH_PYPI is "true". A clean `uv pip install` of the sdist with no c
 Pending, in order: email Larouche/Martinu (draft in email_draft_larouche_martinu.md, gitignored); make the repo
 public; PyPI trusted publisher (project mcp-for-openfilters, workflow ci.yml, environment pypi) then set
 PUBLISH_PYPI; README install via uvx; MCP Registry (mcp-publisher, server.json); pack the .mcpb (needs the PyPI
-package) and submit to Claude's directory; README plugin install line (`/plugin install openfilters --marketplace BBrunoEsteves/mcp-for-openfilters`) once public.
+package) and submit to Claude's directory; README plugin install line (`/plugin install mcp-for-openfilters@mcp-for-openfilters`, marketplace added with `/plugin marketplace add BBrunoEsteves/mcp-for-openfilters`) once public.
 Plugin + marketplace validated 2026-10-30 (`claude plugin validate .`; the CLI is bundled in
 %LOCALAPPDATA%\Claude-Data\claude_*\claude-code\*\*\claude.exe, not on PATH).
 Reinstalling the editable package while Claude runs the server fails (mcp-for-openfilters.exe locked) and leaves a
