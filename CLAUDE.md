@@ -90,6 +90,13 @@ needs a paid Claude plan and GitHub connected on claude.ai). Pre-submission chec
 words describing everything it runs/downloads, license, exact pins (uvx pkg==x.y.z); a uvx package is always held
 for a human reviewer. The .mcpb is built (Docker node:22, npx mcpb pack packaging/mcpb), tested 49/49 via its
 mcp_config, and attached to the release by hand; not built by CI yet.
+SUBMITTED to Claude's directory 2026-11-06 as a Plugin bundle (claude.ai/directory/manage, the owner's Claude
+account): BBrunoEsteves/mcp-for-openfilters, path claude-plugin, tracks main (scheduled checks every ~6 h, no
+webhook), auto-publish on after first approval. Validation passed with 1 policy hold (pinned uvx package -> human
+reviewer); warnings only for directory-read fields and the missing uv.lock (needed only for the Verified badge).
+Listed for Claude Code and Cowork (local stdio servers are not offered in the chat apps). The listing icon is taken
+once, from claude-plugin/.claude-plugin/icon.png; plugin.json version must rise with every release.
+Never put personal email addresses in this public repository.
 Pending, in order: pack the .mcpb (needs the PyPI
 package) and submit to Claude's directory; README plugin install line (`/plugin install mcp-for-openfilters@mcp-for-openfilters`, marketplace added with `/plugin marketplace add BBrunoEsteves/mcp-for-openfilters`) once public.
 Plugin + marketplace validated 2026-10-30 (`claude plugin validate .`; the CLI is bundled in
