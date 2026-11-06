@@ -1,6 +1,6 @@
 # Claude Desktop installs this with uv; the server comes pre-built from PyPI.
 [project]
 name = "mcp-for-openfilters-extension"
-version = "0.2.1"
+version = "0.2.2"
 requires-python = ">=3.10"
-dependencies = ["mcp-for-openfilters==0.2.1"]
+dependencies = ["mcp-for-openfilters==0.2.2"]

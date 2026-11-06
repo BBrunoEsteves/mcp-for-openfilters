@@ -95,11 +95,22 @@ jobs:
           /tmp/sdist-env/bin/pip install dist/*.tar.gz
           cd /tmp && /tmp/sdist-env/bin/python -c "from mcp_for_openfilters import engine; s = engine.acceleration_status(); print(s); assert all(s.values())"
       - name: Validate the Claude Desktop extension manifest
-        run: npx -y @anthropic-ai/mcpb validate packaging/mcpb/manifest.json
+        run: npx -y @anthropic-ai/mcpb@2.1.2 validate packaging/mcpb/manifest.json
+      # The one-click Claude Desktop extension: a small wrapper that installs the PyPI package with uv.
+      - name: Pack the Claude Desktop extension
+        run: |
+          version=$(python -c "import json; print(json.load(open('packaging/mcpb/manifest.json'))['version'])")
+          mkdir -p mcpb-out
+          npx -y @anthropic-ai/mcpb@2.1.2 pack packaging/mcpb "mcpb-out/mcp-for-openfilters-${version}.mcpb"
+          ls -l mcpb-out
       - uses: actions/upload-artifact@v4
         with:
           name: sdist
           path: dist/*.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mcpb
+          path: mcpb-out/*.mcpb
 
   release:
     name: GitHub release
@@ -118,6 +129,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: sdist
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: mcpb
           path: dist
       - name: Create the release with all packages and the installer
         env:

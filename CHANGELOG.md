@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2 — 2026-11-06
+
+Packaging only, no change to the calculations: every release now includes the one-click Claude Desktop extension
+(`.mcpb`), built by CI; the README opens with a Quick start for each Claude app; the plugin folder has its own README,
+icon and listing links, and pins the server with `uvx mcp-for-openfilters==<version>`.
+
 ## 0.2.1 — 2026-11-06
 
 First release on PyPI: `uvx mcp-for-openfilters` runs it with nothing to download by hand. The repository is

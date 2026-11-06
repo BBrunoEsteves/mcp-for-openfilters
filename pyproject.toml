@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-for-openfilters"
-version = "0.2.1"
+version = "0.2.2"
 description = "MCP server that lets Claude design and optimize optical thin-film coatings with OpenFilters"
 readme = "README.md"
 requires-python = ">=3.10"
