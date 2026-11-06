@@ -1578,20 +1578,27 @@ METHODS = {"refine": optimization_refinement, "needle": optimization_needles, "s
 
 STALL_ITERATIONS = 10000  # iterations at one layer count ...
 STALL_GAIN = 0.01  # ... that must lower the merit by at least this fraction, or the run has stalled
+STUCK_ITERATIONS = 2000  # needle method: a free layer still under STALLED_LAYER_NM after this many iterations
 
 
 class _Monitor:
     """Implements OpenFilters' parent.update() hook: enforces limits, detects
     add/remove cycles and stalls, remembers the best design seen, reports progress."""
 
-    def __init__(self, optimizer, deadline, max_layers, max_total_thickness, progress):
-        self.optimizer, self.progress = optimizer, progress
+    def __init__(self, optimizer, deadline, max_layers, max_total_thickness, progress, needles=False):
+        self.optimizer, self.progress, self.needles = optimizer, progress, needles
         self.deadline = deadline
         self.max_layers, self.max_total_thickness = max_layers, max_total_thickness
         self.stop_reason, self.last_report = None, 0.0
         self.best_chi2, self.best_layers = float("inf"), None
         self.states, self.last_count = {}, None
         self.checkpoint = None  # (layer count, iteration, chi2) at the start of the current stall window
+        self.count_start = None  # (layer count, first iteration seen at that count)
+
+    def checkpoint_start(self, count, iteration):
+        if self.count_start is None or self.count_start[0] != count or iteration < self.count_start[1]:
+            self.count_start = (count, iteration)
+        return self.count_start[1]
 
     def update(self, working, status):
         o = self.optimizer
@@ -1629,6 +1636,13 @@ class _Monitor:
             if chi2 > self.checkpoint[2] * (1 - STALL_GAIN):
                 self.stop_reason = self.stop_reason or "stalled"
             self.checkpoint = (count, iteration, chi2)
+        # The direct sign of that crawl: a needle still under 1 nm long after it was inserted. The merit
+        # window alone missed it on Linux and macOS (CI 2026-11-06: 31-60 s instead of 0.4 s), where the
+        # crawl happened to gain a little more than 1 % per window. _continue_needles restarts it at 1 nm.
+        if self.needles and iteration - self.checkpoint_start(count, iteration) >= STUCK_ITERATIONS and any(
+                not isinstance(t, list) and t < STALLED_LAYER_NM and o.refine_thickness[i]
+                for i, t in enumerate(o.front_thickness[:count])):
+            self.stop_reason = self.stop_reason or "stalled"
         if self.deadline and time.time() > self.deadline:
             self.stop_reason = "time_limit"
         elif self.max_layers and count > self.max_layers:
@@ -1847,7 +1861,8 @@ def _run(method, design, targets, options, deadline, progress, floor=None, info=
         o.set_nb_steps(int(options["nb_steps"]))
     if method in ("needle", "step"):
         o.set_automatic_mode(bool(options.get("automatic", True)))
-    monitor = _Monitor(o, deadline, options.get("max_layers"), options.get("max_total_thickness"), progress)
+    monitor = _Monitor(o, deadline, options.get("max_layers"), options.get("max_total_thickness"), progress,
+                       needles=method == "needle")
     o.set_parent(monitor)
     try:
         o.go()
@@ -1894,10 +1909,10 @@ STOP_REASONS = {
     "time_limit": "the time limit was reached; the best design so far is returned",
     "cycling": "the needle/step method kept returning to the same designs, so it was stopped; the best design "
                "seen is returned (normal near an optimum)",
-    "stalled": "the merit improved by less than 1 % over 10000 iterations, so the optimizer was stopped (OpenFilters "
-               "sets no iteration limit and would crawl on for minutes); the needle method restarts such a run with "
-               "the layers stuck near 0 nm at 1 nm, and this is where that stopped helping; the best design seen is "
-               "returned",
+    "stalled": "the optimizer was stopped because it had stalled: its merit improved by less than 1 % over 10000 "
+               "iterations, or a needle stayed under 1 nm for 2000 iterations (OpenFilters sets no iteration limit "
+               "and would crawl on for minutes); the needle method restarts such a run with those layers at 1 nm, "
+               "and this is where that stopped helping; the best design seen is returned",
     "max_layers": "the needle method's next step would have exceeded max_layers; the best design within the limit is "
                   "returned (each needle adds 2 layers and one step can insert several needles, so the result can "
                   "stop several layers below the limit)",

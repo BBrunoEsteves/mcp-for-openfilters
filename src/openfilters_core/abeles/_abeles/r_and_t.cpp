@@ -130,10 +130,10 @@ void calculate_r_and_t(const r_and_t_type *r_and_t, const matrices_type *M, cons
 	for (i = 0; i < r_and_t->wvls->length; i++)
 	{
 		N_square = N_m->N[i]*N_m->N[i];
-		N_m_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+		N_m_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 		N_m_p = N_square/N_m_s;
 		N_square = N_s->N[i]*N_s->N[i];
-		N_s_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+		N_s_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 		N_s_p = N_square/N_s_s;
 
 		/* Correct branch selection. */
@@ -192,10 +192,10 @@ void calculate_r_and_t_reverse(const r_and_t_type *r_and_t, const matrices_type 
 	for (i = 0; i < r_and_t->wvls->length; i++)
 	{
 		N_square = N_m->N[i]*N_m->N[i];
-		N_m_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+		N_m_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 		N_m_p = N_square/N_m_s;
 		N_square = N_s->N[i]*N_s->N[i];
-		N_s_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+		N_s_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 		N_s_p = N_square/N_s_s;
 
 		/* Correct branch selection. */

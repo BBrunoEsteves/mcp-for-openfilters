@@ -252,11 +252,11 @@ void calculate_dMi_needles(const needle_matrices_type *dMi, const N_type *N, con
 		k = two_pi/dMi->wvls->wvls[i_wvl];
 
 		N_square = N->N[i_wvl]*N->N[i_wvl];
-		N_s = sqrt(N_square-sin2_theta_0->sin2[i_wvl]);
+		N_s = principal_sqrt(N_square-sin2_theta_0->sin2[i_wvl]);
 		N_p = N_square/N_s;
 
 		N_n_square = N_n->N[i_wvl]*N_n->N[i_wvl];
-		N_n_s = sqrt(N_n_square-sin2_theta_0->sin2[i_wvl]);
+		N_n_s = principal_sqrt(N_n_square-sin2_theta_0->sin2[i_wvl]);
 		N_n_p = N_n_square/N_n_s;
 
 		/* Correct branch selection. */
@@ -371,7 +371,7 @@ void calculate_dMi_needles_fast(const needle_matrices_type **dMi, const N_type *
 		k = two_pi/dMi[0]->wvls->wvls[i_wvl];
 
 		N_square = N->N[i_wvl]*N->N[i_wvl];
-		N_s = sqrt(N_square-sin2_theta_0->sin2[i_wvl]);
+		N_s = principal_sqrt(N_square-sin2_theta_0->sin2[i_wvl]);
 		N_p = N_square/N_s;
 
 		/* Correct branch selection. */
@@ -389,7 +389,7 @@ void calculate_dMi_needles_fast(const needle_matrices_type **dMi, const N_type *
 		for (i_mat = 0; i_mat < length; i_mat++)
 		{
 			N_n_square = N_n[i_mat]->N[i_wvl]*N_n[i_mat]->N[i_wvl];
-			N_n_s = sqrt(N_n_square-sin2_theta_0->sin2[i_wvl]);
+			N_n_s = principal_sqrt(N_n_square-sin2_theta_0->sin2[i_wvl]);
 			N_n_p = N_n_square/N_n_s;
 
 			/* Correct branch selection. */
@@ -491,7 +491,7 @@ void calculate_dMi_steps(const needle_matrices_type *dMi, const N_type *N, const
 		k = two_pi/dMi->wvls->wvls[i_wvl];
 
 		N_square = N->N[i_wvl]*N->N[i_wvl];
-		N_s = sqrt(N_square-sin2_theta_0->sin2[i_wvl]);
+		N_s = principal_sqrt(N_square-sin2_theta_0->sin2[i_wvl]);
 		N_p = N_square/N_s;
 
 		/* Correct branch selection. */

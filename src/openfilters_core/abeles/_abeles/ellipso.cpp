@@ -201,7 +201,7 @@ void calculate_Psi_and_Delta_with_backside(const Psi_and_Delta_type *Psi_and_Del
 	for (i = 0; i < Psi_and_Delta->wvls->length; i++)
 	{
 		N_s_square = N_s->N[i]*N_s->N[i];
-		N_s_s = sqrt(N_s_square-sin2_theta_0->sin2[i]);
+		N_s_s = principal_sqrt(N_s_square-sin2_theta_0->sin2[i]);
 
 		/* Correct branch selection. */
 		if (real(N_s_s) == 0.0)

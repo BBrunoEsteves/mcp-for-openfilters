@@ -188,7 +188,7 @@ void set_matrices(const matrices_type *M, const N_type *N, const double thicknes
 		k = two_pi/M->wvls->wvls[i];
 
 		N_square = N->N[i]*N->N[i];
-		N_s = sqrt(N_square-sin2_theta_0->sin2[i]);
+		N_s = principal_sqrt(N_square-sin2_theta_0->sin2[i]);
 		N_p = N_square/N_s;
 
 		/* Correct branch selection. */

@@ -111,9 +111,9 @@ void calculate_r_phase(const spectrum_type *phase, const matrices_type *M, const
 		for (i = 0; i < phase->wvls->length; i++)
 		{
 			N_square = N_m->N[i]*N_m->N[i];
-			N_m_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_m_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 			N_square = N_s->N[i]*N_s->N[i];
-			N_s_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_s_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 
 			/* Correct branch selection. */
 			if (real(N_m_s) == 0.0)
@@ -141,9 +141,9 @@ void calculate_r_phase(const spectrum_type *phase, const matrices_type *M, const
 		for (i = 0; i < phase->wvls->length; i++)
 		{
 			N_square = N_m->N[i]*N_m->N[i];
-			N_m_p = N_square/sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_m_p = N_square/principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 			N_square = N_s->N[i]*N_s->N[i];
-			N_s_p = N_square/sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_s_p = N_square/principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 
 			/* Correct branch selection. */
 			if (real(N_m_p) == 0.0)
@@ -206,9 +206,9 @@ void calculate_t_phase(const spectrum_type *phase, const matrices_type *M, const
 		for (i = 0; i < phase->wvls->length; i++)
 		{
 			N_square = N_m->N[i]*N_m->N[i];
-			N_m_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_m_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 			N_square = N_s->N[i]*N_s->N[i];
-			N_s_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_s_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 
 			/* Correct branch selection. */
 			if (real(N_m_s) == 0.0)
@@ -235,9 +235,9 @@ void calculate_t_phase(const spectrum_type *phase, const matrices_type *M, const
 		for (i = 0; i < phase->wvls->length; i++)
 		{
 			N_square = N_m->N[i]*N_m->N[i];
-			N_m_p = N_square/sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_m_p = N_square/principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 			N_square = N_s->N[i]*N_s->N[i];
-			N_s_p = N_square/sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_s_p = N_square/principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 
 			/* Correct branch selection. */
 			if (real(N_m_p) == 0.0)

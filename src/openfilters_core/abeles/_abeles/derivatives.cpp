@@ -356,7 +356,7 @@ void set_dMi_thickness(const matrices_type *dMi, const N_type *N, const double t
 		k = two_pi/dMi->wvls->wvls[i];
 
 		N_square = N->N[i]*N->N[i];
-		N_s = sqrt(N_square-sin2_theta_0->sin2[i]);
+		N_s = principal_sqrt(N_square-sin2_theta_0->sin2[i]);
 		N_p = N_square/N_s;
 
 		/* Correct branch selection. */
@@ -414,7 +414,7 @@ void set_dMi_index(const matrices_type *dMi, const N_type *N, const N_type *dN, 
 		k = two_pi/dMi->wvls->wvls[i];
 
 		N_square = N->N[i]*N->N[i];
-		N_s = sqrt(N_square-sin2_theta_0->sin2[i]);
+		N_s = principal_sqrt(N_square-sin2_theta_0->sin2[i]);
 		N_p = N_square/N_s;
 
 		/* Correct branch selection. */
@@ -487,7 +487,7 @@ void set_dMi_index_with_constant_OT(const matrices_type *dMi, const N_type *N, c
 
 	n_0 = real(N_0);
 	k_0 = -imag(N_0);
-	N_s_0 = sqrt(N_0*N_0-sin2_theta_0_0);
+	N_s_0 = principal_sqrt(N_0*N_0-sin2_theta_0_0);
 
 	/* Correct branch selection. */
 	if (real(N_s_0) == 0.0)
@@ -504,7 +504,7 @@ void set_dMi_index_with_constant_OT(const matrices_type *dMi, const N_type *N, c
 		k = two_pi/dMi->wvls->wvls[i];
 
 		N_square = N->N[i]*N->N[i];
-		N_s = sqrt(N_square-sin2_theta_0->sin2[i]);
+		N_s = principal_sqrt(N_square-sin2_theta_0->sin2[i]);
 		N_p = N_square/N_s;
 
 		/* Correct branch selection. */
@@ -592,10 +592,10 @@ void calculate_psi_matrices(const psi_matrices_type *psi, const r_and_t_type *r_
 	for (i = 0; i < psi->wvls->length; i++)
 	{
 		N_square = N_m->N[i]*N_m->N[i];
-		N_m_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+		N_m_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 		N_m_p = N_square/N_m_s;
 		N_square = N_s->N[i]*N_s->N[i];
-		N_s_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+		N_s_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 		N_s_p = N_square/N_s_s;
 
 		/* Correct branch selection. */
@@ -682,10 +682,10 @@ void calculate_psi_matrices_reverse(const psi_matrices_type *psi, const r_and_t_
 	for (i = 0; i < psi->wvls->length; i++)
 	{
 		N_square = N_m->N[i]*N_m->N[i];
-		N_m_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+		N_m_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 		N_m_p = N_square/N_m_s;
 		N_square = N_s->N[i]*N_s->N[i];
-		N_s_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+		N_s_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 		N_s_p = N_square/N_s_s;
 
 		/* Correct branch selection. */
@@ -928,9 +928,9 @@ void calculate_dT(const spectrum_type *dT, const r_and_t_type *dr_and_dt, const 
 		for (i = 0; i < dT->wvls->length; i++)
 		{
 			N_square = N_i->N[i]*N_i->N[i];
-			N_i_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_i_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 			N_square = N_e->N[i]*N_e->N[i];
-			N_e_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_e_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 
 			dT->data[i] = 2.0*(real(N_e_s)/real(N_i_s))*real(conj(r_and_t->t_s[i])*dr_and_dt->t_s[i]);
 		}
@@ -940,9 +940,9 @@ void calculate_dT(const spectrum_type *dT, const r_and_t_type *dr_and_dt, const 
 		for (i = 0; i < dT->wvls->length; i++)
 		{
 			N_square = N_i->N[i]*N_i->N[i];
-			N_i_p = N_square/sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_i_p = N_square/principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 			N_square = N_e->N[i]*N_e->N[i];
-			N_e_p = N_square/sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_e_p = N_square/principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 
 			dT->data[i] = 2.0*(real(N_e_p)/real(N_i_p))*real(conj(r_and_t->t_p[i])*dr_and_dt->t_p[i]);
 		}
@@ -955,10 +955,10 @@ void calculate_dT(const spectrum_type *dT, const r_and_t_type *dr_and_dt, const 
 		for (i = 0; i < dT->wvls->length; i++)
 		{
 			N_square = N_i->N[i]*N_i->N[i];
-			N_i_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_i_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 			N_i_p = N_square/N_i_s;
 			N_square = N_e->N[i]*N_e->N[i];
-			N_e_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_e_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 			N_e_p = N_square/N_e_s;
 
 			dT->data[i] = 2.0*(real(N_e_s)/real(N_i_s))*real(conj(r_and_t->t_s[i])*dr_and_dt->t_s[i])*sin_Psi_square + 2.0*(real(N_e_p)/real(N_i_p))*real(conj(r_and_t->t_p[i])*dr_and_dt->t_p[i])*(1.0-sin_Psi_square);
@@ -1028,7 +1028,7 @@ void calculate_dR_with_backside(const spectrum_type *dR, const spectrum_type *T_
 	for (i = 0; i < dR->wvls->length; i++)
 	{
 		N_square = N_s->N[i]*N_s->N[i];
-		N_s_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+		N_s_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 
 		/* Correct branch selection. */
 		if (real(N_s_s) == 0.0)
@@ -1078,7 +1078,7 @@ void calculate_dR_with_backside_2(const spectrum_type *dR, const spectrum_type *
 	for (i = 0; i < dR->wvls->length; i++)
 	{
 		N_square = N_s->N[i]*N_s->N[i];
-		N_s_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+		N_s_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 
 		/* Correct branch selection. */
 		if (real(N_s_s) == 0.0)
@@ -1128,7 +1128,7 @@ void calculate_dT_with_backside(const spectrum_type *dT, const spectrum_type *T_
 	for (i = 0; i < dT->wvls->length; i++)
 	{
 		N_square = N_s->N[i]*N_s->N[i];
-		N_s_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+		N_s_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 
 		/* Correct branch selection. */
 		if (real(N_s_s) == 0.0)
@@ -1179,7 +1179,7 @@ void calculate_dT_with_backside_2(const spectrum_type *dT, const spectrum_type *
 	for (i = 0; i < dT->wvls->length; i++)
 	{
 		N_square = N_s->N[i]*N_s->N[i];
-		N_s_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+		N_s_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 
 		/* Correct branch selection. */
 		if (real(N_s_s) == 0.0)
@@ -1227,9 +1227,9 @@ void calculate_dr_phase(const spectrum_type *dphase, const matrices_type *M, con
 		for (i = 0; i < dphase->wvls->length; i++)
 		{
 			N_square = N_m->N[i]*N_m->N[i];
-			N_m_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_m_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 			N_square = N_s->N[i]*N_s->N[i];
-			N_s_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_s_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 
 			/* Correct branch selection. */
 			if (real(N_m_s) == 0.0)
@@ -1261,9 +1261,9 @@ void calculate_dr_phase(const spectrum_type *dphase, const matrices_type *M, con
 		for (i = 0; i < dphase->wvls->length; i++)
 		{
 			N_square = N_m->N[i]*N_m->N[i];
-			N_m_p = N_square/sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_m_p = N_square/principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 			N_square = N_s->N[i]*N_s->N[i];
-			N_s_p = N_square/sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_s_p = N_square/principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 
 			/* Correct branch selection. */
 			if (real(N_m_p) == 0.0)
@@ -1327,9 +1327,9 @@ void calculate_dt_phase(const spectrum_type *dphase, const matrices_type *M, con
 		for (i = 0; i < dphase->wvls->length; i++)
 		{
 			N_square = N_m->N[i]*N_m->N[i];
-			N_m_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_m_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 			N_square = N_s->N[i]*N_s->N[i];
-			N_s_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_s_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 
 			/* Correct branch selection. */
 			if (real(N_m_s) == 0.0)
@@ -1359,9 +1359,9 @@ void calculate_dt_phase(const spectrum_type *dphase, const matrices_type *M, con
 		for (i = 0; i < dphase->wvls->length; i++)
 		{
 			N_square = N_m->N[i]*N_m->N[i];
-			N_m_p = N_square/sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_m_p = N_square/principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 			N_square = N_s->N[i]*N_s->N[i];
-			N_s_p = N_square/sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_s_p = N_square/principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 
 			/* Correct branch selection. */
 			if (real(N_m_p) == 0.0)

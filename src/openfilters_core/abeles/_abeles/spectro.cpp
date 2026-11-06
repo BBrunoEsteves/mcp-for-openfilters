@@ -171,9 +171,9 @@ void calculate_T(const spectrum_type *T, const r_and_t_type *r_and_t, const N_ty
 		for (i = 0; i < T->wvls->length; i++)
 		{
 			N_square = N_i->N[i]*N_i->N[i];
-			N_i_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_i_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 			N_square = N_e->N[i]*N_e->N[i];
-			N_e_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_e_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 
 			T->data[i] = (real(N_e_s)/real(N_i_s)) * norm(r_and_t->t_s[i]);
 		}
@@ -183,9 +183,9 @@ void calculate_T(const spectrum_type *T, const r_and_t_type *r_and_t, const N_ty
 		for (i = 0; i < T->wvls->length; i++)
 		{
 			N_square = N_i->N[i]*N_i->N[i];
-			N_i_p = N_square/sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_i_p = N_square/principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 			N_square = N_e->N[i]*N_e->N[i];
-			N_e_p = N_square/sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_e_p = N_square/principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 
 			T->data[i] = (real(N_e_p)/real(N_i_p)) * norm(r_and_t->t_p[i]);
 		}
@@ -199,10 +199,10 @@ void calculate_T(const spectrum_type *T, const r_and_t_type *r_and_t, const N_ty
 		for (i = 0; i < T->wvls->length; i++)
 		{
 			N_square = N_i->N[i]*N_i->N[i];
-			N_i_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_i_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 			N_i_p = N_square/N_i_s;
 			N_square = N_e->N[i]*N_e->N[i];
-			N_e_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_e_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 			N_e_p = N_square/N_e_s;
 
 			T->data[i] = ((real(N_e_s)/real(N_i_s)) * norm(r_and_t->t_s[i])) * sin_Psi_square\
@@ -242,7 +242,7 @@ void calculate_R_with_backside(const spectrum_type *R, const spectrum_type *T_fr
 	for (i = 0; i < R->wvls->length; i++)
 	{
 		N_square = N_s->N[i]*N_s->N[i];
-		N_s_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+		N_s_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 
 		/* Correct branch selection. */
 		if (real(N_s_s) == 0.0)
@@ -284,7 +284,7 @@ void calculate_T_with_backside(const spectrum_type *T, const spectrum_type *T_fr
 	for (i = 0; i < T->wvls->length; i++)
 	{
 		N_square = N_s->N[i]*N_s->N[i];
-		N_s_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+		N_s_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 
 		/* Correct branch selection. */
 		if (real(N_s_s) == 0.0)

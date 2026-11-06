@@ -283,6 +283,39 @@ def port_moremath_cpp(directory):
         (directory / "_moremath.def").read_text().replace("init_moremath", "PyInit__moremath"))
 
 
+PRINCIPAL_SQRT = '''
+/* PORTABILITY FIX (MCP for OpenFilters): OpenFilters corrects the branch of sqrt(N^2 - sin2) with "if the
+ * real part is 0, negate", which assumes sqrt of a negative real returns +i*sqrt (MSVC, glibc). libc++
+ * (macOS) honours a -0 imaginary part and returns -i*sqrt, so beyond the critical angle the correction chose
+ * the growing wave (R 0.99930 instead of 0.99958 from the substrate side at 50 deg). This returns +i*sqrt for
+ * every negative real argument, as on Windows and Linux; every other argument is std::sqrt's. */
+inline std::complex<double> principal_sqrt(const std::complex<double> &z)
+{
+	if (z.imag() == 0.0 && z.real() < 0.0) return std::complex<double>(0.0, std::sqrt(-z.real()));
+	return std::sqrt(z);
+}
+'''
+
+
+def port_abeles_cpp(directory):
+    """Make the branch of the complex square roots the same on every platform (see PRINCIPAL_SQRT)."""
+    header = directory / "_abeles.h"
+    text = header.read_text(encoding="latin-1")
+    if "#include <complex>\n" not in text:
+        raise SystemExit("_abeles.h: #include <complex> not found")
+    header.write_text(text.replace("#include <complex>\n", "#include <complex>\n" + PRINCIPAL_SQRT, 1),
+                      encoding="latin-1", newline="\n")
+    total = 0
+    for path in directory.glob("*.cpp"):
+        text = path.read_text(encoding="latin-1")
+        text, count = re.subn(r"\bsqrt\((N_square|N_0\*N_0|N_s_square|N_n_square)", r"principal_sqrt(\1", text)
+        if count:
+            total += count
+            path.write_text(text, encoding="latin-1", newline="\n")
+    if total < 50:
+        raise SystemExit(f"_abeles: expected the complex square roots, found {total}")
+
+
 INIT = '''"""Calculation core of OpenFilters 1.1.1 (Larouche and Martinu, Polytechnique
 Montreal), ported to Python 3 without the GUI. See PROVENANCE.md."""
 '''
@@ -337,6 +370,7 @@ def main(original, fork, output):
     # C++ extension: Python 3 C API port from the fork.
     shutil.rmtree(output / "abeles" / "_abeles")
     shutil.copytree(fork / "abeles" / "_abeles", output / "abeles" / "_abeles")
+    port_abeles_cpp(output / "abeles" / "_abeles")
     port_moremath_cpp(output / "moremath" / "_moremath")
 
 

@@ -36,6 +36,11 @@ chat's own permission guard):
   dR"): without the backside, OpenFilters set the sample's derivatives to the whole per-parameter list. In
   campaigns the error was caught and the start returned unoptimized. Now indexed per parameter; A targets
   optimize (checked against a brute-force scan of the reachable absorptance).
+- Fix (macOS): beyond the critical angle (e.g. light from the substrate at 50°), the compiled core chose the
+  wrong branch of a complex square root on macOS only (libc++ honours a -0 sign that MSVC and glibc ignore):
+  R 0.99930 instead of 0.99958. The square root now gives the same branch on every platform.
+- Needle runs whose needles stay under 1 nm for 2000 iterations stop and restart at 1 nm: on Linux and macOS
+  the merit-based stall check alone let such runs crawl for 30-60 s.
 - Fix: needles that stayed at 0 nm made OpenFilters' needle method stop "converged" after one iteration with the
   needles unused (a V-coat start: not met, chi2 11.2). Such runs restart with those layers at 1 nm (now met).
 - Fix: "optically invisible layer" warnings described the starting design, not the result (a campaign row named a

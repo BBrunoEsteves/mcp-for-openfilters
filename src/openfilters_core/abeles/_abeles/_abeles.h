@@ -33,6 +33,17 @@
 
 /* Make sure that complex and stdexcept are loaded. */
 #include <complex>
+
+/* PORTABILITY FIX (MCP for OpenFilters): OpenFilters corrects the branch of sqrt(N^2 - sin2) with "if the
+ * real part is 0, negate", which assumes sqrt of a negative real returns +i*sqrt (MSVC, glibc). libc++
+ * (macOS) honours a -0 imaginary part and returns -i*sqrt, so beyond the critical angle the correction chose
+ * the growing wave (R 0.99930 instead of 0.99958 from the substrate side at 50 deg). This returns +i*sqrt for
+ * every negative real argument, as on Windows and Linux; every other argument is std::sqrt's. */
+inline std::complex<double> principal_sqrt(const std::complex<double> &z)
+{
+	if (z.imag() == 0.0 && z.real() < 0.0) return std::complex<double>(0.0, std::sqrt(-z.real()));
+	return std::sqrt(z);
+}
 #include <stdexcept>
 
 

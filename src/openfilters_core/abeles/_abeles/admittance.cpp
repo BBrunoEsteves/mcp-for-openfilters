@@ -126,7 +126,7 @@ void calculate_admittance(const admittance_type *admittance, const matrices_type
 		for (i = 0; i < admittance->wvls->length; i++)
 		{
 			N_square = N_s->N[i]*N_s->N[i];
-			N_s_s = sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_s_s = principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 
 			/* Correct branch selection. */
 			if (real(N_s_s) == 0.0)
@@ -143,7 +143,7 @@ void calculate_admittance(const admittance_type *admittance, const matrices_type
 		for (i = 0; i < admittance->wvls->length; i++)
 		{
 			N_square = N_s->N[i]*N_s->N[i];
-			N_s_p = N_square/sqrt(N_square - sin2_theta_0->sin2[i]);
+			N_s_p = N_square/principal_sqrt(N_square - sin2_theta_0->sin2[i]);
 
 			/* Correct branch selection. */
 			if (real(N_s_p) == 0.0)

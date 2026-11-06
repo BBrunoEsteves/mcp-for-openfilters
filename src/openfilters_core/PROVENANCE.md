@@ -36,3 +36,9 @@ Source chain:
      per-parameter derivatives instead of one parameter's (8 lines, where the derivatives are
      set up and in add_parameters), so every optimization with an A target failed ("first
      argument must be dR"). They are now indexed by parameter, as in the R and T branches.
+   - **portability fix** (abeles/_abeles): OpenFilters picks the branch of sqrt(N^2 - sin^2)
+     with "if the real part is 0, negate", which assumes the square root of a negative real
+     is +i*sqrt (MSVC, glibc). libc++ (macOS) honours a -0 imaginary part and returns
+     -i*sqrt, so beyond the critical angle (e.g. light from the substrate at 50 deg) the
+     correction chose the growing wave. principal_sqrt (_abeles.h) returns +i*sqrt for every
+     negative real argument on every platform; all other arguments go to std::sqrt.

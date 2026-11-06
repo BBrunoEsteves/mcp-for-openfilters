@@ -160,3 +160,18 @@ def test_absorptance_targets_can_be_optimized(backside, method):
     assert result["stop_reason"] not in ("openfilters_error", "numerical_error")
     A = engine.spectra(result["design"], ["A"], [550])["series"][0]["values"][0]
     assert result["all_targets_met"] and abs(A - 0.06) < 1e-3
+
+
+@pytest.mark.parametrize("layers", [
+    [("SiO2", 299.63), ("TiO2", 208.85)],
+    [("SiO2", 203.38), ("TiO2", 89.97), ("SiO2", 98.15)],
+    [("SiO2", 243.09), ("TiO2", 225.63)],
+])
+def test_stuck_needles_are_caught_without_the_merit_window(monkeypatch, layers):
+    # CI 2026-11-06: on Linux and macOS the crawl gained a little over 1 % per 10000 iterations, so the merit
+    # window never fired (31-60 s instead of 0.4 s). A needle under 1 nm for 2000 iterations now stops the run.
+    monkeypatch.setattr(engine, "STALL_GAIN", 0.0)  # the window never fires, as there
+    design = {"substrate": "FusedSilica", "center_wavelength": 1064, "layers": _layers(*layers)}
+    start = time.time()
+    result = engine.optimize(design, [dict(VCOAT[0], tolerance=0.0001)], "needle", {"max_layers": 6, "time_limit": 60})
+    assert time.time() - start < 15 and result["all_targets_met"]
