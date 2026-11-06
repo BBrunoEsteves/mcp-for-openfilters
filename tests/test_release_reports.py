@@ -174,7 +174,8 @@ def test_stuck_needles_are_caught_without_the_merit_window(monkeypatch, layers):
     design = {"substrate": "FusedSilica", "center_wavelength": 1064, "layers": _layers(*layers)}
     start = time.time()
     result = engine.optimize(design, [dict(VCOAT[0], tolerance=0.0001)], "needle", {"max_layers": 6, "time_limit": 60})
-    assert time.time() - start < 15 and result["all_targets_met"], (
+    # 0.2-2 s here, about 18 s on GitHub's Linux runners: bounded well below the 60 s limit (see test_release_run).
+    assert time.time() - start < 45 and result["all_targets_met"] and result["stop_reason"] != "time_limit", (
         f"{time.time() - start:.1f} s, stop {result['stop_reason']}, {result['iterations']} iterations, met "
         f"{result['all_targets_met']}, chi2 {result['merit_chi2']:.3g}, layers "
         f"{[round(l['thickness'], 3) for l in result['design']['layers']]}, warnings {result.get('warnings')}")

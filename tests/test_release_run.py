@@ -29,7 +29,9 @@ def test_needle_run_with_fresh_needles_does_not_crawl(layers):
               "layers": [{"material": m, "thickness": t} for m, t in layers]}
     start = time.time()
     result = engine.optimize(design, VCOAT_TARGET, "needle", {"max_layers": 6, "time_limit": 60})
-    assert time.time() - start < 15, (  # what the optimizer did, if a platform is slow
+    # The bug burned the whole time limit and failed. 0.4 s here; 18-20 s on GitHub's slower Linux runners (which
+    # converged in 6495 iterations, CI 2026-11-06), so the bound is generous but well below the 60 s limit.
+    assert time.time() - start < 45, (  # what the optimizer did, if a platform is slow
         f"{time.time() - start:.1f} s, stop {result['stop_reason']}, {result['iterations']} iterations, met "
         f"{result['all_targets_met']}, chi2 {result['merit_chi2']:.3g}, layers "
         f"{[round(l['thickness'], 3) for l in result['design']['layers']]}, warnings {result.get('warnings')}")
