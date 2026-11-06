@@ -79,8 +79,12 @@ and validates the .mcpb manifest. CI job "pypi" (trusted publishing) runs on tag
 variable PUBLISH_PYPI is "true". A clean `uv pip install` of the sdist with no compiler works (pure Python).
 
 Repo made PUBLIC 2026-11-06 (contact mcp.for.openfilters@gmail.com in README/CITATION/metadata). CI is free from now on.
-Pending, in order: PyPI trusted publisher (project mcp-for-openfilters, workflow ci.yml, environment pypi) then set
-PUBLISH_PYPI; README install via uvx; MCP Registry (mcp-publisher, server.json); pack the .mcpb (needs the PyPI
+PUBLISHED 2026-11-06: PyPI mcp-for-openfilters 0.2.1 (trusted publishing: pending publisher ci.yml / env pypi,
+repo variable PUBLISH_PYPI=true; every v* tag now publishes); `uvx mcp-for-openfilters` passes acceptance 49/49 on
+a clean Linux; MCP Registry io.github.BBrunoEsteves/mcp-for-openfilters 0.2.1 active (mcp-publisher 1.8.8 from
+modelcontextprotocol/registry releases: `login github` = device code the user approves, then `publish server.json`;
+republish after each release with the new version). Local .venv pip metadata still says 0.2.0 (exe locked).
+Pending, in order: pack the .mcpb (needs the PyPI
 package) and submit to Claude's directory; README plugin install line (`/plugin install mcp-for-openfilters@mcp-for-openfilters`, marketplace added with `/plugin marketplace add BBrunoEsteves/mcp-for-openfilters`) once public.
 Plugin + marketplace validated 2026-10-30 (`claude plugin validate .`; the CLI is bundled in
 %LOCALAPPDATA%\Claude-Data\claude_*\claude-code\*\*\claude.exe, not on PATH).
