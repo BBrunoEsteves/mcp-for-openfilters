@@ -1,7 +1,7 @@
 {
   "name": "mcp-for-openfilters",
   "displayName": "MCP for OpenFilters",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Design, simulate and optimize optical thin-film coatings with the OpenFilters engine.",
   "author": {
     "name": "Bruno Esteves",
@@ -22,7 +22,7 @@
     "mcp-for-openfilters": {
       "command": "uvx",
       "args": [
-        "mcp-for-openfilters@0.2.0"
+        "mcp-for-openfilters@0.2.1"
       ]
     }
   }

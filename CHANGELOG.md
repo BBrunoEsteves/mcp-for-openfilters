@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1 — 2026-11-06
+
+First release on PyPI: `uvx mcp-for-openfilters` runs it with nothing to download by hand. The repository is
+public. Contact details (project email, affiliation) in the README, the citation file and the package metadata.
+The Claude Desktop extension manifest gains the `mcp_config` that mcpb 2.x requires. No change to the
+calculations.
+
 ## 0.2.0 — 2026-11-06
 
 Renamed to **MCP for OpenFilters** (package and command `mcp-for-openfilters`, module `mcp_for_openfilters`,

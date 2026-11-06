@@ -7,6 +7,10 @@ calculation engine built in. Nothing else to install besides Python.
 
 ## Changes in this version
 
+**0.2.1:** first release on PyPI, so it can also be run with one command, `uvx mcp-for-openfilters` (see
+"Install" below), and contact details for bug reports and collaboration. No change to the calculations; the
+0.2.0 changes below are what is new since 0.1.x.
+
 **New name: MCP for OpenFilters** (was *openfilters-mcp*), so that it is not mistaken for part of OpenFilters
 itself; it remains an unofficial connector built on the OpenFilters calculation engine. The package and command
 are now `mcp-for-openfilters` and the server is registered as `mcp-for-openfilters`. Upgrading: fully quit

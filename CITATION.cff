@@ -11,7 +11,7 @@ authors:
     affiliation: "Center for MicroElectroMechanical Systems (CMEMS), University of Minho"
 repository-code: "https://github.com/BBrunoEsteves/mcp-for-openfilters"
 license: GPL-2.0-or-later
-version: 0.2.0
+version: 0.2.1
 date-released: "2026-11-06"
 keywords:
   - thin film
