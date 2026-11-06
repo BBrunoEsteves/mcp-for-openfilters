@@ -7,7 +7,23 @@ registration `mcp-for-openfilters`), so that the connector is not mistaken for p
 Environment variables are now `MCP_FOR_OPENFILTERS_HOME` / `_WORKERS` and the default data folder
 `~/MCP-for-OpenFilters`; the old variables and an existing `~/OpenFilters-MCP` folder still work. The installer
 removes the old `openfilters` registration (only one that points to openfilters-mcp) and its environment.
-0.1.3 was never released; its changes follow.
+0.1.3 was never released; its changes follow the fixes below.
+
+From the pre-release scenario run through the live tools (2026-11-06; Batch 1 and the new-feature checks all
+reproduce their reference values):
+
+- Fix: a needle optimization could crawl for its whole time limit (300 s by default) after inserting needles:
+  OpenFilters' Levenberg-Marquardt, which has no iteration limit, kept improving by tiny steps with the new
+  layers stuck at its 0 nm bound (same in the pure-Python core). Two starts of a 12-start V-coat campaign held
+  it for 5 minutes and still failed. A run that gains less than 1 % over 10000 iterations now stops as
+  "stalled", and the needle method restarts it with those layers at 1 nm: the same campaign takes 2 s and
+  both starts meet the target.
+- Messages about materials used outside their data name only the wavelengths used (8000-12000 nm, not
+  1771-12000 nm).
+- `compute_spectrum` returns one series per distinct polarization and angle (30 and "30deg", 45 and
+  "unpolarized" were computed twice).
+- `tolerance_analysis` warns when the design itself does not meet the targets (the yield then only counts
+  trials whose errors happen to fix it).
 
 ## 0.1.3 — not released (included in 0.2.0)
 

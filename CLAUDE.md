@@ -246,6 +246,13 @@ removes the old "openfilters" registration only when it points to openfilters-mc
 GitHub repo still BBrunoEsteves/openfilters-mcp: URLs in the files already say mcp-for-openfilters, so the repo
 must be renamed on GitHub before the release (GitHub redirects the old URL). Quit Claude Desktop BEFORE reinstalling
 into .venv (the running server locks the .exe).
+Pre-release run 2026-11-06 (live tools, 0.2.0; tests/test_release_run.py, SCENARIO_TESTS Batch 6): Batch 1 and
+the new features reproduce. Fixed: needle runs crawled for the whole time limit after inserting needles (LM with
+layers at the 0 nm bound; OpenFilters sets no iteration limit, same in pure Python) -> _Monitor stops "stalled"
+(< STALL_GAIN 1 % over STALL_ITERATIONS 10000 at one layer count) and _continue_needles restarts with layers
+< 1 nm lifted to 1 nm (dropping them instead lost the progress: the crawl does converge, in ~5 min); outside_data
+ranges clipped to the wavelengths used; duplicate polarizations/angles merged in spectra; tolerance warns when the
+nominal design fails.
 Output schemas deliberately not added (Claude reads the text; plots can't be described; drift would break tools).
 Private-repo CI minutes cost 10x on macOS and 2x on Windows; they reset monthly (next
 2026-11-01, or free once public. CI now tests only Linux on ordinary pushes.

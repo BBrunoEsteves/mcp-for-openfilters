@@ -415,8 +415,13 @@ def finalize_tolerance(manager, job):
                "chi2_median": float(np.median(chi2)), "chi2_p90": float(np.percentile(chi2, 90)),
                "target_failure_rate": [round(x / trials, 4) for x in failures],
                "thickness_error": res["thickness_error"], "index_error": res["index_error"]}
-    if res.get("warnings"):
-        summary["warnings"] = res["warnings"]
+    warnings = list(res.get("warnings") or [])
+    if not res["nominal_passes"]:
+        warnings.insert(0, "the design itself does not meet the targets (nominal_passes false), so the yield only "
+                           "counts trials whose errors happen to fix it; optimize the design first (evaluate_design "
+                           "shows the misses)")
+    if warnings:
+        summary["warnings"] = warnings
     _finish_table(manager, job, manager.rows(job["id"]), summary=summary)
 
 

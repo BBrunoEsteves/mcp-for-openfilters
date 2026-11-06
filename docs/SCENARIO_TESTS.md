@@ -4,7 +4,7 @@ Realistic coating tasks for a Claude chat to run on its own and report on. Where
 (closed forms, or values computed with the connector's engine from built-in materials), it is given as a
 **reference**; elsewhere the check is a physical or behavioural one.
 
-Five batches, one chat each (a batch takes 20–40 minutes):
+Six batches, one chat each (a batch takes 20–40 minutes):
 
 | Batch | Theme | Scenarios |
 |---|---|---|
@@ -13,6 +13,7 @@ Five batches, one chat each (a batch takes 20–40 minutes):
 | 3 | Analysis and manufacturing | S3.1–S3.9 |
 | 4 | Robustness: bad inputs, limits, edge cases | S4.1–S4.14 |
 | 5 | Recheck of the Batch 3 and 4 fixes, plus spot checks | S5.1–S5.15 |
+| 6 | Features added after the batches (0.2.0) | S6.1–S6.8 |
 
 ## How to run a batch
 
@@ -343,3 +344,51 @@ result fails its targets, any between-grid warning is consistent with its plot.
 **S5.15 Spot check: AR campaign with yield** (S2.1). *As S2.1: R ≤ 0.5 % from 430 to 670 nm on BK7, TiO2/SiO2,
 at most 6 layers, min_thickness 10, campaign with a yield stage.*
 Check: ranking by yield; designs respect 6 layers and 10 nm; "met" agrees with the worst R; duplicates marked.
+
+---
+
+## Batch 6 — Features added after the batches (2026-11-06, version 0.2.0)
+
+Reference values from the pre-release run through the live tools.
+
+**S6.1 Polarization angle.** *S1.5's mirror at 45°: R at 1064 and 1200 nm for polarization 30 (degrees),
+"30", 0, 90, 45 and unpolarized, in one call.*
+Reference: R(30°) at 1064 nm = **99.813496 %** = sin²30°·Rs + cos²30°·Rp; 0 = p, 90 = s, 45 = unpolarized.
+Check: one series per distinct polarization (30 and "30" are the same, so are 45 and unpolarized).
+
+**S6.2 Thermal shift.** *S1.6's band-pass with TiO2 dn/dT −1e-4, cte 5e-6, Poisson 0.27 and SiO2 dn/dT 1e-5,
+cte 0.5e-6, Poisson 0.17 on fused silica (cte 0.55e-6): thermal_sensitivity, then thermal_sweep at −50, 0, 50,
+100 K.*
+Reference: dλ/dT **−8.49 pm/K** (sweep −8.48), TiO2 clamped strain 8.292e-6/K, athermal TiO2 dn/dT −3.02e-5,
+about 134 K per FWHM.
+
+**S6.3 Rugate profile.** *IdealMixture rugate on fused silica, n 1.6–2.0, 20 periods, Hann apodization, quintic
+matching on both sides, centre 650 nm: describe it and compute R from 300 to 900 nm with the half-maximum.*
+Reference: 861 graded steps (design_file), notch centre **652.4 nm**, FWHM 94.6 nm; warnings that the ramps
+stop at n = 1.5 (IdealMixture's end), leaving air unmatched (R = 4 %) and fused silica (0.017 %).
+
+**S6.4 Spectroscopic monitoring.** *(HL)^3 at 550 nm on BK7 with wavelength_range 400–700 nm (step 5):
+monitoring "spectroscopic".*
+Reference: 61 wavelengths, selected 550 nm, layer ends 0.658187, 0.903038, 0.352832, 0.612931, 0.161189,
+0.319362, and a CSV of the spectrum at every layer end.
+
+**S6.5 Random errors.** *S1.6's band-pass, 520–545 nm (step 0.1), 200 tests, 0.5 % normal thickness errors,
+unpolarized.*
+Reference: runs in well under a second; largest standard deviation of T about 0.31 near 532.8 nm, worst
+deviation about 0.93 at 532.0 nm (the 1.1 nm passband moves by more than its width).
+
+**S6.6 Table extrapolation.** *50 nm Ge on BK7 at 1500 and 2500 nm with the default, then with
+"table_extrapolation": "refuse"; then 500 nm Ge on Si from 8 to 12 µm.*
+Reference: 61.22 % / 39.34 % with a warning naming **1771–2500 nm** and both modes' n,k; "refuse" gives an
+error; 8–12 µm is refused and the message names **8000–12000 nm** (not 1771–12000).
+
+**S6.7 Graded designs in other tools.** *Load examples/Rugate; pass design 3's design_file to
+compute_electric_field (550 nm), tolerance_analysis (R ≥ 99 % at 540–560 nm, 1 % thickness, 0.5 % index) and
+thermal_sensitivity.*
+Reference: field peak |E|² 1.0015 inside the graded layer; tolerance warns that the design itself fails the
+target and that index errors skip mixtures; thermal refuses graded layers with a clear message.
+
+**S6.8 V-coat campaign speed** (was S5.12). *Two-layer V-coat R ≤ 0.05 % at 1064 nm on FusedSilica, TiO2/SiO2,
+12 random starts of 2–4 layers, seed 2, needle, max_layers 6.*
+Check: the campaign finishes within seconds (before 0.2.0, two starts crawled for the whole 300 s time limit);
+no row has stop_reason time_limit.

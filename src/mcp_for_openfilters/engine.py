@@ -853,8 +853,9 @@ def outside_data(design, wavelengths):
         data = None if material.is_mixture() else _data_range(material)
         if data is None:
             continue
-        ranges = ([(lo, data[0])] if lo < data[0] * (1 - 1e-6) else []) + \
-                 ([(data[1], hi)] if hi > data[1] * (1 + 1e-6) else [])
+        # the part of the wavelengths used outside the data (e.g. 8000-12000 nm, not 1771-12000 nm)
+        ranges = ([(lo, min(hi, data[0]))] if lo < data[0] * (1 - 1e-6) else []) + \
+                 ([(max(lo, data[1]), hi)] if hi > data[1] * (1 + 1e-6) else [])
         if ranges:
             out.append((name, data, ranges))
     return out
@@ -1024,7 +1025,10 @@ def spectra(design, quantities=("R", "T"), wavelengths=None, angles=(0.0,), pola
             warnings.append("GD/GDD are numerical derivatives over the requested wavelengths: use at least 5 "
                             "points with steps of 5 nm or less, or the values can be wrong")
     series = []
-    for q in quantities:
+    # One series per distinct case: 30 and "30deg", or 45 and "unpolarized", are the same polarization.
+    angles = list(dict.fromkeys(float(a) for a in angles))
+    polarizations = list(dict.fromkeys(polarization_value(p) for p in polarizations))
+    for q in dict.fromkeys(quantities):
         if q not in QUANTITIES:
             raise EngineError(f"unknown quantity {q}; choose from {', '.join(QUANTITIES)}")
         if reverse and q not in REVERSIBLE:
@@ -1540,9 +1544,13 @@ def evaluate(design, target_specs):
 METHODS = {"refine": optimization_refinement, "needle": optimization_needles, "step": optimization_steps}
 
 
+STALL_ITERATIONS = 10000  # iterations at one layer count ...
+STALL_GAIN = 0.01  # ... that must lower the merit by at least this fraction, or the run has stalled
+
+
 class _Monitor:
     """Implements OpenFilters' parent.update() hook: enforces limits, detects
-    add/remove cycles, remembers the best design seen, reports progress."""
+    add/remove cycles and stalls, remembers the best design seen, reports progress."""
 
     def __init__(self, optimizer, deadline, max_layers, max_total_thickness, progress):
         self.optimizer, self.progress = optimizer, progress
@@ -1551,6 +1559,7 @@ class _Monitor:
         self.stop_reason, self.last_report = None, 0.0
         self.best_chi2, self.best_layers = float("inf"), None
         self.states, self.last_count = {}, None
+        self.checkpoint = None  # (layer count, iteration, chi2) at the start of the current stall window
 
     def update(self, working, status):
         o = self.optimizer
@@ -1577,6 +1586,17 @@ class _Monitor:
             self.states[key] = self.states.get(key, 0) + 1
             if self.states[key] >= 3:
                 self.stop_reason = "cycling"
+        # OpenFilters' refinement has no iteration limit (its GUI user presses Stop): with layers at its
+        # 0 nm bound (fresh needles) Levenberg-Marquardt can crawl for minutes, each step a little
+        # better, without meeting its "change too small" test. Stop when a window of STALL_ITERATIONS
+        # at one layer count gains less than STALL_GAIN.
+        iteration = o.get_iteration()
+        if self.checkpoint is None or self.checkpoint[0] != count or iteration < self.checkpoint[1]:
+            self.checkpoint = (count, iteration, chi2)
+        elif iteration - self.checkpoint[1] >= STALL_ITERATIONS:
+            if chi2 > self.checkpoint[2] * (1 - STALL_GAIN):
+                self.stop_reason = self.stop_reason or "stalled"
+            self.checkpoint = (count, iteration, chi2)
         if self.deadline and time.time() > self.deadline:
             self.stop_reason = "time_limit"
         elif self.max_layers and count > self.max_layers:
@@ -1842,6 +1862,10 @@ STOP_REASONS = {
     "time_limit": "the time limit was reached; the best design so far is returned",
     "cycling": "the needle/step method kept returning to the same designs, so it was stopped; the best design "
                "seen is returned (normal near an optimum)",
+    "stalled": "the merit improved by less than 1 % over 10000 iterations, so the optimizer was stopped (OpenFilters "
+               "sets no iteration limit and would crawl on for minutes); the needle method restarts such a run with "
+               "the layers stuck near 0 nm at 1 nm, and this is where that stopped helping; the best design seen is "
+               "returned",
     "max_layers": "the needle method's next step would have exceeded max_layers; the best design within the limit is "
                   "returned (each needle adds 2 layers and one step can insert several needles, so the result can "
                   "stop several layers below the limit)",
@@ -1854,6 +1878,9 @@ STOP_REASONS = {
 
 EDGE_NEEDLE_NM = 1.0
 MAX_CONTINUATIONS = 20
+
+
+STALLED_LAYER_NM = 1.0  # after a stall, free layers thinner than this restart at this thickness
 
 
 def _drop_empty_layers(layers):
@@ -1874,8 +1901,9 @@ def _drop_empty_layers(layers):
 
 def _continue_needles(current, chi2, stop, info, targets, options, deadline, progress):
     """Carry on where OpenFilters' needle method stops early: restart once after a
-    numerical failure (without the 0 nm layers that trigger it), and insert a thin
-    layer at the best layer edge while that improves the merit (see _edge_needle).
+    numerical failure (without the 0 nm layers that trigger it), restart a stalled run
+    with its near-0 nm layers at STALLED_LAYER_NM, and insert a thin layer at the best
+    layer edge while that improves the merit (see _edge_needle).
     Returns (design, chi2, stop, iterations, edge needles inserted)."""
     iterations = inserted = 0
     restarted = False
@@ -1886,6 +1914,14 @@ def _continue_needles(current, chi2, stop, info, targets, options, deadline, pro
         if stop == "numerical_error" and not restarted:
             restarted = True
             layers = _drop_empty_layers(current["layers"])
+        elif stop == "stalled":
+            # The stall comes from layers stuck at OpenFilters' 0 nm bound (fresh needles): restarted
+            # from STALLED_LAYER_NM, the solver converges in a fraction of a second where it crawled for
+            # minutes. A restart that does not improve the merit ends the loop (below).
+            layers = [dict(l, thickness=STALLED_LAYER_NM) if _adjustable(l) and l["thickness"] < STALLED_LAYER_NM
+                      else dict(l) for l in current["layers"]]
+            if all(a["thickness"] == b["thickness"] for a, b in zip(layers, current["layers"])):
+                break
         elif stop in ("converged", "finished") and info.get("edge_needle"):
             position, material = info["edge_needle"]
             if max_layers and len(current["layers"]) + 1 > max_layers:
@@ -1900,7 +1936,7 @@ def _continue_needles(current, chi2, stop, info, targets, options, deadline, pro
         iterations += its
         if not c_chi2 < chi2 * (1 - 1e-4):
             break
-        inserted += stop != "numerical_error"
+        inserted += stop not in ("numerical_error", "stalled")  # counts edge needles only
         current, chi2, stop = candidate, c_chi2, c_stop
     return current, chi2, stop, iterations, inserted
 
