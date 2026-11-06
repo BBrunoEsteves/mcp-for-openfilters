@@ -67,7 +67,9 @@ Releases: pushing a tag v* makes CI publish a GitHub release with all wheels + s
 (stdlib installer: private venv in ~/.mcp-for-openfilters/venv, registers in Claude Desktop and Claude Code).
 v0.1.0 released (private) 2026-10-23; v0.1.1 (installer finds the Microsoft Store Claude Desktop, whose data is in
 %LOCALAPPDATA%\Claude-Data\claude_<id>) 2026-10-23;
-v0.1.2 (.ofp projects keep targets, layer flags and how designs were made) 2026-10-23. Update scripts/RELEASE_NOTES.md (release text) and bump the version in pyproject.toml and src/mcp_for_openfilters/__init__.py
+v0.1.2 (.ofp projects keep targets, layer flags and how designs were made) 2026-10-23. v0.2.0 (renamed MCP for OpenFilters; three OpenFilters
+bugs fixed: C++ solver memory, A targets, macOS TIR branch) released (private) 2026-11-06, CI run 42265731886; its
+Windows build is installed in src/ (dev/fetch_compiled.py: rename locked .pyd/.dll to *.old first, delete after restart). Update scripts/RELEASE_NOTES.md (release text) and bump the version in pyproject.toml and src/mcp_for_openfilters/__init__.py
 before tagging the next one.
 
 Open-release prep (2026-10-23): tool annotations, PRIVACY.md, CITATION.cff, CHANGELOG.md, issue templates,
