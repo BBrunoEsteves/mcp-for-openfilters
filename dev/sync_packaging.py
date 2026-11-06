@@ -82,7 +82,10 @@ def manifests(version=__version__):
             "license": "GPL-2.0-or-later",
             "keywords": KEYWORDS,
             "privacy_policies": [f"{REPO}/blob/main/PRIVACY.md"],
-            "server": {"type": "uv", "entry_point": "src/server.py"},
+            # mcp_config is required by mcpb 2.x; the form of the official examples/hello-world-uv.
+            "server": {"type": "uv", "entry_point": "src/server.py",
+                       "mcp_config": {"command": "uv",
+                                      "args": ["run", "--directory", "${__dirname}", "src/server.py"]}},
             "compatibility": {"platforms": ["darwin", "win32", "linux"], "runtimes": {"python": ">=3.10"}},
             "tools": tools(),
             "tools_generated": False,
