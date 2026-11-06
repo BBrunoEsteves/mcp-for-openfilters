@@ -245,7 +245,8 @@ RENAMED 2026-11-06 to "MCP for OpenFilters" (version 0.2.0; 0.1.3 never tagged):
 mcp-for-openfilters, module mcp_for_openfilters, registration key mcp-for-openfilters, env MCP_FOR_OPENFILTERS_*,
 data ~/MCP-for-OpenFilters. Old env names and an existing ~/OpenFilters-MCP still work (settings.py); the installer
 removes the old "openfilters" registration only when it points to openfilters-mcp (tests/test_rename.py).
-GitHub repo renamed to BBrunoEsteves/mcp-for-openfilters on 2026-11-06 (GitHub redirects the old URL). Quit Claude Desktop BEFORE reinstalling
+GitHub repo renamed to BBrunoEsteves/mcp-for-openfilters on 2026-11-06 (GitHub redirects the old URL). Commits use the GitHub no-reply address (this repo's git config). Push tags with the CI workflow disabled (gh workflow disable CI),
+or a re-pushed v* tag starts a full release run. Quit Claude Desktop BEFORE reinstalling
 into .venv (the running server locks the .exe).
 Pre-release run 2026-11-06 (live tools, 0.2.0; tests/test_release_run.py, SCENARIO_TESTS Batch 6): Batch 1 and
 the new features reproduce. Fixed: needle runs crawled for the whole time limit after inserting needles (LM with
