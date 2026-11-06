@@ -201,3 +201,16 @@ def test_lifted_needles_are_refined_before_needles_are_added(monkeypatch):
     design, new_chi2, _, _, _ = engine._continue_needles(stuck, chi2, "stalled", {}, targets, {"max_layers": 6},
                                                          time.time() + 60, None)
     assert new_chi2 < 1e-6 * chi2 and len(design["layers"]) > 1
+
+
+def test_max_layers_stop_with_empty_needles_is_restarted():
+    # Linux (both cores, Docker 2026-11-06): the needle method inserted two needles at 0 nm, found nothing to
+    # refine and added two more at once: 7 > max_layers 6, stop "max_layers" with the first needles still at
+    # 0 nm, never restarted, and the result collapsed to one SiO2 layer. That stop now lifts them too.
+    targets = engine.build_targets([dict(VCOAT[0], tolerance=0.0001)], pad=True)
+    stuck = {"substrate": "FusedSilica", "center_wavelength": 1064,
+             "layers": _layers(("SiO2", 90.629), ("TiO2", 0.0), ("SiO2", 1088.473), ("TiO2", 0.0), ("SiO2", 272.084))}
+    chi2 = float(engine._evaluator(engine.build_filter(stuck), targets).get_chi_2())
+    design, new_chi2, _, _, _ = engine._continue_needles(stuck, chi2, "max_layers", {}, targets, {"max_layers": 6},
+                                                         time.time() + 60, None)
+    assert new_chi2 < 1e-6 * chi2 and len(design["layers"]) == 5

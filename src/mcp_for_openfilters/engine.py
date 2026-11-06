@@ -1928,6 +1928,7 @@ MAX_CONTINUATIONS = 20
 
 
 STALLED_LAYER_NM = 1.0  # after a stall, free layers thinner than this restart at this thickness
+LIFTABLE_STOPS = ("stalled", "converged", "finished", "max_layers", "cycling")
 
 
 def _drop_empty_layers(layers):
@@ -1964,10 +1965,11 @@ def _continue_needles(current, chi2, stop, info, targets, options, deadline, pro
         if stop == "numerical_error" and not restarted:
             restarted, kind = True, "restart"
             layers = _drop_empty_layers(current["layers"])
-        elif stop in ("stalled", "converged", "finished") and stuck and lift_failed is not current:
+        elif stop in LIFTABLE_STOPS and stuck and lift_failed is not current:
             # Needles inserted at OpenFilters' 0 nm bound can stay there: the solver either crawls
-            # ("stalled", minutes) or calls it converged after one iteration with the needles unused.
-            # Restarted from STALLED_LAYER_NM it typically converges in well under a second.
+            # ("stalled", minutes), calls it converged after one iteration with the needles unused, or (Linux,
+            # both cores) adds more needles at once and stops at max_layers with the first ones still at 0 nm.
+            # Restarted from STALLED_LAYER_NM (refined first, below) it typically converges in under a second.
             kind = "lift"
             layers = [dict(l, thickness=STALLED_LAYER_NM) if i in stuck else dict(l)
                       for i, l in enumerate(current["layers"])]

@@ -42,7 +42,8 @@ chat's own permission guard):
 - Needle runs whose needles stay under 1 nm for 2000 iterations stop and restart at 1 nm: on Linux and macOS
   the merit-based stall check alone let such runs crawl for 30-60 s.
   The lifted needles are refined before the needle method resumes: at max_layers its first step could add
-  needles at once and stop with the lifted ones unrefined (seen on Linux: a V-coat start collapsed to one layer).
+  needles at once and stop with the lifted ones unrefined. Runs stopped by max_layers or cycling with needles
+  still at 0 nm are restarted the same way (on Linux, in both cores, a V-coat start collapsed to one layer).
 - Fix: needles that stayed at 0 nm made OpenFilters' needle method stop "converged" after one iteration with the
   needles unused (a V-coat start: not met, chi2 11.2). Such runs restart with those layers at 1 nm (now met).
 - Fix: "optically invisible layer" warnings described the starting design, not the result (a campaign row named a

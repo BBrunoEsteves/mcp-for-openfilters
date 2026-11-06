@@ -271,6 +271,9 @@ port_abeles_cpp: principal_sqrt in _abeles.h for every sqrt(N_square...). Linux/
 window -> _Monitor(needles=True) also stops when a free layer stays < 1 nm for STUCK_ITERATIONS 2000.
 Third full CI: macOS/Windows green; Linux needle restart hit max_layers at 0 iterations (lifted needles never
 refined) -> _continue_needles refines a lifted design before the needle run (test simulates Linux's path).
+REAL Linux cause (found in Docker, both cores): the needle run stopped "max_layers" right after adding needles at
+0 nm, a stop the lift ignored -> LIFTABLE_STOPS includes max_layers/cycling. LINUX TESTS LOCALLY: Docker Desktop
++ python:3.14 container, git archive HEAD -> /work, setup.py build_ext, pytest both cores (no CI minutes).
 Timing tests bound at 45 s (Linux runners ~5x slower; that start converges in 6495 iterations, 18-20 s there).
 Not done (judgment): ranking by met-between-grid, absentee-layer equivalence, default margin, yield-CI ties.
 Output schemas deliberately not added (Claude reads the text; plots can't be described; drift would break tools).
