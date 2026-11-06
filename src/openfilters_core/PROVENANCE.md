@@ -24,3 +24,10 @@ Source chain:
      This is the connector's default only: a design with "table_extrapolation":
      "openfilters" uses OpenFilters' original extrapolation (mcp_for_openfilters/engine.py
      rebuilds those tables without the padding).
+   - **bug fix in OpenFilters' C++ solver** (moremath/_moremath/Levenberg_Marquardt.cpp):
+     the work arrays were allocated uninitialized. `b` has max(nb_par, nb_points) rows
+     but only the first nb_points are ever set, so with more fitted parameters than
+     target points (e.g. a single-wavelength target and three or more layers) leftover
+     heap memory entered the QR solve and occasionally made every thickness NaN,
+     depending on what had run before in the process. The arrays now start at 0.0,
+     as in the pure-Python solver (Levenberg_Marquardt.py), which never failed.

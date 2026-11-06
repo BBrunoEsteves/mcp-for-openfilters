@@ -1035,10 +1035,11 @@ async def run_optimization_campaign(targets: Targets,
                  for i, d in enumerate(designs) for m in methods]
     meta = {"targets": targets, "top_n": int(top_n), "tolerance": tolerance}
     max_layers = (options or {}).get("max_layers")
-    if max_layers and "needle" in methods and max(len(d.get("layers") or []) for d in designs) >= int(max_layers) - 2:
-        meta["warnings"] = [f"some starts have {max(len(d.get('layers') or []) for d in designs)} layers and "
-                            f"max_layers is {max_layers}: the needle method has little or no room to add layers. "
-                            "Use fewer starting layers or a larger max_layers."]
+    largest = max(len(d.get("layers") or []) for d in designs)
+    # A needle adds 2 layers: warn only when a start has no room for even one (4 layers with max 6 do).
+    if max_layers and "needle" in methods and largest + 2 > int(max_layers):
+        meta["warnings"] = [f"some starts have {largest} layers and max_layers is {max_layers}: the needle method "
+                            "cannot add a needle (2 layers) to them. Use fewer starting layers or a larger max_layers."]
     job_id = manager().submit("campaign", task_list, meta=meta, label=label or "optimization campaign")
     out = {"job_id": job_id, "optimizations": len(task_list), "workers": manager().workers,
            "note": "poll job_status, then get_results"}

@@ -25,6 +25,28 @@ reproduce their reference values):
 - `tolerance_analysis` warns when the design itself does not meet the targets (the yield then only counts
   trials whose errors happen to fix it).
 
+From the two pre-release chat reports (Batch 6: 8/8 pass; Batches 1-5: 57/57 pass, one sub-check blocked by the
+chat's own permission guard):
+
+- Fix (OpenFilters' C++ solver): the Levenberg-Marquardt work arrays were allocated uninitialized. With more
+  thicknesses than target points (e.g. a single-wavelength V-coat target and three or more layers), leftover memory
+  entered the solve and about 4 % of such runs ended with every thickness NaN, depending on what had run before.
+  The arrays now start at zero, as in OpenFilters' pure-Python solver, which never failed (see PROVENANCE.md).
+- Fix: needles that stayed at 0 nm made OpenFilters' needle method stop "converged" after one iteration with the
+  needles unused (a V-coat start: not met, chi2 11.2). Such runs restart with those layers at 1 nm (now met).
+- Fix: "optically invisible layer" warnings described the starting design, not the result (a campaign row named a
+  Ge layer that the optimized design no longer had).
+- Fix: the between-grid worst value could lie just outside the target's range (399.75 nm for 400-900 nm).
+- Cancelled campaigns are ranked on the starts that finished: duplicates marked, summary.csv and top_designs.ofp
+  written, marked as partial (copies of one design used to take separate ranks, and nothing was saved).
+- Clearer: the 0 nm removal note adds up ("2 layer(s) ended at 0 nm and were removed, merging the 2 pair(s) ...:
+  6 layers before, 2 now"); every material used beyond its data is named in one refusal; thermal tools name the
+  graded layers they cannot handle and suggest layer_sensitivity; kelvin_per_fwhm says which FWHM it uses; a
+  half-maximum search with `near` says when the peak it found is not the highest; campaign rows give
+  thinnest_layer_nm; the start-size warning appears only when a start has no room for one needle.
+- Plots: target legends name only what is drawn (markers or bands); start curves of R and T differ in style;
+  layer boundaries in monitoring plots are dotted, not grid-like.
+
 ## 0.1.3 — not released (included in 0.2.0)
 
 From a scenario run through the live tools (2026-10-30):

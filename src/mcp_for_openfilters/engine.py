@@ -861,11 +861,16 @@ def outside_data(design, wavelengths):
     return out
 
 
+def _nm_range(a, b):
+    """"8000-12000 nm", or "10000 nm" for a single wavelength (not "10000-10000 nm")."""
+    return f"{a:g} nm" if abs(b - a) < 1e-9 else f"{a:g}-{b:g} nm"
+
+
 def _nk(z):
     return f"n = {z.real:.4g}, k = {-z.imag + 0.0:.3g}"  # k < 0 (gain) shown as it is
 
 
-def material_warnings(design, wavelengths):
+def material_warnings(design, wavelengths, invisible=True):
     """Warnings for tabulated materials used outside their data, saying what was used there (held end
     values or OpenFilters' extrapolation, per table_extrapolation) and what the other mode would give;
     errors for "refuse", for use far beyond the data (TABLE_REACH) when no mode was chosen, and where a
@@ -879,18 +884,35 @@ def material_warnings(design, wavelengths):
     design, warnings = expand_profiles(design)
     lo, hi = min(wavelengths), max(wavelengths)
     grid = sorted(set(np.linspace(lo, hi, 64).tolist()) | set(wavelengths[:: max(1, len(wavelengths) // 200)]))
-    for name, data, ranges in outside_data(design, wavelengths):
-        where = " and ".join(f"{a:g}-{b:g} nm" for a, b in ranges)
-        if mode == "refuse":
-            raise EngineError(f"{name}: its data cover {data[0]:g}-{data[1]:g} nm and it is used at {where}, which "
-                              "table_extrapolation \"refuse\" forbids. Limit the wavelengths, use a material with data "
-                              "there, or choose \"hold\" or \"openfilters\".")
-        if not chosen and (lo < data[0] / TABLE_REACH or hi > data[1] * TABLE_REACH):
-            raise EngineError(f"{name}: its data cover {data[0]:g}-{data[1]:g} nm, so its n,k at {where} (more than "
-                              f"{TABLE_REACH:g}x beyond the data) are unknown. Use a material with data for this range "
-                              "(search_refractiveindex and import_refractiveindex_material), or ask the user and set "
-                              "the design's table_extrapolation to \"hold\" (end values) or \"openfilters\" "
-                              "(OpenFilters' extrapolation) to compute anyway.")
+    outside = outside_data(design, wavelengths)
+    # Name every material that is refused in one message (S4.7: Ge was named, the Si substrate only after a retry).
+    described = [(name, f"{data[0]:g}-{data[1]:g} nm", " and ".join(_nm_range(a, b) for a, b in ranges))
+                 for name, data, ranges in outside]
+    if mode == "refuse" and outside:
+        if len(described) == 1:
+            name, data, where = described[0]
+            raise EngineError(f"{name}: its data cover {data} and it is used at {where}, which table_extrapolation "
+                              "\"refuse\" forbids. Limit the wavelengths, use a material with data there, or choose "
+                              "\"hold\" or \"openfilters\".")
+        listed = "; ".join(f"{name} (data {data}, used at {where})" for name, data, where in described)
+        raise EngineError(f"these materials are used outside their data, which table_extrapolation \"refuse\" forbids: "
+                          f"{listed}. Limit the wavelengths, use materials with data there, or choose \"hold\" or "
+                          "\"openfilters\".")
+    far = [d for d, (name, data, ranges) in zip(described, outside)
+           if not chosen and (lo < data[0] / TABLE_REACH or hi > data[1] * TABLE_REACH)]
+    if far:
+        advice = ("Use a material with data for this range (search_refractiveindex and import_refractiveindex_material), "
+                  "or ask the user and set the design's table_extrapolation to \"hold\" (end values) or \"openfilters\" "
+                  "(OpenFilters' extrapolation) to compute anyway.")
+        if len(far) == 1:
+            name, data, where = far[0]
+            raise EngineError(f"{name}: its data cover {data}, so its n,k at {where} (more than {TABLE_REACH:g}x beyond "
+                              f"the data) are unknown. " + advice)
+        listed = "; ".join(f"{name} (data {data}, n,k needed at {where})" for name, data, where in far)
+        raise EngineError(f"these materials are used more than {TABLE_REACH:g}x beyond the data, where their n,k are "
+                          f"unknown: {listed}. " + advice.replace("Use a material", "Use materials"))
+    for name, data, ranges in outside:
+        where = " and ".join(_nm_range(a, b) for a, b in ranges)
         ends = [a if a < data[0] else b for a, b in ranges]  # the farthest wavelength on each side
         held, extrapolated = material_N(name, ends), material_N(name, ends, "openfilters")
         used, other = (held, extrapolated) if mode == "hold" else (extrapolated, held)
@@ -913,7 +935,7 @@ def material_warnings(design, wavelengths):
                               f"{' with table_extrapolation openfilters' if mode == 'openfilters' else ''}: its model "
                               "is not valid there. Use a material with data for this range (search_refractiveindex "
                               "and import_refractiveindex_material).")
-    return warnings + _invisible_layers(design, (lo + hi) / 2) + _graded_rounding(design)
+    return warnings + (_invisible_layers(design, (lo + hi) / 2) if invisible else []) + _graded_rounding(design)
 
 
 def check_long_job(operation, args):
@@ -939,7 +961,7 @@ def require_extrapolation_choice(design, wavelengths, what):
     outside = outside_data(design, wavelengths)
     if outside:
         listed = "; ".join(f"{name} (data {d[0]:g}-{d[1]:g} nm, used at "
-                           f"{' and '.join(f'{a:g}-{b:g} nm' for a, b in r)})" for name, d, r in outside)
+                           f"{' and '.join(_nm_range(a, b) for a, b in r)})" for name, d, r in outside)
         raise EngineError(f"{what} uses materials outside their measured data: {listed}. Ask the user how n,k should "
                           "be filled in there before starting, and set the design's \"table_extrapolation\": "
                           "\"hold\" (end values, the default for quick calculations), \"openfilters\" (OpenFilters' "
@@ -1442,6 +1464,11 @@ def half_max_summary(x, values, options, axis="nm"):
                    fwhm_note=f"the half-maximum edge ({' and '.join(clipped)}) is beyond the computed range: widen it")
     else:
         out["fwhm"] = round(edges[1] - edges[0], 6)
+    top = int(np.argmax(values))
+    if options.get("near") is not None and values[top] > values[i] * (1 + 1e-6):
+        # S6.3: the local peak nearest 663.5 nm was returned while the series maximum (0.856) was at 633.5 nm.
+        out["peak_note"] = (f"the local peak nearest {float(options['near']):g} {axis}; the highest value in the range "
+                            f"is {sig(values[top], 8)} at {round(float(x[top]), 6)} {axis}")
     return out
 
 
@@ -1471,7 +1498,12 @@ def _refine_worst(design, spec, row, step):
     if spec.get("kind") not in ("R", "T", "A") or spec.get("points") or "worst_at_nm" not in row:
         return
     w = row["worst_at_nm"]
-    r = spectra(design, [spec["kind"]], {"from": w - step, "to": w + step, "step": step / 25},
+    # Stay inside the target's range (S5.11: "worst at 399.75 nm" for a 400-900 nm target).
+    lo, hi = sorted((float(spec["from"]), float(spec["to"])))
+    a, b = max(w - step, lo), min(w + step, hi)
+    if b <= a:
+        return
+    r = spectra(design, [spec["kind"]], {"from": a, "to": b, "step": (b - a) / 50},
                 angles=[float(spec.get("angle", 0.0))], polarizations=[spec.get("polarization", "unpolarized")],
                 reverse=str(spec.get("direction", "normal")).lower() in ("reverse", "back"))
     values, wvls = np.asarray(r["series"][0]["values"]), r["wavelengths"]
@@ -1901,42 +1933,48 @@ def _drop_empty_layers(layers):
 
 def _continue_needles(current, chi2, stop, info, targets, options, deadline, progress):
     """Carry on where OpenFilters' needle method stops early: restart once after a
-    numerical failure (without the 0 nm layers that trigger it), restart a stalled run
-    with its near-0 nm layers at STALLED_LAYER_NM, and insert a thin layer at the best
-    layer edge while that improves the merit (see _edge_needle).
+    numerical failure (without the 0 nm layers that trigger it), restart a run that ended
+    with needles stuck near 0 nm with those layers at STALLED_LAYER_NM, and insert a thin
+    layer at the best layer edge while that improves the merit (see _edge_needle).
     Returns (design, chi2, stop, iterations, edge needles inserted)."""
     iterations = inserted = 0
     restarted = False
+    lift_failed = None  # the design whose lifted restart did not help (then go on to the edge needle)
     max_layers = options.get("max_layers")
     for _ in range(MAX_CONTINUATIONS):
         if time.time() >= deadline or chi2 <= 0.0:
             break
+        stuck = [i for i, l in enumerate(current["layers"]) if _adjustable(l) and l["thickness"] < STALLED_LAYER_NM]
+        kind = None
         if stop == "numerical_error" and not restarted:
-            restarted = True
+            restarted, kind = True, "restart"
             layers = _drop_empty_layers(current["layers"])
-        elif stop == "stalled":
-            # The stall comes from layers stuck at OpenFilters' 0 nm bound (fresh needles): restarted
-            # from STALLED_LAYER_NM, the solver converges in a fraction of a second where it crawled for
-            # minutes. A restart that does not improve the merit ends the loop (below).
-            layers = [dict(l, thickness=STALLED_LAYER_NM) if _adjustable(l) and l["thickness"] < STALLED_LAYER_NM
-                      else dict(l) for l in current["layers"]]
-            if all(a["thickness"] == b["thickness"] for a, b in zip(layers, current["layers"])):
-                break
+        elif stop in ("stalled", "converged", "finished") and stuck and lift_failed is not current:
+            # Needles inserted at OpenFilters' 0 nm bound can stay there: the solver either crawls
+            # ("stalled", minutes) or calls it converged after one iteration with the needles unused.
+            # Restarted from STALLED_LAYER_NM it typically converges in well under a second.
+            kind = "lift"
+            layers = [dict(l, thickness=STALLED_LAYER_NM) if i in stuck else dict(l)
+                      for i, l in enumerate(current["layers"])]
         elif stop in ("converged", "finished") and info.get("edge_needle"):
             position, material = info["edge_needle"]
             if max_layers and len(current["layers"]) + 1 > max_layers:
                 break
+            kind = "edge"
             layers = [dict(l) for l in current["layers"]]
             layers.insert(position, {"material": material, "thickness": EDGE_NEEDLE_NM})
         else:
             break
-        info = {}
+        previous_info, info = info, {}
         candidate, c_chi2, c_stop, its = _run("needle", dict(current, layers=layers), targets, options,
                                               deadline, progress, info=info)
         iterations += its
         if not c_chi2 < chi2 * (1 - 1e-4):
+            if kind == "lift":
+                lift_failed, info = current, previous_info  # try the edge needle on the unlifted design
+                continue
             break
-        inserted += stop not in ("numerical_error", "stalled")  # counts edge needles only
+        inserted += kind == "edge"
         current, chi2, stop = candidate, c_chi2, c_stop
     return current, chi2, stop, iterations, inserted
 
@@ -2029,7 +2067,9 @@ def optimize(design, target_specs, method="needle", options=None, progress=None)
     spec_targets = build_targets(target_specs, pad=True)
     margin = float(options.get("margin") or 0.0)
     targets = build_targets(with_margin(target_specs, margin), pad=True) if margin else spec_targets
-    warnings = material_warnings(design, target_wavelengths(target_specs))
+    # Invisible layers are judged on the result, not on the start (a random start's Ge next to a Ge substrate
+    # said nothing about the optimized design it was reported with).
+    warnings = material_warnings(design, target_wavelengths(target_specs), invisible=False)
     start = time.time()
     deadline = start + float(options.get("time_limit", 300))
     design = design_from_filter(build_filter(design))
@@ -2077,9 +2117,16 @@ def optimize(design, target_specs, method="needle", options=None, progress=None)
     # 0 nm layers (left at OpenFilters' lower bound) are optically invisible: drop them.
     kept = _drop_empty_layers(current["layers"])
     if kept and len(kept) < len(current["layers"]):
-        warnings.append(f"{len(current['layers']) - len(kept)} layer(s) went to 0 nm and were removed "
-                        f"({len(design['layers'])} layers at the start, {len(kept)} now)")
+        zeros = sum(1 for l in current["layers"] if not l.get("graded") and l["thickness"] < 1e-3)
+        merged = len(current["layers"]) - zeros - len(kept)
+        warnings.append(f"{zeros} layer(s) ended at 0 nm and were removed"
+                        + (f", merging the {merged} pair(s) of identical layers they separated" if merged else "")
+                        + f": {len(current['layers'])} layers before, {len(kept)} now ({len(design['layers'])} at "
+                        "the start)")
     current = dict(current, layers=kept or current["layers"])
+    wavelengths = target_wavelengths(target_specs)
+    if wavelengths:
+        warnings += _invisible_layers(current, (min(wavelengths) + max(wavelengths)) / 2)
     f = build_filter(current)
     final = _evaluator(f, spec_targets)
     rows, all_pass = target_report(final, target_specs)

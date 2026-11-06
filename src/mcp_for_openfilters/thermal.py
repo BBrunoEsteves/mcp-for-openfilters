@@ -57,9 +57,16 @@ def _shifted_material(name, dn, dk, wavelengths, mode="hold"):
 def _explicit(design):
     """The design with explicit layers (formulas expanded), as engine.design_from_filter returns it."""
     expanded = engine.design_from_filter(engine.build_filter(design))
-    for key in ("layers", "back_layers"):
-        if any(layer.get("graded") for layer in expanded.get(key) or []):
-            raise EngineError("thermal calculations do not support graded layers")
+    graded = [f"{'layer' if key == 'layers' else 'back layer'} {i + 1} ({layer['material']})"
+              for key in ("layers", "back_layers") for i, layer in enumerate(expanded.get(key) or [])
+              if layer.get("graded")]
+    if graded:
+        raise EngineError(
+            f"thermal_sensitivity and thermal_sweep shift the index and thickness of regular materials, and this design "
+            f"has graded layers: {', '.join(graded)}. A graded layer's index comes from its mixture's composition "
+            "steps, which these tools cannot shift yet (not even for the nm-per-index part). For the peak shift when a "
+            "graded layer is deposited thicker or thinner as a whole, use layer_sensitivity (it scales graded layers "
+            "as a whole) or compare compute_spectrum results with scaled step_thicknesses.")
     return expanded
 
 
@@ -209,6 +216,7 @@ def sensitivity(design, quantity="T", near=None, window=None, angle=0.0, polariz
         out.update(dlambda_dT_pm_per_K=engine.sig(total, 6), clamped=bool(thermal.get("clamped", True)))
         if base["fwhm_nm"] and total:
             out["kelvin_per_fwhm"] = engine.sig(base["fwhm_nm"] * 1e3 / abs(total), 4)
+            out["kelvin_per_fwhm_note"] = f"FWHM of the design as given ({base['fwhm_nm']:g} nm) / |dlambda/dT|"
     if warnings:
         out["warnings"] = warnings
     return out
@@ -241,6 +249,9 @@ def sweep(design, delta_T, thermal, quantity="T", near=None, window=None, angle=
         fwhm = [r["fwhm_nm"] for r in rows if r["fwhm_nm"]]
         if fwhm and slope:
             out["kelvin_per_fwhm"] = engine.sig(min(fwhm) / abs(slope), 4)
+            # thermal_sensitivity uses the FWHM at delta_T 0, so the two can differ when the FWHM changes with T.
+            out["kelvin_per_fwhm_note"] = (f"narrowest FWHM over the sweep ({min(fwhm):g} nm) / |fitted slope|; "
+                                           "thermal_sensitivity uses the FWHM at delta_T = 0")
     if warnings:
         out["warnings"] = warnings
     return out

@@ -143,26 +143,26 @@ Levenberg_Marquardt::Levenberg_Marquardt(const long nb_par, const long nb_points
 
 	try
 	{
-		this->previous_a = new double[this->nb_par];
+		this->previous_a = new double[this->nb_par]();
 		this->A = new double*[this->nb_par];
 		for (par = 0; par < this->nb_par; par++)
 			this->A[par] = NULL;
 		for (par = 0; par < this->nb_par; par++)
-			this->A[par] = new double[this->nb_rows];
-		this->b = new double[this->nb_rows];
-		this->beta = new double[this->nb_par];
-		this->da = new double[this->nb_par];
-		this->D = new double[this->nb_par];
-		this->alpha_D = new double[this->nb_par];
+			this->A[par] = new double[this->nb_rows]();
+		this->b = new double[this->nb_rows]();
+		this->beta = new double[this->nb_par]();
+		this->da = new double[this->nb_par]();
+		this->D = new double[this->nb_par]();
+		this->alpha_D = new double[this->nb_par]();
 		this->use_par = new bool[this->nb_par];
-		this->column_norms = new double[this->nb_par];
-		this->scaled_da = new double[this->nb_par];
-		this->temp_array = new double[this->nb_par];
+		this->column_norms = new double[this->nb_par]();
+		this->scaled_da = new double[this->nb_par]();
+		this->temp_array = new double[this->nb_par]();
 		this->use_point = new bool[this->nb_points];
-		this->diag = new double[this->nb_par];
+		this->diag = new double[this->nb_par]();
 		this->perm = new long[this->nb_par];
-		this->a_min = new double[this->nb_par];
-		this->a_max = new double[this->nb_par];
+		this->a_min = new double[this->nb_par]();
+		this->a_max = new double[this->nb_par]();
 		this->inequalities = new char[this->nb_points];
 	}
 	catch (const std::bad_alloc&)
@@ -860,13 +860,13 @@ double ** Levenberg_Marquardt::get_correlation_matrix()
 	/* Make the necessary structures. */
 	try
 	{
-		sums = new double[this->nb_par];
+		sums = new double[this->nb_par]();
 		sums_squares = new double [this->nb_par];
 		C = new double*[this->nb_par];
 		for (par = 0; par < this->nb_par; par++)
 			C[par] = NULL;
 		for (par = 0; par < this->nb_par; par++)
-			C[par] = new double[this->nb_par];
+			C[par] = new double[this->nb_par]();
 	}
 	catch (const std::bad_alloc&)
 	{

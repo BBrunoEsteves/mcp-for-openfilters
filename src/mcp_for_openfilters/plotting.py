@@ -106,11 +106,13 @@ def spectra(result, title="Spectrum"):
 def curves(x, ys, title, xlabel, ylabel, boundaries=None):
     """ys: {label: values}. Optional vertical layer boundaries."""
     fig, ax = _figure(title, xlabel, ylabel)
-    for b in boundaries or []:
-        ax.axvline(b, color=GRID, linewidth=0.8, zorder=0)
+    # Layer boundaries dotted, so they do not read as grid lines (Batch 6 report).
+    for i, b in enumerate(boundaries or []):
+        ax.axvline(b, color=INK_2, linewidth=0.8, linestyle=":", alpha=0.7, zorder=0,
+                   label="layer boundaries" if i == 0 else None)
     for i, (label, values) in enumerate(list(ys.items())[:MAX_SERIES]):
         ax.plot(x[:len(values)], values, color=SERIES[i], linewidth=1.8, label=label)
-    return _png(fig, ax, min(len(ys), MAX_SERIES))
+    return _png(fig, ax, min(len(ys), MAX_SERIES) + (1 if boundaries else 0))
 
 
 def index_profile(segments, substrate_n, medium_n, center_wavelength, title="Index profile"):
@@ -147,7 +149,9 @@ def design_vs_targets(wavelengths, curves, targets, title, ylabel=None, photomet
         if design not in designs:
             designs.append(design)
         color = SERIES[designs.index(design) % MAX_SERIES]
-        style = "--" if reference else ("-", "-.", ":")[quantities.index(quantity) % 3]
+        # One line style per quantity for the start too ("R start" and "T start" looked the same).
+        styles = ("--", (0, (1.5, 1.5)), (0, (6, 2, 1, 2))) if reference else ("-", "-.", ":")
+        style = styles[quantities.index(quantity) % 3]
         ax.plot(wavelengths, values, color=color, linewidth=1.0 if reference else 1.8,
                 linestyle=style, alpha=0.6 if reference else 1.0, label=label)
     for target in targets:
@@ -169,10 +173,19 @@ def design_vs_targets(wavelengths, curves, targets, title, ylabel=None, photomet
     target_values += [p[1] for t in targets if t.get("kind") in quantities for p in t.get("points", [])]
     if photometric:
         _photometric_axis(ax, np.concatenate([np.asarray(c[2]) for c in curves] + [np.asarray(target_values, dtype=float)]))
-    note = "grey bars: targets (▲ ≥, ▼ ≤)"
+    note = _target_note([t for t in targets if t.get("kind") in quantities])
     if any(c[3] for c in curves):
-        note += "\ndashed: starting design"
+        note = (note + "\n" if note else "") + "dashed/dotted: starting design"
     return _png(fig, ax, len(curves), legend_title=note)
+
+
+def _target_note(targets):
+    """Legend note naming only the target marks that are drawn (a single-wavelength target is a marker,
+    not a grey bar)."""
+    bands = any("from" in t or "points" in t for t in targets)
+    markers = any("wavelength" in t or "from" in t for t in targets)
+    parts = (["grey bars: target bands"] if bands else []) + (["▲ ≥ / ▼ ≤ targets"] if markers else [])
+    return "; ".join(parts) or None
 
 
 def _draw_targets(ax, targets):
@@ -225,7 +238,7 @@ def random_errors(wavelengths, series, show, targets=(), title="Random errors"):
             values = [s["design"], s["min"], s["max"]] + ([s["mean"] + k * s["std_dev"]] if k else [])
             values += [np.asarray([t["value"] for t in shown_targets if "value" in t], dtype=float)]
             _photometric_axis(ax, np.concatenate([np.asarray(v, dtype=float) for v in values]))
-        images.append(_png(fig, ax, drawn, legend_title="grey: targets (▲ ≥, ▼ ≤)" if shown_targets else None))
+        images.append(_png(fig, ax, drawn, legend_title=_target_note(shown_targets)))
     return images
 
 

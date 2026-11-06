@@ -253,6 +253,16 @@ layers at the 0 nm bound; OpenFilters sets no iteration limit, same in pure Pyth
 < 1 nm lifted to 1 nm (dropping them instead lost the progress: the crawl does converge, in ~5 min); outside_data
 ranges clipped to the wavelengths used; duplicate polarizations/angles merged in spectra; tolerance warns when the
 nominal design fails.
+Chat reports 2026-11-06 (Batch 6 8/8, Batches 1-5 57/57; tests/test_release_reports.py): OPENFILTERS C++ BUG,
+Levenberg_Marquardt.cpp allocates its arrays uninitialized and b's rows beyond nb_points are never set (nb_par >
+nb_points, e.g. 1-wavelength targets): random all-NaN steps, ~4 % of runs, state-dependent; pure Python zero-fills.
+Fixed in tools/port_from_py2.py (zero-init every new double[]) + PROVENANCE.md; NO local compiler: the binary needs
+CI (workflow_dispatch builds Windows wheels) then dev/fetch_compiled.py (quit Claude first: the .pyd is locked);
+until then test_compiled_solver_has_no_uninitialized_rows fails locally. Also: _continue_needles lifts needles
+left < 1 nm after converged/finished/stalled (falls through to the edge needle if no gain); invisible-layer
+warnings on the result (material_warnings(invisible=False) for the start); _refine_worst clipped to the target
+range; cancelled campaigns finalized partial (jobs._check_cancelled, summary.partial, status note/outputs).
+Not done (judgment): ranking by met-between-grid, absentee-layer equivalence, default margin, yield-CI ties.
 Output schemas deliberately not added (Claude reads the text; plots can't be described; drift would break tools).
 Private-repo CI minutes cost 10x on macOS and 2x on Windows; they reset monthly (next
 2026-11-01, or free once public. CI now tests only Linux on ordinary pushes.

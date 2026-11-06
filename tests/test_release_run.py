@@ -48,8 +48,10 @@ def test_stalled_run_stops_with_an_explanation(monkeypatch):
 def test_out_of_data_range_names_only_the_wavelengths_used():
     # S4.7: Ge (data 124-1771 nm) used at 8000-12000 nm was reported as "used at 1771-12000 nm".
     design = {"substrate": "Si", "layers": [{"material": "Ge", "thickness": 500}]}
-    with pytest.raises(engine.EngineError, match=r"n,k at 8000-12000 nm"):
+    with pytest.raises(engine.EngineError, match=r"Ge \(data 124-1771 nm, n,k needed at 8000-12000 nm\)"):
         engine.spectra(design, ["R"], {"from": 8000, "to": 12000, "step": 50})
+    with pytest.raises(engine.EngineError, match=r"Ge: its data cover 124-1771 nm, so its n,k at 8000-12000 nm"):
+        engine.spectra(dict(design, substrate="FusedSilica"), ["R"], [8000, 12000])
     (name, data, ranges), = engine.outside_data(design, [1500, 2500])
     assert ranges == [(data[1], 2500.0)]  # partly inside: from the end of the data
     with pytest.raises(engine.EngineError, match=r"used at 8000-12000 nm"):

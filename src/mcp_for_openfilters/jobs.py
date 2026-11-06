@@ -64,7 +64,8 @@ def result_row(index, op, result):
         row.update(r["metrics"])
     elif op in ("optimize", "evaluate"):
         for key in ("merit_chi2", "all_targets_met", "nb_layers", "total_thickness_nm", "iterations",
-                    "stop_reason", "elapsed_s", "initial_chi2", "thin_layers_removed", "error_detail", "warnings"):
+                    "stop_reason", "elapsed_s", "initial_chi2", "thinnest_layer_nm", "thin_layers_removed",
+                    "error_detail", "warnings"):
             if key in r:
                 row[key] = r[key]
     elif op == "tolerance":
@@ -195,6 +196,7 @@ class JobManager:
         with self._lock:
             self._futures.get(job_id, {}).pop(index, None)
         if future.cancelled():
+            self._check_cancelled(job_id)
             return
         error = future.exception()
         if error is not None:  # the worker process died
@@ -205,6 +207,30 @@ class JobManager:
                 with self._lock:
                     self._pool = None
         self._check_stage(job_id)
+        self._check_cancelled(job_id)
+
+    def _check_cancelled(self, job_id):
+        """A cancelled campaign is finalized on what finished (ranked, duplicates marked, top designs saved)
+        once its last running task ends (S4.11/S5.11: up to five copies of one design took separate ranks,
+        and no summary.csv or project was written)."""
+        with self._lock:
+            job = self._load(job_id)
+            if job["status"] != "cancelled" or job["kind"] != "campaign" or job.get("partial")                     or job.get("finalizing") or self._futures.get(job_id):
+                return
+            job["finalizing"] = True
+            self._save(job)
+        threading.Thread(target=self._finalize_cancelled, args=(job_id,), daemon=True).start()
+
+    def _finalize_cancelled(self, job_id):
+        try:
+            finalize_campaign(self, self._load(job_id), partial=True)
+            job = self._load(job_id)
+        except Exception as error:
+            job = self._load(job_id)
+            job["error"] = f"partial results could not be finalized: {type(error).__name__}: {error}"
+        job.pop("finalizing", None)
+        job["partial"] = True
+        self._save(job)
 
     def _check_stage(self, job_id):
         with self._lock:
@@ -278,8 +304,10 @@ class JobManager:
             info["earlier_stages"] = [f"{e - b} {o} tasks" for b, e, o in job["stages"][:-1]]
         if job.get("error"):
             info["error"] = job["error"]
-        if job["status"] == "done":
+        if job["status"] == "done" or job.get("outputs"):
             info["outputs"] = job.get("outputs", {})
+        if job.get("partial"):
+            info["note"] = "cancelled: the outputs rank the starts that finished (partial results)"
         return info
 
     def list(self, limit=20):
@@ -307,6 +335,7 @@ class JobManager:
         job["status"] = "cancelled"
         job["finished"] = time.time()
         self._save(job)
+        self._check_cancelled(job_id)  # nothing left running: finalize what finished now
         start, end, _ = job["stages"][-1]
         done = self._done_indices(job_id)
         running = sum(1 for i in range(start, end) if i not in done
@@ -334,7 +363,7 @@ class JobManager:
     def results(self, job_id, top_n=10, sort_by=None, descending=False):
         job = self._load(job_id)
         summary = os.path.join(job["folder"], "summary.json")
-        if job["status"] == "done" and os.path.exists(summary):
+        if (job["status"] == "done" or job.get("partial")) and os.path.exists(summary):
             rows = _read_json(summary)["rows"]
         else:
             rows = self.rows(job_id, stage=0) if job["kind"] in ("campaign",) else self.rows(job_id)
@@ -469,9 +498,11 @@ def distinct_top(manager, job, rows, n):
     return top
 
 
-def finalize_campaign(manager, job):
+def finalize_campaign(manager, job, partial=False):
+    """Rank a campaign's results; after the optimizations, start the yield stage if one was asked for.
+    partial: the campaign was cancelled; rank what finished and start nothing."""
     meta = job["meta"]
-    if len(job["stages"]) == 1:
+    if len(job["stages"]) == 1 and not partial:
         rows = sorted(manager.rows(job["id"], stage=0), key=rank_key)
         best = distinct_top(manager, job, rows, meta["top_n"])
         if meta.get("tolerance") and best:
@@ -486,7 +517,10 @@ def finalize_campaign(manager, job):
         # Stage-1 tasks carry the index of the stage-0 optimization they test.
         by_task = {row["task"]: row for row in rows}
         start, end, _ = job["stages"][1]
+        finished = manager._done_indices(job["id"])
         for i in range(start, end):
+            if i not in finished:  # a cancelled yield stage
+                continue
             r = manager.result(job["id"], i)
             if r.get("ok"):
                 row = by_task[r["params"]["task"]]
@@ -525,6 +559,11 @@ def finalize_campaign(manager, job):
         summary["note"] = "No design passed the yield stage (all yields 0): the ranking is by merit."
     if meta.get("warnings"):
         summary["warnings"] = meta["warnings"]
+    if partial:
+        start, end, _ = job["stages"][0]
+        summary["partial"] = (f"the campaign was cancelled: {len(rows)} of {end - start} starts finished and are ranked "
+                              "here" + ("; the yield stage did not run" if meta.get("tolerance") and len(job["stages"]) == 1
+                                        else ""))
     _finish_table(manager, job, top + [r for r in rows if r not in top], outputs, summary)
 
 

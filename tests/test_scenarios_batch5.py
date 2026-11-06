@@ -109,4 +109,4 @@ def test_layers_dropped_at_zero_thickness_are_reported(monkeypatch):
     monkeypatch.setattr(engine, "_run", lambda *args, **kwargs: (ended, 1.0, "converged", 3))
     r = engine.optimize(design, targets, "refine")
     assert r["nb_layers"] == 2
-    assert any("1 layer(s) went to 0 nm and were removed (3 layers at the start, 2 now)" in w for w in r["warnings"])
+    assert any("1 layer(s) ended at 0 nm and were removed" in w for w in r["warnings"])

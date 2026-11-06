@@ -239,6 +239,15 @@ def port_moremath_cpp(directory):
         text = text.replace("PyInt_AsLong", "PyLong_AsLong")
         text = text.replace("PyCObject_Check(answer)", "PyCapsule_CheckExact(answer)")
         text = re.sub(r"PyCObject_AsVoidPtr\((\w+)\)", r"PyCapsule_GetPointer(\1, NULL)", text)
+        if path.name == "Levenberg_Marquardt.cpp":
+            # BUG FIX (original OpenFilters C++): the work arrays were allocated uninitialized. b has
+            # max(nb_par, nb_points) rows but only the first nb_points are ever set, so with more
+            # parameters than target points (e.g. a single-wavelength target and 3+ layers) leftover
+            # heap memory entered the QR solve: random NaN steps, depending on what ran before.
+            # The Python solver (Levenberg_Marquardt.py) starts every array at 0.0; so does this now.
+            text, count = re.subn(r"= new double\[(this->nb_\w+)\];", r"= new double[\1]();", text)
+            if count < 10:
+                raise SystemExit(f"Levenberg_Marquardt.cpp: expected the work array allocations, found {count}")
         if path.name == "_moremath.cpp":
             text = text.replace("PyMODINIT_FUNC init_moremath()", "PyMODINIT_FUNC PyInit__moremath()")
             text = text.replace("if (!package) return;", "if (!package) return NULL;")
