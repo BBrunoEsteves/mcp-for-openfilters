@@ -29,7 +29,10 @@ def test_needle_run_with_fresh_needles_does_not_crawl(layers):
               "layers": [{"material": m, "thickness": t} for m, t in layers]}
     start = time.time()
     result = engine.optimize(design, VCOAT_TARGET, "needle", {"max_layers": 6, "time_limit": 60})
-    assert time.time() - start < 15
+    assert time.time() - start < 15, (  # what the optimizer did, if a platform is slow
+        f"{time.time() - start:.1f} s, stop {result['stop_reason']}, {result['iterations']} iterations, met "
+        f"{result['all_targets_met']}, chi2 {result['merit_chi2']:.3g}, layers "
+        f"{[round(l['thickness'], 3) for l in result['design']['layers']]}, warnings {result.get('warnings')}")
     assert result["all_targets_met"] and result["stop_reason"] != "time_limit"
     assert result["edge_needles_added"] == 0  # stall restarts are not edge needles
 
