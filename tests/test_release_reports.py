@@ -179,3 +179,25 @@ def test_stuck_needles_are_caught_without_the_merit_window(monkeypatch, layers):
         f"{time.time() - start:.1f} s, stop {result['stop_reason']}, {result['iterations']} iterations, met "
         f"{result['all_targets_met']}, chi2 {result['merit_chi2']:.3g}, layers "
         f"{[round(l['thickness'], 3) for l in result['design']['layers']]}, warnings {result.get('warnings')}")
+
+
+def test_lifted_needles_are_refined_before_needles_are_added(monkeypatch):
+    # CI Linux 2026-11-06: after a stall, the restart with the needles lifted to 1 nm went straight to the needle
+    # method, whose first step there added two needles: 5 + 2 > max_layers 6, stop at 0 iterations, the lifted
+    # needles never refined, and the result collapsed to one SiO2 layer (chi2 1.1e5). Simulated here: a needle
+    # run on a design with lifted (1 nm) layers stops at once, as it did on Linux.
+    real_run = engine._run
+
+    def linux_like(method, design, targets, options, *rest, **kwargs):
+        if method == "needle" and any(l["thickness"] == engine.STALLED_LAYER_NM for l in design["layers"]):
+            return design, float(engine._evaluator(engine.build_filter(design), targets).get_chi_2()), "max_layers", 0
+        return real_run(method, design, targets, options, *rest, **kwargs)
+
+    monkeypatch.setattr(engine, "_run", linux_like)
+    targets = engine.build_targets([dict(VCOAT[0], tolerance=0.0001)], pad=True)
+    stuck = {"substrate": "FusedSilica", "center_wavelength": 1064,
+             "layers": _layers(("SiO2", 200), ("TiO2", 0.0), ("SiO2", 900), ("TiO2", 0.0), ("SiO2", 351.186))}
+    chi2 = float(engine._evaluator(engine.build_filter(stuck), targets).get_chi_2())
+    design, new_chi2, _, _, _ = engine._continue_needles(stuck, chi2, "stalled", {}, targets, {"max_layers": 6},
+                                                         time.time() + 60, None)
+    assert new_chi2 < 1e-6 * chi2 and len(design["layers"]) > 1

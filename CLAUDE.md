@@ -269,6 +269,9 @@ Full CI 2026-11-06 (first macOS/Linux run of the new tests): C++ solver fix conf
 TIR branch (OpenFilters' "real == 0 -> negate" assumes sqrt(-x+-0i) = +i; libc++ gives -i for -0) -> port script
 port_abeles_cpp: principal_sqrt in _abeles.h for every sqrt(N_square...). Linux/macOS needle crawl beat the 1 %
 window -> _Monitor(needles=True) also stops when a free layer stays < 1 nm for STUCK_ITERATIONS 2000.
+Third full CI: macOS/Windows green; Linux needle restart hit max_layers at 0 iterations (lifted needles never
+refined) -> _continue_needles refines a lifted design before the needle run (test simulates Linux's path).
+Timing tests bound at 45 s (Linux runners ~5x slower; that start converges in 6495 iterations, 18-20 s there).
 Not done (judgment): ranking by met-between-grid, absentee-layer equivalence, default margin, yield-CI ties.
 Output schemas deliberately not added (Claude reads the text; plots can't be described; drift would break tools).
 Private-repo CI minutes cost 10x on macOS and 2x on Windows; they reset monthly (next

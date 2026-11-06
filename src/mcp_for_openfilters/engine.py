@@ -1981,8 +1981,16 @@ def _continue_needles(current, chi2, stop, info, targets, options, deadline, pro
         else:
             break
         previous_info, info = info, {}
-        candidate, c_chi2, c_stop, its = _run("needle", dict(current, layers=layers), targets, options,
-                                              deadline, progress, info=info)
+        start = dict(current, layers=layers)
+        if kind == "lift":
+            # Refine the lifted needles first: the needle method adds needles straight away, and at max_layers
+            # it stopped before refining them (CI Linux 2026-11-06: 5 layers + 2 needles > 6, "0 iterations",
+            # the needles never grew and the result collapsed to one layer).
+            refined, r_chi2, _, its = _run("refine", start, targets, options, deadline, progress)
+            iterations += its
+            if r_chi2 < chi2 * (1 - 1e-4):
+                start = refined
+        candidate, c_chi2, c_stop, its = _run("needle", start, targets, options, deadline, progress, info=info)
         iterations += its
         if not c_chi2 < chi2 * (1 - 1e-4):
             if kind == "lift":
