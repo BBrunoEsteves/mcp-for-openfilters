@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 — unreleased
+## 0.2.0 — 2026-11-06
 
 Renamed to **MCP for OpenFilters** (package and command `mcp-for-openfilters`, module `mcp_for_openfilters`,
 registration `mcp-for-openfilters`), so that the connector is not mistaken for part of OpenFilters itself.
