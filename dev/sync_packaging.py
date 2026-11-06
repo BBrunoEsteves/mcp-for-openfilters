@@ -59,6 +59,10 @@ def manifests(version=__version__):
             "license": "GPL-2.0-or-later",
             "keywords": KEYWORDS,
             "privacyPolicyUrl": f"{REPO}/blob/main/PRIVACY.md",
+            # Read by Claude's directory listing (Claude Code ignores them at load time).
+            "supportUrl": f"{REPO}/issues",
+            "documentationUrl": f"{REPO}#readme",
+            "termsOfServiceUrl": f"{REPO}/blob/main/LICENSE",
             "mcpServers": {"mcp-for-openfilters": {"command": "uvx", "args": [f"mcp-for-openfilters=={version}"]}},
         },
         "packaging/mcpb/manifest.json": {

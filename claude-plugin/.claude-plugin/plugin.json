@@ -18,6 +18,9 @@
     "OpenFilters"
   ],
   "privacyPolicyUrl": "https://github.com/BBrunoEsteves/mcp-for-openfilters/blob/main/PRIVACY.md",
+  "supportUrl": "https://github.com/BBrunoEsteves/mcp-for-openfilters/issues",
+  "documentationUrl": "https://github.com/BBrunoEsteves/mcp-for-openfilters#readme",
+  "termsOfServiceUrl": "https://github.com/BBrunoEsteves/mcp-for-openfilters/blob/main/LICENSE",
   "mcpServers": {
     "mcp-for-openfilters": {
       "command": "uvx",
