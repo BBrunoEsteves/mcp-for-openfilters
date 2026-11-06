@@ -78,8 +78,8 @@ installs silently fell back to pure Python); CI job "sdist" checks a source inst
 and validates the .mcpb manifest. CI job "pypi" (trusted publishing) runs on tags only when the repository
 variable PUBLISH_PYPI is "true". A clean `uv pip install` of the sdist with no compiler works (pure Python).
 
-Pending, in order: email Larouche/Martinu (draft in email_draft_larouche_martinu.md, gitignored); make the repo
-public; PyPI trusted publisher (project mcp-for-openfilters, workflow ci.yml, environment pypi) then set
+Repo made PUBLIC 2026-11-06 (contact mcp.for.openfilters@gmail.com in README/CITATION/metadata). CI is free from now on.
+Pending, in order: PyPI trusted publisher (project mcp-for-openfilters, workflow ci.yml, environment pypi) then set
 PUBLISH_PYPI; README install via uvx; MCP Registry (mcp-publisher, server.json); pack the .mcpb (needs the PyPI
 package) and submit to Claude's directory; README plugin install line (`/plugin install mcp-for-openfilters@mcp-for-openfilters`, marketplace added with `/plugin marketplace add BBrunoEsteves/mcp-for-openfilters`) once public.
 Plugin + marketplace validated 2026-10-30 (`claude plugin validate .`; the CLI is bundled in
