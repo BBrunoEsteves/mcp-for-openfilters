@@ -19,7 +19,7 @@ from mcp_for_openfilters import __version__, server  # noqa: E402
 NAME = "io.github.BBrunoEsteves/mcp-for-openfilters"
 REPO = "https://github.com/BBrunoEsteves/mcp-for-openfilters"
 DESCRIPTION = "Design, simulate and optimize optical thin-film coatings with the OpenFilters engine."
-AUTHOR = {"name": "Bruno Esteves"}
+AUTHOR = {"name": "Bruno Esteves", "email": "mcp.for.openfilters@gmail.com"}
 KEYWORDS = ["thin film", "optical coating", "optics", "interference filter", "OpenFilters"]
 
 

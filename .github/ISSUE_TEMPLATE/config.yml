@@ -1,1 +1,5 @@
 blank_issues_enabled: true
+contact_links:
+  - name: Collaboration or other questions
+    url: mailto:mcp.for.openfilters@gmail.com
+    about: For anything that is not a bug report or a feature request.

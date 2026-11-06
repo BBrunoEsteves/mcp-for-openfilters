@@ -7,6 +7,8 @@ type: software
 authors:
   - family-names: Esteves
     given-names: Bruno
+    email: mcp.for.openfilters@gmail.com
+    affiliation: "Center for MicroElectroMechanical Systems (CMEMS), University of Minho"
 repository-code: "https://github.com/BBrunoEsteves/mcp-for-openfilters"
 license: GPL-2.0-or-later
 version: 0.2.0

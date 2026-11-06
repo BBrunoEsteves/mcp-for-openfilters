@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "GPL-2.0-or-later"
 license-files = ["LICENSE", "src/openfilters_core/gpl.txt"]
-authors = [{ name = "Bruno Esteves" }]
+authors = [{ name = "Bruno Esteves", email = "mcp.for.openfilters@gmail.com" }]
 keywords = ["thin film", "optical coating", "optics", "interference filter", "MCP", "Claude", "OpenFilters"]
 classifiers = [
     "Programming Language :: Python :: 3",

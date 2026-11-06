@@ -13,4 +13,5 @@ MCP for OpenFilters runs entirely on your computer.
 - What you type in Claude and the results Claude reads from the tools are handled by the Claude app you
   use, under Anthropic's privacy policy, not by this project.
 
-Questions: open an issue at https://github.com/BBrunoEsteves/mcp-for-openfilters/issues.
+Questions: open an issue at https://github.com/BBrunoEsteves/mcp-for-openfilters/issues, or write to
+mcp.for.openfilters@gmail.com.

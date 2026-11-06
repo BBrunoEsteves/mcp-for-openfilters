@@ -167,6 +167,13 @@ If you use this in published work, please cite OpenFilters:
 > S. Larouche and L. Martinu, "OpenFilters: open-source software for the design, optimization, and
 > synthesis of optical filters," *Applied Optics* **47**, C219–C230 (2008).
 
+## Contact
+
+- **Bug reports and feature requests:** [GitHub Issues](https://github.com/BBrunoEsteves/mcp-for-openfilters/issues)
+  (please include the output of the `server_info` tool).
+- **Collaboration and other questions:** Bruno Esteves, Center for MicroElectroMechanical Systems (CMEMS),
+  University of Minho: [mcp.for.openfilters@gmail.com](mailto:mcp.for.openfilters@gmail.com).
+
 ## License
 
 GPL-2.0-or-later, like OpenFilters. OpenFilters is © Stéphane Larouche; this project is not

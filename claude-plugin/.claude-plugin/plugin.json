@@ -4,7 +4,8 @@
   "version": "0.2.0",
   "description": "Design, simulate and optimize optical thin-film coatings with the OpenFilters engine.",
   "author": {
-    "name": "Bruno Esteves"
+    "name": "Bruno Esteves",
+    "email": "mcp.for.openfilters@gmail.com"
   },
   "homepage": "https://github.com/BBrunoEsteves/mcp-for-openfilters",
   "repository": "https://github.com/BBrunoEsteves/mcp-for-openfilters",

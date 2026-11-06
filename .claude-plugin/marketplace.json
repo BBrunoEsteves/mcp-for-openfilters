@@ -1,7 +1,8 @@
 {
   "name": "mcp-for-openfilters",
   "owner": {
-    "name": "Bruno Esteves"
+    "name": "Bruno Esteves",
+    "email": "mcp.for.openfilters@gmail.com"
   },
   "metadata": {
     "description": "Thin-film optical coating design for Claude, built on OpenFilters (unofficial)."
