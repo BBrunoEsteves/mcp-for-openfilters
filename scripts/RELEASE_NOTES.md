@@ -29,6 +29,15 @@ environment. Your data folder (`~/OpenFilters-MCP`) is kept and still used.
 - Saving a project with characters outside Latin-1 (e.g. "λ") failed on Windows.
 - The electric field inside graded layers was only sampled at step boundaries (peaks could be missed).
 - A polarization angle (e.g. 30°, the fourth choice of OpenFilters' dialogs) was refused by every tool.
+- Optimizations with an absorptance (A) target always failed (a bug in OpenFilters itself).
+- About 4 % of optimizations with few target points (e.g. a single laser wavelength and three or more layers)
+  ended with every thickness "NaN": OpenFilters' compiled solver used uninitialized memory. Fixed in the
+  calculation core.
+- On macOS, reflectance beyond the critical angle (light from the substrate side at steep angles) was slightly
+  wrong.
+- The needle method could crawl for its whole time limit, or stop with new layers left at 0 nm and return a
+  much worse design (a two-layer V-coat campaign: 10 of 12 starts met the target, now 12 of 12, in seconds).
+- Cancelled campaigns now rank and save the starts that finished (duplicates marked, project file written).
 
 **New:**
 
